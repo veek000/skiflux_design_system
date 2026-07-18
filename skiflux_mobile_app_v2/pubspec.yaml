@@ -1,0 +1,42 @@
+name: skiflux_mobile_app_v2
+description: Skiflux mobile app v2 — companion app for the Skiflux design system; run on emulator to preview screens.
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  skiflux_design_system:
+    path: ../skiflux_design_system
+  cupertino_icons: ^1.0.8
+  # Persistent recent-search history (confirmed per CLAUDE.md package policy).
+  shared_preferences: ^2.3.2
+  # Streak-flow vector decor (light ray, laurels) — confirmed per CLAUDE.md
+  # package policy; same version the design system uses.
+  flutter_svg: ^2.0.10
+  # Relative "2 min ago" timestamps on the Notifications screen — confirmed
+  # per CLAUDE.md package policy (pure Dart, no native code).
+  timeago: ^3.7.0
+  # Real file picking on submission tasks (Task Flow) — confirmed "real"
+  # per package policy. Pinned with share_plus 10.x for win32 compatibility.
+  file_picker: 10.1.9
+  # Native share sheet for quiz "Share Result" — confirmed "real".
+  share_plus: 10.1.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/home_video_cover.png
+    - assets/home_video_raw1.png
+    # Streak flow decor (Figma Streak Flow section 3092:14400).
+    - assets/streaks/
+    # Achievement badges + leaderboard podium (deferred screens).
+    - assets/badges/

@@ -1,0 +1,780 @@
+import 'package:flutter/material.dart';
+import 'package:skiflux_design_system/skiflux_design_system.dart';
+
+import '../notifications/notifications_screen.dart';
+import '../search/search_screen.dart';
+import '../subscriptions/subscriptions_screen.dart';
+import 'data/tasks_store.dart';
+import 'quiz_intro_screen.dart';
+import 'quiz_result_screen.dart';
+import 'submission_task_screen.dart';
+
+// Figma: **Task Flow** (`1256:12977`) — Tasks tab body.
+// TF15 Learning (`1256:13693`), TF14 Mission (`2902:13714`),
+// TF13 Marketplace empty (`1256:14057`).
+
+/// Body of the bottom-nav Tasks tab (tab bar lives in HomeScreen).
+class TasksBody extends StatefulWidget {
+  const TasksBody({super.key});
+
+  @override
+  State<TasksBody> createState() => _TasksBodyState();
+}
+
+class _TasksBodyState extends State<TasksBody> {
+  final TasksStore _store = TasksStore.instance;
+  int _segment = 0; // Learning / Mission / Marketplace
+  // null = All; otherwise maps to status (Revision → actionNeeded).
+  LearningTaskStatus? _filter;
+
+  @override
+  void initState() {
+    super.initState();
+    _store.addListener(_onStore);
+  }
+
+  @override
+  void dispose() {
+    _store.removeListener(_onStore);
+    super.dispose();
+  }
+
+  void _onStore() => setState(() {});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        SubscriptionsTopBar(
+          title: 'Tasks',
+          onSearch: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const SearchScreen()),
+          ),
+          onNotification: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+          ),
+        ),
+        const SizedBox(height: SkifluxSpacing.spaceL),
+        SkifluxSegmentedControl(
+          labels: const ['Learning', 'Mission', 'Marketplace'],
+          selectedIndex: _segment,
+          onChanged: (i) => setState(() => _segment = i),
+        ),
+        const SizedBox(height: SkifluxSpacing.spaceL),
+        Expanded(
+          child: switch (_segment) {
+            0 => _LearningList(
+                store: _store,
+                filter: _filter,
+                onFilter: (f) => setState(() => _filter = f),
+              ),
+            1 => _MissionList(store: _store),
+            _ => _MarketplaceEmpty(
+                onKeepLearning: () => setState(() => _segment = 0),
+              ),
+          },
+        ),
+      ],
+    );
+  }
+}
+
+// ── Learning (TF15) ──────────────────────────────────────────────────
+
+class _LearningList extends StatelessWidget {
+  const _LearningList({
+    required this.store,
+    required this.filter,
+    required this.onFilter,
+  });
+
+  final TasksStore store;
+  final LearningTaskStatus? filter;
+  final ValueChanged<LearningTaskStatus?> onFilter;
+
+  @override
+  Widget build(BuildContext context) {
+    final tasks = store.learningFiltered(filter);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          height: SkifluxUnit.u32,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              _FilterPill(
+                label: 'All',
+                count: store.countFor(null),
+                selected: filter == null,
+                onTap: () => onFilter(null),
+              ),
+              const SizedBox(width: SkifluxSpacing.spaceS),
+              _FilterPill(
+                label: 'Pending',
+                count: store.countFor(LearningTaskStatus.pending),
+                selected: filter == LearningTaskStatus.pending,
+                onTap: () => onFilter(LearningTaskStatus.pending),
+              ),
+              const SizedBox(width: SkifluxSpacing.spaceS),
+              _FilterPill(
+                label: 'In Review',
+                count: store.countFor(LearningTaskStatus.inReview),
+                selected: filter == LearningTaskStatus.inReview,
+                onTap: () => onFilter(LearningTaskStatus.inReview),
+              ),
+              const SizedBox(width: SkifluxSpacing.spaceS),
+              _FilterPill(
+                label: 'Revision',
+                count: store.countFor(LearningTaskStatus.actionNeeded),
+                selected: filter == LearningTaskStatus.actionNeeded,
+                onTap: () => onFilter(LearningTaskStatus.actionNeeded),
+              ),
+              const SizedBox(width: SkifluxSpacing.spaceS),
+              _FilterPill(
+                label: 'Completed',
+                count: store.countFor(LearningTaskStatus.completed),
+                selected: filter == LearningTaskStatus.completed,
+                onTap: () => onFilter(LearningTaskStatus.completed),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: SkifluxSpacing.spaceL),
+        Expanded(
+          child: tasks.isEmpty
+              ? Center(
+                  child: Text(
+                    'No tasks in this filter',
+                    style: SkifluxTypography.bodyP8Regular.copyWith(
+                      color: SkifluxColors.contentTertiary,
+                    ),
+                  ),
+                )
+              : ListView.separated(
+                  itemCount: tasks.length,
+                  separatorBuilder: (_, __) =>
+                      const SizedBox(height: SkifluxSpacing.spaceM),
+                  itemBuilder: (context, i) => _LearningTaskCard(
+                    task: tasks[i],
+                    onAction: () => _openTask(context, tasks[i]),
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+
+  void _openTask(BuildContext context, LearningTask task) {
+    // "View Result" must NEVER open task details — always the result screen.
+    if (task.status == LearningTaskStatus.completed) {
+      _openResult(context, task);
+      return;
+    }
+    if (task.kind == LearningTaskKind.quiz) {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => QuizIntroScreen(taskId: task.id)),
+      );
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SubmissionTaskScreen(taskId: task.id),
+      ),
+    );
+  }
+
+  void _openResult(BuildContext context, LearningTask task) {
+    final quiz = task.quiz;
+    if (task.kind == LearningTaskKind.quiz && quiz != null) {
+      final total = quiz.questions.length;
+      final answers = task.quizAnswers ??
+          List<int?>.generate(
+            total,
+            (i) => quiz.questions[i].correctIndex,
+          );
+      final correct = task.quizCorrect ?? total;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => QuizResultScreen(
+            taskId: task.id,
+            correct: correct,
+            total: total,
+            answers: answers,
+            passed: correct >= total,
+          ),
+        ),
+      );
+      return;
+    }
+    // Completed submission (or any non-quiz complete) — same result shell
+    // with task coin/XP rewards; Review is hidden when there is no quiz.
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => QuizResultScreen(
+          taskId: task.id,
+          correct: 1,
+          total: 1,
+          answers: const [],
+          passed: true,
+        ),
+      ),
+    );
+  }
+}
+
+/// Filter pill with count badge (Figma Button Group Pill on TF15).
+class _FilterPill extends StatelessWidget {
+  const _FilterPill({
+    required this.label,
+    required this.count,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final int count;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = selected
+        ? SkifluxColors.backgroundBrand
+        : SkifluxColors.backgroundPrimary;
+    final fg = selected
+        ? SkifluxColors.contentPrimaryInverse
+        : SkifluxColors.contentTertiary;
+    final badgeBg = selected
+        ? SkifluxColors.backgroundPrimaryBrand
+        : SkifluxColors.backgroundDisabled;
+    final badgeFg = selected
+        ? SkifluxColors.contentBrand
+        : SkifluxColors.contentDisabled;
+
+    return Material(
+      color: bg,
+      borderRadius: SkifluxRadii.borderPill,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: SkifluxRadii.borderPill,
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: SkifluxSpacing.spaceS,
+            vertical: SkifluxSpacing.spaceXs,
+          ),
+          decoration: BoxDecoration(
+            borderRadius: SkifluxRadii.borderPill,
+            border: selected
+                ? null
+                : Border.all(
+                    color: SkifluxColors.borderTertiary,
+                    width: SkifluxBorderWidth.xs,
+                  ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: SkifluxSpacing.spaceXs,
+                ),
+                child: Text(
+                  label,
+                  style: SkifluxTypography.uiButtonSmall.copyWith(color: fg),
+                ),
+              ),
+              Container(
+                width: SkifluxSpacing.spaceL,
+                height: SkifluxSpacing.spaceL,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: badgeBg,
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  '$count',
+                  style: SkifluxTypography.uiBadgeTagSmall.copyWith(
+                    color: badgeFg,
+                    fontSize: 8,
+                    height: 1,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LearningTaskCard extends StatelessWidget {
+  const _LearningTaskCard({required this.task, required this.onAction});
+
+  final LearningTask task;
+  final VoidCallback onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = _statusStyle(task.status);
+
+    return Container(
+      padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
+      decoration: BoxDecoration(
+        color: SkifluxColors.backgroundPrimary,
+        borderRadius: SkifluxRadii.borderL,
+        border: Border.all(
+          color: SkifluxColors.borderTertiary,
+          width: SkifluxBorderWidth.xs,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Episode row
+          Row(
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                decoration: const BoxDecoration(
+                  color: SkifluxColors.backgroundBrand,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  RemixIcons.play_circle_fill,
+                  size: 20,
+                  color: SkifluxColors.contentPrimaryInverse,
+                ),
+              ),
+              const SizedBox(width: SkifluxSpacing.spaceS),
+              Expanded(
+                child: Text(
+                  task.episodeLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: SkifluxTypography.headingH10Bold.copyWith(
+                    color: SkifluxColors.contentPrimary,
+                  ),
+                ),
+              ),
+              Text(
+                'View Episode',
+                style: SkifluxTypography.uiBadgeTagSmall.copyWith(
+                  color: SkifluxColors.contentBrand,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: SkifluxSpacing.spaceS),
+          // Title + status
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      task.title,
+                      style: SkifluxTypography.headingH9Bold.copyWith(
+                        color: SkifluxColors.contentPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: SkifluxSpacing.spaceXs),
+                    Text(
+                      task.description,
+                      style: SkifluxTypography.bodyP10Regular.copyWith(
+                        color: SkifluxColors.contentTertiary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: SkifluxSpacing.spaceS),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: SkifluxSpacing.spaceS,
+                  vertical: SkifluxSpacing.spaceXs,
+                ),
+                decoration: BoxDecoration(
+                  color: status.bg,
+                  borderRadius: SkifluxRadii.borderPill,
+                ),
+                child: Text(
+                  task.statusLabel,
+                  style: SkifluxTypography.uiBadgeTagSmall.copyWith(
+                    color: status.fg,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (task.feedback != null) ...[
+            const SizedBox(height: SkifluxSpacing.spaceS),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
+              decoration: BoxDecoration(
+                color: SkifluxColors.backgroundNegativeSubtle,
+                borderRadius: SkifluxRadii.borderM,
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    RemixIcons.information_fill,
+                    size: 20,
+                    color: SkifluxColors.contentNegative,
+                  ),
+                  const SizedBox(width: SkifluxSpacing.spaceS),
+                  Expanded(
+                    child: Text(
+                      task.feedback!,
+                      style: SkifluxTypography.bodyP10Regular.copyWith(
+                        color: SkifluxColors.contentNegative,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: SkifluxSpacing.spaceS),
+          // Rewards + CTA
+          Row(
+            children: [
+              _RewardChip(
+                icon: RemixIcons.copper_coin_fill,
+                label: '+${task.coins}',
+                color: SkifluxColors.contentNotice,
+              ),
+              const SizedBox(width: SkifluxSpacing.spaceM),
+              _RewardChip(
+                icon: RemixIcons.flashlight_fill,
+                label: '+${task.xp} XP',
+                color: SkifluxColors.contentBrand,
+              ),
+              const Spacer(),
+              _CardActionButton(
+                label: task.actionLabel,
+                enabled: task.actionEnabled ||
+                    task.status == LearningTaskStatus.completed,
+                destructive:
+                    task.status == LearningTaskStatus.actionNeeded,
+                secondary: task.status == LearningTaskStatus.completed ||
+                    task.status == LearningTaskStatus.inReview,
+                onPressed: task.status == LearningTaskStatus.inReview
+                    ? null
+                    : onAction,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  static ({Color bg, Color fg}) _statusStyle(LearningTaskStatus s) {
+    return switch (s) {
+      LearningTaskStatus.completed => (
+          bg: SkifluxColors.backgroundPositiveSubtle,
+          fg: SkifluxColors.contentPositive,
+        ),
+      LearningTaskStatus.pending => (
+          bg: SkifluxColors.backgroundNoticeSubtle,
+          fg: SkifluxColors.contentNotice,
+        ),
+      LearningTaskStatus.inReview => (
+          bg: SkifluxColors.backgroundInfoSubtle,
+          fg: SkifluxColors.contentInfo,
+        ),
+      LearningTaskStatus.actionNeeded => (
+          bg: SkifluxColors.backgroundNegativeSubtle,
+          fg: SkifluxColors.contentNegative,
+        ),
+    };
+  }
+}
+
+class _RewardChip extends StatelessWidget {
+  const _RewardChip({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: SkifluxIcons.sizeS, color: color),
+        const SizedBox(width: SkifluxSpacing.space2xs),
+        Text(
+          label,
+          style: SkifluxTypography.uiButtonSmall.copyWith(color: color),
+        ),
+      ],
+    );
+  }
+}
+
+/// Compact S-height CTA matching list-card buttons (primary / secondary /
+/// destructive / disabled).
+class _CardActionButton extends StatelessWidget {
+  const _CardActionButton({
+    required this.label,
+    required this.enabled,
+    this.destructive = false,
+    this.secondary = false,
+    this.onPressed,
+  });
+
+  final String label;
+  final bool enabled;
+  final bool destructive;
+  final bool secondary;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    if (destructive) {
+      return Material(
+        color: SkifluxColors.backgroundNegative,
+        borderRadius: SkifluxRadii.borderPill,
+        child: InkWell(
+          onTap: enabled ? onPressed : null,
+          borderRadius: SkifluxRadii.borderPill,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: SkifluxSpacing.spaceS,
+              vertical: SkifluxSpacing.spaceXs,
+            ),
+            child: Text(
+              label,
+              style: SkifluxTypography.uiButtonSmall.copyWith(
+                color: SkifluxColors.contentPrimaryInverse,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (secondary || !enabled) {
+      return Material(
+        color: SkifluxColors.backgroundPrimary,
+        borderRadius: SkifluxRadii.borderPill,
+        child: InkWell(
+          onTap: enabled ? onPressed : null,
+          borderRadius: SkifluxRadii.borderPill,
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: SkifluxSpacing.spaceS,
+              vertical: SkifluxSpacing.spaceXs,
+            ),
+            decoration: BoxDecoration(
+              borderRadius: SkifluxRadii.borderPill,
+              border: Border.all(
+                color: SkifluxColors.borderTertiary,
+                width: SkifluxBorderWidth.xs,
+              ),
+            ),
+            child: Text(
+              label,
+              style: SkifluxTypography.uiButtonSmall.copyWith(
+                color: enabled
+                    ? SkifluxColors.contentPrimary
+                    : SkifluxColors.contentDisabled,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return SkifluxButton(
+      label: label,
+      size: SkifluxButtonSize.s,
+      onPressed: onPressed,
+    );
+  }
+}
+
+// ── Mission (TF14 · card `2902:13732`) ───────────────────────────────
+
+class _MissionList extends StatelessWidget {
+  const _MissionList({required this.store});
+
+  final TasksStore store;
+
+  static const _icons = <String, IconData>{
+    'instagram': RemixIcons.instagram_fill,
+    'twitter': RemixIcons.twitter_x_fill,
+    'facebook': RemixIcons.facebook_circle_fill,
+    'linkedin': RemixIcons.linkedin_box_fill,
+    'tiktok': RemixIcons.tiktok_fill,
+    'telegram': RemixIcons.telegram_fill,
+    'whatsapp': RemixIcons.whatsapp_fill,
+    'user': RemixIcons.user_add_fill,
+    'star': RemixIcons.star_fill,
+    'image': RemixIcons.image_add_fill,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      itemCount: store.missions.length,
+      separatorBuilder: (_, __) =>
+          const SizedBox(height: SkifluxSpacing.spaceM),
+      itemBuilder: (context, i) {
+        final m = store.missions[i];
+        // Figma `2902:13732`: 16px pad, border, radius L; top-aligned
+        // 30px brand icon + text column (title · body · coin/CTA row).
+        return Container(
+          padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
+          decoration: BoxDecoration(
+            color: SkifluxColors.backgroundPrimary,
+            borderRadius: SkifluxRadii.borderL,
+            border: Border.all(
+              color: SkifluxColors.contentSecondaryInverse,
+              width: SkifluxBorderWidth.xs,
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                alignment: Alignment.center,
+                decoration: const BoxDecoration(
+                  color: SkifluxColors.contentBrand,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  _icons[m.iconKey] ?? RemixIcons.flag_fill,
+                  size: 20,
+                  color: SkifluxColors.contentPrimaryInverse,
+                ),
+              ),
+              const SizedBox(width: SkifluxSpacing.spaceL),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      m.title,
+                      style: SkifluxTypography.headingH10Bold.copyWith(
+                        color: SkifluxColors.contentSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: SkifluxSpacing.spaceXs),
+                    Text(
+                      m.description,
+                      style: SkifluxTypography.bodyP10Regular.copyWith(
+                        color: SkifluxColors.contentTertiary,
+                      ),
+                    ),
+                    const SizedBox(height: SkifluxSpacing.spaceXs),
+                    Row(
+                      children: [
+                        const Icon(
+                          RemixIcons.copper_coin_fill,
+                          size: SkifluxIcons.sizeS,
+                          color: SkifluxColors.contentNoticeBold,
+                        ),
+                        const SizedBox(width: SkifluxSpacing.space2xs),
+                        Text(
+                          '+${m.coins}',
+                          style: SkifluxTypography.uiButtonSmall.copyWith(
+                            color: SkifluxColors.contentNoticeBold,
+                          ),
+                        ),
+                        const Spacer(),
+                        SkifluxButton(
+                          label: m.completed ? 'Done' : m.actionLabel,
+                          size: SkifluxButtonSize.s,
+                          onPressed: m.completed
+                              ? null
+                              : () => store.completeMission(m.id),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ── Marketplace empty (TF13 · `1256:14074`) ──────────────────────────
+
+class _MarketplaceEmpty extends StatelessWidget {
+  const _MarketplaceEmpty({required this.onKeepLearning});
+
+  final VoidCallback onKeepLearning;
+
+  @override
+  Widget build(BuildContext context) {
+    // Figma: column gap Space/S (8) between icon, copy, and Keep Learning —
+    // not the generic empty-state's 48px vertical pad + extra XL.
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: SkifluxSpacing.spaceL),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: SkifluxEmptyState.iconSize + 50, // 98
+              height: SkifluxEmptyState.iconSize + 50,
+              decoration: const BoxDecoration(
+                color: SkifluxColors.brand100,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                RemixIcons.search_fill,
+                size: SkifluxEmptyState.iconSize,
+                color: SkifluxColors.contentBrand,
+              ),
+            ),
+            const SizedBox(height: SkifluxSpacing.spaceS),
+            Text(
+              'Marketplace Coming Soon',
+              textAlign: TextAlign.center,
+              style: SkifluxTypography.headingH7Bold.copyWith(
+                color: SkifluxColors.contentPrimary,
+              ),
+            ),
+            const SizedBox(height: SkifluxSpacing.spaceXs),
+            Text(
+              'We are building the ultimate gig ecosystem. Complete your '
+              'learning tasks and earn verified skill badges to prepare for '
+              'incoming client contracts.',
+              textAlign: TextAlign.center,
+              style: SkifluxTypography.bodyP8Regular.copyWith(
+                color: SkifluxColors.contentTertiary,
+              ),
+            ),
+            const SizedBox(height: SkifluxSpacing.spaceS),
+            SkifluxButton(
+              label: 'Keep Learning',
+              onPressed: onKeepLearning,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+

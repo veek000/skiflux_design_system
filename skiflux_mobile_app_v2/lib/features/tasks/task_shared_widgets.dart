@@ -1,0 +1,160 @@
+import 'package:flutter/material.dart';
+import 'package:skiflux_design_system/skiflux_design_system.dart';
+
+import '../subscriptions/data/subscriptions_store.dart';
+import '../subscriptions/subscriptions_screen.dart';
+import 'data/tasks_store.dart';
+
+/// Combined SkillCoins + XP chip (Figma Task Details reward pill).
+class TaskRewardPill extends StatelessWidget {
+  const TaskRewardPill({super.key, required this.coins, required this.xp});
+
+  final int coins;
+  final int xp;
+
+  @override
+  Widget build(BuildContext context) {
+    // Align left so the grey pill hugs content (ListView would otherwise
+    // stretch a bare Container to full width).
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: SkifluxSpacing.spaceS,
+          vertical: SkifluxSpacing.spaceS,
+        ),
+        decoration: BoxDecoration(
+          color: SkifluxColors.backgroundHover,
+          borderRadius: SkifluxRadii.borderX,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              RemixIcons.copper_coin_fill,
+              size: SkifluxIcons.sizeS,
+              color: SkifluxColors.contentNoticeBold,
+            ),
+            const SizedBox(width: SkifluxSpacing.space2xs),
+            Text(
+              '+$coins SkillCoins',
+              style: SkifluxTypography.uiInputContent.copyWith(
+                color: SkifluxColors.contentNoticeBold,
+              ),
+            ),
+            const SizedBox(width: SkifluxSpacing.spaceS),
+            const Icon(
+              RemixIcons.flashlight_fill,
+              size: SkifluxIcons.sizeS,
+              color: SkifluxColors.contentBrand,
+            ),
+            const SizedBox(width: SkifluxSpacing.space2xs),
+            Text(
+              '+$xp XP',
+              style: SkifluxTypography.uiInputContent.copyWith(
+                color: SkifluxColors.contentBrand,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Episode row on task detail / quiz intro — taps open the player sheet.
+class TaskEpisodeRow extends StatelessWidget {
+  const TaskEpisodeRow({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: SkifluxColors.backgroundHover,
+      borderRadius: SkifluxRadii.borderX,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: SkifluxRadii.borderX,
+        child: Row(
+          children: [
+            const SkifluxAvatar(
+              size: SkifluxUnit.u48,
+              style: SkifluxAvatarStyle.initial,
+              initials: 'AD',
+            ),
+            const SizedBox(width: SkifluxSpacing.spaceS),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: SkifluxTypography.headingH10Bold.copyWith(
+                      color: SkifluxColors.contentPrimary,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: SkifluxTypography.bodyP11Regular.copyWith(
+                      color: SkifluxColors.contentTertiary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(
+              width: SkifluxUnit.u48,
+              height: SkifluxUnit.u48,
+              child: Icon(
+                RemixIcons.arrow_right_s_line,
+                size: SkifluxIcons.sizeM,
+                color: SkifluxColors.contentPrimary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Opens the existing episode player sheet for a learning task's episode.
+void openTaskEpisode(BuildContext context, LearningTask task) {
+  final match = RegExp(r'EP\s*(\d+)', caseSensitive: false)
+      .firstMatch(task.episodeLabel);
+  final epNumber = int.tryParse(match?.group(1) ?? '') ?? 1;
+
+  // Prefer a feed episode with the same number; fall back to a synthetic one
+  // so the row always opens a real player sheet.
+  SubscriptionEpisode? fromFeed;
+  for (final e in SubscriptionsStore.feed()) {
+    if (e.epNumber == epNumber) {
+      fromFeed = e;
+      break;
+    }
+  }
+
+  final episode = fromFeed ??
+      SubscriptionEpisode(
+        epNumber: epNumber,
+        title: task.episodeTitle,
+        creatorUsername: SubscriptionsStore.creators.first.username,
+        duration: '12:40',
+        views: '2.1k',
+        postedAgo: '1d ago',
+      );
+
+  showEpisodePlayerModal(context, episode);
+}
