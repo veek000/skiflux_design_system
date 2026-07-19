@@ -649,9 +649,13 @@ as a new app — uninstall the old "skiflux_example" install manually.
       chips, minimize; View Playlist still navigates to playlist page.
     - Notify sheet title "Notify me of" + toast copy for activated/off.
 
+20. **Monorepo Restructure**: Moved the previously nested `skiflux_mobile_app_v2`
+    to be a sibling of `skiflux_design_system` under a shared `skiflux/` root.
+    Added a proper root `.gitignore` to block disposable build artifacts and 
+    cleanly pushed this restructured state to the GitHub repository.
+
 ## 8. Suggested next steps
 
-- `git init` + first commit (repo has no history — biggest handoff risk).
 - Real data/state layer (feed, comments, profile, tasks, playlists are demo);
   voice notes produce real m4a files but nothing persists them.
 - My Profile detail screens: settings, coins/streak, Design World,
