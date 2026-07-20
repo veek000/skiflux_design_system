@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
@@ -12,14 +13,14 @@ import 'data/leaderboard_store.dart';
 // highlighted row is in view (Figma shows rows 10–13). League switching
 // only re-selects the pill — the demo store has one league of data.
 
-class LeaderboardScreen extends StatefulWidget {
+class LeaderboardScreen extends ConsumerStatefulWidget {
   const LeaderboardScreen({super.key});
 
   @override
-  State<LeaderboardScreen> createState() => _LeaderboardScreenState();
+  ConsumerState<LeaderboardScreen> createState() => _LeaderboardScreenState();
 }
 
-class _LeaderboardScreenState extends State<LeaderboardScreen> {
+class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
   /// How far the rank card slides up over the podium steps (Figma:
   /// podium bottom y565.92 − card top y538, in 361-frame units).
   static const double _cardOverlap = 27.92;
@@ -28,6 +29,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final board = ref.watch(leaderboardProvider);
+
     return Scaffold(
       backgroundColor: SkifluxColors.backgroundPrimary,
       appBar: SkifluxTopNavBar(
@@ -49,11 +52,11 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
       body: Column(
         children: [
           const SizedBox(height: SkifluxSpacing.spaceL),
-          _pillGroup(),
+          _pillGroup(board),
           const SizedBox(height: SkifluxSpacing.spaceL),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: SkifluxSpacing.spaceL),
-            child: _RankNotification(),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: SkifluxSpacing.spaceL),
+            child: _RankNotification(board: board),
           ),
           const SizedBox(height: SkifluxSpacing.spaceL),
           Expanded(
@@ -65,11 +68,11 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                 final podiumHeight = _Podium.frameH * scale;
                 return Stack(
                   children: [
-                    const Positioned(
+                    Positioned(
                       top: 0,
                       left: SkifluxSpacing.spaceL,
                       right: SkifluxSpacing.spaceL,
-                      child: _Podium(),
+                      child: _Podium(board: board),
                     ),
                     Positioned(
                       // Figma overlap: 565.92 − 538 ≈ 28 (scaled).
@@ -77,7 +80,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                       left: SkifluxSpacing.spaceL,
                       right: SkifluxSpacing.spaceL,
                       bottom: 0,
-                      child: const _RankTable(),
+                      child: _RankTable(board: board),
                     ),
                   ],
                 );
@@ -91,16 +94,16 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 
   /// League pills (`1256:25615`) — same Button Group Pill pattern as the
   /// creator profile (size S, selected = primary).
-  Widget _pillGroup() {
+  Widget _pillGroup(LeaderboardData board) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: SkifluxSpacing.spaceL),
       child: Row(
         children: [
-          for (var i = 0; i < LeaderboardStore.leagues.length; i++) ...[
+          for (var i = 0; i < board.leagues.length; i++) ...[
             if (i > 0) const SizedBox(width: SkifluxSpacing.spaceS),
             SkifluxButton(
-              label: LeaderboardStore.leagues[i],
+              label: board.leagues[i],
               size: SkifluxButtonSize.s,
               type: i == _leagueIndex
                   ? SkifluxButtonType.primary
@@ -117,7 +120,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 /// Notification pill (`1256:25616`): brand-subtle pill, 32px brand "#12"
 /// avatar, Creato Bold 14 brand message.
 class _RankNotification extends StatelessWidget {
-  const _RankNotification();
+  const _RankNotification({required this.board});
+
+  final LeaderboardData board;
 
   @override
   Widget build(BuildContext context) {
@@ -144,7 +149,7 @@ class _RankNotification extends StatelessWidget {
               shape: BoxShape.circle,
             ),
             child: Text(
-              '#${LeaderboardStore.currentRank}',
+              '#${board.currentRank}',
               style: SkifluxTypography.uiBadgeTagSmall.copyWith(
                 color: SkifluxColors.contentPrimaryInverse,
               ),
@@ -154,7 +159,7 @@ class _RankNotification extends StatelessWidget {
           Expanded(
             child: Text(
               'You are doing better than '
-              '${LeaderboardStore.betterThanPercent}% of other participants',
+              '${board.betterThanPercent}% of other participants',
               style: SkifluxTypography.uiButtonMedium.copyWith(
                 color: SkifluxColors.contentBrand,
               ),
@@ -173,7 +178,9 @@ class _RankNotification extends StatelessWidget {
 /// is 361×325.92 with the SVG bottom-anchored at y 110.68; positions
 /// scale with the available width.
 class _Podium extends StatelessWidget {
-  const _Podium();
+  const _Podium({required this.board});
+
+  final LeaderboardData board;
 
   // Figma geometry (361-wide frame) — shared with the screen's Stack so
   // the rank-card overlap scales with the same factor.
@@ -190,6 +197,7 @@ class _Podium extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final scale = constraints.maxWidth / frameW;
+        final podium = board.podium;
         return SizedBox(
           height: frameH * scale,
           child: Stack(
@@ -205,10 +213,9 @@ class _Podium extends StatelessWidget {
                   fit: BoxFit.fill,
                 ),
               ),
-              _place(LeaderboardStore.podium[0], _firstX, _firstY, scale,
-                  crowned: true),
-              _place(LeaderboardStore.podium[1], _secondX, _secondY, scale),
-              _place(LeaderboardStore.podium[2], _thirdX, _thirdY, scale),
+              _place(podium[0], _firstX, _firstY, scale, crowned: true),
+              _place(podium[1], _secondX, _secondY, scale),
+              _place(podium[2], _thirdX, _thirdY, scale),
             ],
           ),
         );
@@ -320,9 +327,11 @@ class _CrownBadge extends StatelessWidget {
 /// 24px corners) with a fixed RANK / TOTAL XP header and its own
 /// scrolling row list (starting at #4 — the podium holds 1–3). Opens
 /// pre-scrolled so the signed-in user's highlighted row sits in view,
-/// like the Figma frame (rows 10–13 visible around #12).
+/// like the Figma frame (rows 10–13).
 class _RankTable extends StatefulWidget {
-  const _RankTable();
+  const _RankTable({required this.board});
+
+  final LeaderboardData board;
 
   @override
   State<_RankTable> createState() => _RankTableState();
@@ -352,8 +361,9 @@ class _RankTableState extends State<_RankTable> {
   }
 
   double get _userOffset {
-    final index = LeaderboardStore.ranked.indexWhere(
-      (entry) => entry.rank == LeaderboardStore.currentRank,
+    final board = widget.board;
+    final index = board.ranked.indexWhere(
+      (entry) => entry.rank == board.currentRank,
     );
     if (index <= 2) return 0;
     return (index - 2) * _rowExtent;
@@ -367,6 +377,7 @@ class _RankTableState extends State<_RankTable> {
 
   @override
   Widget build(BuildContext context) {
+    final board = widget.board;
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: const BoxDecoration(
@@ -417,16 +428,15 @@ class _RankTableState extends State<_RankTable> {
                 vertical: SkifluxSpacing.spaceL,
               ),
               itemExtent: _rowExtent,
-              itemCount: LeaderboardStore.ranked.length,
+              itemCount: board.ranked.length,
               itemBuilder: (context, index) {
-                final entry = LeaderboardStore.ranked[index];
+                final entry = board.ranked[index];
                 return Padding(
                   padding:
                       const EdgeInsets.only(bottom: SkifluxSpacing.spaceS),
                   child: _RankRow(
                     entry: entry,
-                    highlighted:
-                        entry.rank == LeaderboardStore.currentRank,
+                    highlighted: entry.rank == board.currentRank,
                   ),
                 );
               },

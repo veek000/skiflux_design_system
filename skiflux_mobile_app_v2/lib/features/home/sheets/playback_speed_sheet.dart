@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../../shared/sheets/skiflux_sheet.dart';
@@ -15,7 +16,7 @@ Future<void> showPlaybackSpeedSheet(BuildContext context) {
   );
 }
 
-class _PlaybackSpeedSheet extends StatelessWidget {
+class _PlaybackSpeedSheet extends ConsumerWidget {
   const _PlaybackSpeedSheet();
 
   String _label(double s) {
@@ -24,55 +25,51 @@ class _PlaybackSpeedSheet extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final prefs = PlayerPrefsStore.instance;
-    return ListenableBuilder(
-      listenable: prefs,
-      builder: (context, _) {
-        return SkifluxSheetShell(
-          title: 'Playback Speed',
-          child: ListView(
-            shrinkWrap: true,
-            padding: const EdgeInsets.fromLTRB(
-              SkifluxSpacing.spaceL,
-              0,
-              SkifluxSpacing.spaceL,
-              SkifluxSpacing.spaceL,
-            ),
-            children: [
-              for (final s in _kSpeeds)
-                InkWell(
-                  onTap: () {
-                    prefs.setSpeed(s);
-                    Navigator.of(context).pop();
-                  },
-                  child: SizedBox(
-                    height: SkifluxUnit.u48,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            _label(s),
-                            style: SkifluxTypography.uiButtonLarge.copyWith(
-                              color: prefs.speed == s
-                                  ? SkifluxColors.contentBrand
-                                  : SkifluxColors.contentPrimary,
-                            ),
-                          ),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final prefs = ref.watch(playerPrefsProvider);
+    final notifier = ref.read(playerPrefsProvider.notifier);
+    return SkifluxSheetShell(
+      title: 'Playback Speed',
+      child: ListView(
+        shrinkWrap: true,
+        padding: const EdgeInsets.fromLTRB(
+          SkifluxSpacing.spaceL,
+          0,
+          SkifluxSpacing.spaceL,
+          SkifluxSpacing.spaceL,
+        ),
+        children: [
+          for (final s in _kSpeeds)
+            InkWell(
+              onTap: () {
+                notifier.setSpeed(s);
+                Navigator.of(context).pop();
+              },
+              child: SizedBox(
+                height: SkifluxUnit.u48,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _label(s),
+                        style: SkifluxTypography.uiButtonLarge.copyWith(
+                          color: prefs.speed == s
+                              ? SkifluxColors.contentBrand
+                              : SkifluxColors.contentPrimary,
                         ),
-                        if (prefs.speed == s)
-                          const Icon(
-                            RemixIcons.check_fill,
-                            color: SkifluxColors.contentBrand,
-                          ),
-                      ],
+                      ),
                     ),
-                  ),
+                    if (prefs.speed == s)
+                      const Icon(
+                        RemixIcons.check_fill,
+                        color: SkifluxColors.contentBrand,
+                      ),
+                  ],
                 ),
-            ],
-          ),
-        );
-      },
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

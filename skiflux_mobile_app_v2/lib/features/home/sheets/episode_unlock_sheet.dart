@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../../shared/sheets/skiflux_sheet.dart';
@@ -17,27 +18,26 @@ Future<void> showEpisodeUnlockSheet(
   );
 }
 
-class _EpisodeUnlockSheet extends StatefulWidget {
+class _EpisodeUnlockSheet extends ConsumerStatefulWidget {
   const _EpisodeUnlockSheet({required this.episodeId});
 
   final String episodeId;
 
   @override
-  State<_EpisodeUnlockSheet> createState() => _EpisodeUnlockSheetState();
+  ConsumerState<_EpisodeUnlockSheet> createState() =>
+      _EpisodeUnlockSheetState();
 }
 
 enum _UnlockPhase { cost, processing, success }
 
-class _EpisodeUnlockSheetState extends State<_EpisodeUnlockSheet> {
-  final _store = PlaylistsStore.instance;
+class _EpisodeUnlockSheetState extends ConsumerState<_EpisodeUnlockSheet> {
   _UnlockPhase _phase = _UnlockPhase.cost;
   bool _busy = false;
 
-  PlaylistEpisode? get _ep => _store.byId(widget.episodeId);
-
   @override
   Widget build(BuildContext context) {
-    final ep = _ep;
+    final store = ref.watch(playlistsProvider);
+    final ep = store.byId(widget.episodeId);
     if (ep == null) {
       return const SkifluxSheetShell(
         title: 'Episode',
@@ -108,7 +108,7 @@ class _EpisodeUnlockSheetState extends State<_EpisodeUnlockSheet> {
       );
     }
 
-    final canAfford = _store.skillCoins >= ep.coinCost;
+    final canAfford = store.skillCoins >= ep.coinCost;
 
     return SkifluxSheetShell(
       title: 'Episode Cost',
@@ -157,7 +157,7 @@ class _EpisodeUnlockSheetState extends State<_EpisodeUnlockSheet> {
                           ),
                         ),
                         Text(
-                          'Your balance: ${_store.skillCoins}',
+                          'Your balance: ${store.skillCoins}',
                           style: SkifluxTypography.bodyP10Regular.copyWith(
                             color: canAfford
                                 ? SkifluxColors.contentTertiary
@@ -208,7 +208,7 @@ class _EpisodeUnlockSheetState extends State<_EpisodeUnlockSheet> {
       _phase = _UnlockPhase.processing;
     });
     await Future<void>.delayed(const Duration(milliseconds: 900));
-    final ok = _store.tryUnlock(ep.id);
+    final ok = ref.read(playlistsProvider.notifier).tryUnlock(ep.id);
     if (!mounted) return;
     if (!ok) {
       setState(() {

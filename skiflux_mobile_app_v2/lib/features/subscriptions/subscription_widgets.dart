@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import 'data/subscriptions_store.dart';
@@ -83,7 +84,7 @@ class ViewAllStoryTile extends StatelessWidget {
 
 /// Creator story avatar with the purple "N new" badge pill and name below.
 /// [active] draws the brand ring (flow 03 — creator-filtered view).
-class CreatorStoryTile extends StatelessWidget {
+class CreatorStoryTile extends ConsumerWidget {
   const CreatorStoryTile({
     super.key,
     required this.creator,
@@ -96,8 +97,8 @@ class CreatorStoryTile extends StatelessWidget {
   final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) {
-    final newCount = SubscriptionsStore.newCountFor(creator);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final newCount = ref.watch(subscriptionsProvider).newCountFor(creator);
     return GestureDetector(
       onTap: onTap,
       child: SizedBox(
@@ -177,7 +178,7 @@ class _NewBadge extends StatelessWidget {
 
 /// Feed card: photo thumbnail (EP tag + duration chips) beside a text
 /// column — optional purple "New" label, title, creator row, views · age.
-class SubscriptionEpisodeCard extends StatelessWidget {
+class SubscriptionEpisodeCard extends ConsumerWidget {
   const SubscriptionEpisodeCard({
     super.key,
     required this.episode,
@@ -188,8 +189,8 @@ class SubscriptionEpisodeCard extends StatelessWidget {
   final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) {
-    final creator = SubscriptionsStore.creatorOf(episode);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final creator = ref.watch(subscriptionsProvider).creatorOf(episode);
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,

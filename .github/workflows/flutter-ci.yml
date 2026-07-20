@@ -1,0 +1,60 @@
+# Skiflux monorepo CI — analyze + test on every PR and push to main.
+# Pinned Flutter version matches the local stable SDK used for development
+# (Flutter 3.41.6 / Dart 3.11.4) so CI does not drift when "latest" changes.
+name: Flutter CI
+
+# Quoted "on" so YAML 1.1 parsers don't treat the key as boolean true.
+"on":
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+# Cancel in-progress runs for the same branch/PR when a new commit lands.
+concurrency:
+  group: flutter-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze-and-test:
+    name: Analyze & Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.41.6"
+          channel: stable
+          cache: true
+
+      - name: Flutter version
+        run: flutter --version
+
+      # Path dependency: app → ../skiflux_design_system — resolve design system first.
+      - name: pub get (design system)
+        working-directory: skiflux_design_system
+        run: flutter pub get
+
+      - name: pub get (mobile app)
+        working-directory: skiflux_mobile_app_v2
+        run: flutter pub get
+
+      - name: Analyze design system
+        working-directory: skiflux_design_system
+        run: flutter analyze
+
+      - name: Analyze mobile app
+        working-directory: skiflux_mobile_app_v2
+        run: flutter analyze
+
+      # Design system has no test/ directory yet — only the app is tested.
+      - name: Test mobile app
+        working-directory: skiflux_mobile_app_v2
+        run: flutter test

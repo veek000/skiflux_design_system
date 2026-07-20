@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../../shared/sheets/skiflux_sheet.dart';
+import '../../../shared/toast/skiflux_toast.dart';
 import '../../playlists/data/playlists_store.dart';
 import '../../tasks/data/tasks_store.dart';
 import '../../tasks/quiz_intro_screen.dart';
@@ -18,32 +20,13 @@ Future<void> showMoreMenuSheet(BuildContext context) {
   );
 }
 
-class _MoreMenuSheet extends StatefulWidget {
+class _MoreMenuSheet extends ConsumerWidget {
   const _MoreMenuSheet();
 
   @override
-  State<_MoreMenuSheet> createState() => _MoreMenuSheetState();
-}
-
-class _MoreMenuSheetState extends State<_MoreMenuSheet> {
-  final _prefs = PlayerPrefsStore.instance;
-
-  @override
-  void initState() {
-    super.initState();
-    _prefs.addListener(_onPrefs);
-  }
-
-  @override
-  void dispose() {
-    _prefs.removeListener(_onPrefs);
-    super.dispose();
-  }
-
-  void _onPrefs() => setState(() {});
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final prefs = ref.watch(playerPrefsProvider);
+    final prefsNotifier = ref.read(playerPrefsProvider.notifier);
     return SkifluxSheetShell(
       title: 'More Menu',
       child: ListView(
@@ -61,7 +44,7 @@ class _MoreMenuSheetState extends State<_MoreMenuSheet> {
             title: 'View Task',
             subtitle: 'See what you need to execute',
             trailing: RemixIcons.arrow_right_s_line,
-            onTap: () => _openTask(context),
+            onTap: () => _openTask(context, ref),
           ),
           const SizedBox(height: SkifluxSpacing.spaceS),
           _FeatureCard(
@@ -80,7 +63,7 @@ class _MoreMenuSheetState extends State<_MoreMenuSheet> {
           _MenuRow(
             icon: RemixIcons.speed_fill,
             label: 'Playback Speed',
-            chipLabel: _prefs.speedLabel,
+            chipLabel: prefs.speedLabel,
             chipBackground: SkifluxColors.backgroundPrimaryBrand,
             chipForeground: SkifluxColors.contentBrand,
             onTap: () async {
@@ -93,12 +76,7 @@ class _MoreMenuSheetState extends State<_MoreMenuSheet> {
             label: 'Download Episode',
             onTap: () {
               Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Episode queued for download'),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
+              SkifluxToast.info(context, 'Episode queued for download');
             },
           ),
           _MenuRow(
@@ -106,48 +84,41 @@ class _MoreMenuSheetState extends State<_MoreMenuSheet> {
             label: 'Full Screen',
             onTap: () {
               Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Full screen player'),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
+              SkifluxToast.info(context, 'Full screen player');
             },
           ),
           _MenuRow(
             icon: RemixIcons.closed_captioning_fill,
             label: 'Caption',
-            chipLabel: _prefs.captionsOn ? 'On' : 'Off',
-            chipBackground: _prefs.captionsOn
+            chipLabel: prefs.captionsOn ? 'On' : 'Off',
+            chipBackground: prefs.captionsOn
                 ? SkifluxColors.backgroundPrimaryBrand
                 : SkifluxColors.backgroundHover,
-            chipForeground: _prefs.captionsOn
+            chipForeground: prefs.captionsOn
                 ? SkifluxColors.contentBrand
                 : SkifluxColors.contentDisabled,
-            onTap: () => _prefs.toggleCaptions(),
+            onTap: prefsNotifier.toggleCaptions,
           ),
           _MenuRow(
             icon: RemixIcons.arrow_down_double_fill,
             label: 'Auto Scroll',
-            chipLabel: _prefs.autoScrollOn ? 'On' : 'Off',
-            chipBackground: _prefs.autoScrollOn
+            chipLabel: prefs.autoScrollOn ? 'On' : 'Off',
+            chipBackground: prefs.autoScrollOn
                 ? SkifluxColors.backgroundPrimaryBrand
                 : SkifluxColors.backgroundHover,
-            chipForeground: _prefs.autoScrollOn
+            chipForeground: prefs.autoScrollOn
                 ? SkifluxColors.contentBrand
                 : SkifluxColors.contentDisabled,
-            onTap: () => _prefs.toggleAutoScroll(),
+            onTap: prefsNotifier.toggleAutoScroll,
           ),
           _MenuRow(
             icon: RemixIcons.eye_off_fill,
             label: 'Not Interested',
             onTap: () {
               Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('We\'ll show fewer videos like this'),
-                  behavior: SnackBarBehavior.floating,
-                ),
+              SkifluxToast.success(
+                context,
+                "We'll show fewer videos like this",
               );
             },
           ),
@@ -157,12 +128,7 @@ class _MoreMenuSheetState extends State<_MoreMenuSheet> {
             color: SkifluxColors.contentNegative,
             onTap: () {
               Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Thanks for your report'),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
+              SkifluxToast.success(context, 'Thanks for your report');
             },
           ),
         ],
@@ -170,9 +136,9 @@ class _MoreMenuSheetState extends State<_MoreMenuSheet> {
     );
   }
 
-  void _openTask(BuildContext context) {
+  void _openTask(BuildContext context, WidgetRef ref) {
     Navigator.of(context).pop();
-    final tasks = TasksStore.instance.learning;
+    final tasks = ref.read(tasksProvider).learning;
     // Prefer a pending learning task (submission or quiz).
     LearningTask? target;
     for (final t in tasks) {
@@ -199,6 +165,7 @@ class _MoreMenuSheetState extends State<_MoreMenuSheet> {
     }
   }
 }
+
 
 class _FeatureCard extends StatelessWidget {
   const _FeatureCard({

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/sheets/share_sheet.dart';
@@ -8,7 +9,7 @@ import 'quiz_assessment_screen.dart';
 // Figma: Task flow 01 (`1256:14718`) — Assessment Passed / result.
 // Rewards split card: `1256:14729` (border/secondary divider).
 
-class QuizResultScreen extends StatelessWidget {
+class QuizResultScreen extends ConsumerWidget {
   const QuizResultScreen({
     super.key,
     required this.taskId,
@@ -25,8 +26,8 @@ class QuizResultScreen extends StatelessWidget {
   final bool passed;
 
   @override
-  Widget build(BuildContext context) {
-    final task = TasksStore.instance.byId(taskId);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final task = ref.watch(tasksProvider).byId(taskId);
     final quiz = task?.quiz;
     final isQuiz = task?.kind == LearningTaskKind.quiz && quiz != null;
     final percent = total == 0 ? 0 : ((correct / total) * 100).round();

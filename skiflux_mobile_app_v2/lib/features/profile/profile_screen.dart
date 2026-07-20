@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/sheets/share_sheet.dart';
+import '../../shared/toast/skiflux_toast.dart';
+import '../../shared/widgets/playlist_deck.dart';
 import '../home/sheets/episode_unlock_sheet.dart';
 import '../home/sheets/notify_settings_sheet.dart';
 import '../playlists/data/playlists_store.dart';
@@ -13,14 +16,14 @@ import '../subscriptions/subscriptions_screen.dart';
 ///
 /// Top nav, creator header (Subscribe / Notify), Recent | Playlists tabs,
 /// pill filter group, and episode cards (Completed / Unlocked / Locked).
-class ProfileScreen extends StatefulWidget {
+class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   int _tabIndex = 0;
   int _pillIndex = 0;
   bool _subscribed = false;
@@ -56,34 +59,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
               subscribed: _subscribed,
               onSubscribe: () {
                 setState(() => _subscribed = !_subscribed);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      _subscribed
-                          ? 'Subscribed to Amara Design'
-                          : 'Unsubscribed',
-                    ),
-                    behavior: SnackBarBehavior.floating,
-                  ),
+                // Generalized typed toast (success) — same copy as before;
+                // visual uses Background/Positive + check icon.
+                SkifluxToast.success(
+                  context,
+                  _subscribed
+                      ? 'Subscribed to Amara Design'
+                      : 'Unsubscribed',
                 );
               },
               onNotify: () async {
-                final messenger = ScaffoldMessenger.of(context);
                 final next = await showNotifySettingsSheet(
                   context,
                   current: _notify,
                 );
-                if (!mounted || next == null) return;
+                if (next == null || !context.mounted) return;
                 setState(() => _notify = next);
-                messenger.showSnackBar(
-                  SnackBar(
-                    content: Text('${next.toastTitle}\n${next.toastBody}'),
-                    behavior: SnackBarBehavior.floating,
-                    backgroundColor: next == NotifyPreference.none
-                        ? SkifluxColors.contentSecondary
-                        : SkifluxColors.backgroundBrand,
-                  ),
-                );
+                final message = '${next.toastTitle}\n${next.toastBody}';
+                // Off → info; activated prefs → success confirmation.
+                if (next == NotifyPreference.none) {
+                  SkifluxToast.info(context, message);
+                } else {
+                  SkifluxToast.success(context, message);
+                }
               },
             ),
             const SizedBox(height: SkifluxSpacing.spaceL),
@@ -106,7 +104,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   List<Widget> _recentEpisodes(BuildContext context) {
-    final eps = PlaylistsStore.instance.defaultPlaylist.episodes.take(4);
+    final eps =
+        ref.watch(playlistsProvider).defaultPlaylist.episodes.take(4);
     final widgets = <Widget>[];
     for (final ep in eps) {
       widgets.add(
@@ -154,125 +153,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return widgets;
   }
 
-  /// Figma Home Flow 06 playlist row: stacked cover (image) + count chip.
+  /// Playlist preview — same rendering as the search playlist result row
+  /// (Figma `304:9582`): stacked deck thumbnail + title + creator · count.
   Widget _playlistTile(BuildContext context) {
-    final pl = PlaylistsStore.instance.defaultPlaylist;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const PlaylistScreen()),
-        ),
-        borderRadius: SkifluxRadii.borderL,
+    final pl = ref.watch(playlistsProvider).defaultPlaylist;
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const PlaylistScreen()),
+      ),
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        height: 98,
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            SizedBox(
-              width: 132,
-              height: 132,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  // Back card peeks (offset) — uses cover image tinted.
-                  Positioned(
-                    left: 6,
-                    top: 0,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(14),
-                      child: ColorFiltered(
-                        colorFilter: ColorFilter.mode(
-                          SkifluxColors.magenta200.withValues(alpha: 0.85),
-                          BlendMode.srcATop,
-                        ),
-                        child: Image.asset(
-                          pl.coverAsset,
-                          width: 114,
-                          height: 114,
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Front card
-                  Positioned(
-                    left: 0,
-                    top: 5,
-                    child: ClipRRect(
-                      borderRadius: SkifluxRadii.borderL,
-                      child: SizedBox(
-                        width: 126,
-                        height: 126,
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            Image.asset(
-                              pl.coverAsset,
-                              fit: BoxFit.cover,
-                            ),
-                            const ColoredBox(
-                              color: Color(0x66000000),
-                            ),
-                            Positioned(
-                              right: SkifluxSpacing.spaceM,
-                              bottom: SkifluxSpacing.spaceM,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: SkifluxSpacing.spaceS,
-                                  vertical: SkifluxSpacing.spaceXs,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: SkifluxColors.backgroundPrimaryBrand,
-                                  borderRadius: SkifluxRadii.borderX,
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      RemixIcons.play_list_2_line,
-                                      size: 12,
-                                      color: SkifluxColors.contentBrand,
-                                    ),
-                                    const SizedBox(
-                                      width: SkifluxSpacing.space2xs,
-                                    ),
-                                    Text(
-                                      '${pl.episodeCount}',
-                                      style: SkifluxTypography.uiBadgeTagSmall
-                                          .copyWith(
-                                        color: SkifluxColors.contentBrand,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+            PlaylistDeck(
+              width: 126,
+              height: 98,
+              episodeCount: pl.episodeCount,
             ),
-            const SizedBox(width: SkifluxSpacing.spaceS),
             Expanded(
-              child: SizedBox(
-                height: 126,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: SkifluxSpacing.spaceS,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
                       pl.title,
-                      maxLines: 3,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: SkifluxTypography.headingH9Bold.copyWith(
+                      style: SkifluxTypography.headingH10Bold.copyWith(
                         color: SkifluxColors.contentPrimary,
-                        height: 24 / 18,
                       ),
                     ),
                     Text(
-                      pl.viewsLabel,
-                      style: SkifluxTypography.bodyP10Regular.copyWith(
+                      pl.metaLine,
+                      style: SkifluxTypography.bodyP11Regular.copyWith(
                         color: SkifluxColors.contentPrimary,
                       ),
                     ),

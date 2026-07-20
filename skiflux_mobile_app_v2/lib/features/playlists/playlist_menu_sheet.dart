@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/sheets/skiflux_sheet.dart';
+import '../../shared/toast/skiflux_toast.dart';
 import '../home/sheets/episode_unlock_sheet.dart';
 import 'data/playlists_store.dart';
 import 'playlist_screen.dart';
@@ -16,33 +18,12 @@ Future<void> showPlaylistMenuSheet(BuildContext context) {
   );
 }
 
-class _PlaylistMenuSheet extends StatefulWidget {
+class _PlaylistMenuSheet extends ConsumerWidget {
   const _PlaylistMenuSheet();
 
   @override
-  State<_PlaylistMenuSheet> createState() => _PlaylistMenuSheetState();
-}
-
-class _PlaylistMenuSheetState extends State<_PlaylistMenuSheet> {
-  final _store = PlaylistsStore.instance;
-
-  @override
-  void initState() {
-    super.initState();
-    _store.addListener(_onStore);
-  }
-
-  @override
-  void dispose() {
-    _store.removeListener(_onStore);
-    super.dispose();
-  }
-
-  void _onStore() => setState(() {});
-
-  @override
-  Widget build(BuildContext context) {
-    final pl = _store.defaultPlaylist;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pl = ref.watch(playlistsProvider).defaultPlaylist;
     return SkifluxSheetShell(
       title: pl.title,
       child: Column(
@@ -121,12 +102,7 @@ class _PlaylistMenuSheetState extends State<_PlaylistMenuSheet> {
     // Unlocked — dismiss menu; player already shows current EP in demo.
     if (context.mounted) Navigator.of(context).pop();
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Playing ${ep.epTag} · ${ep.title}'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      SkifluxToast.info(context, 'Playing ${ep.epTag} · ${ep.title}');
     }
   }
 }

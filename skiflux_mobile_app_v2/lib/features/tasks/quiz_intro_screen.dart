@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import 'data/tasks_store.dart';
@@ -7,14 +8,14 @@ import 'task_shared_widgets.dart';
 
 // Figma: Task flow 08 (`1256:14443`) — quiz intro / "Before you start".
 
-class QuizIntroScreen extends StatelessWidget {
+class QuizIntroScreen extends ConsumerWidget {
   const QuizIntroScreen({super.key, required this.taskId});
 
   final String taskId;
 
   @override
-  Widget build(BuildContext context) {
-    final task = TasksStore.instance.byId(taskId);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final task = ref.watch(tasksProvider).byId(taskId);
     final quiz = task?.quiz;
 
     if (task == null || quiz == null) {
@@ -61,7 +62,7 @@ class QuizIntroScreen extends StatelessWidget {
                 TaskEpisodeRow(
                   title: task.episodeTitle,
                   subtitle: task.episodeSubtitle,
-                  onTap: () => openTaskEpisode(context, task),
+                  onTap: () => openTaskEpisode(context, ref, task),
                 ),
                 const SizedBox(height: SkifluxSpacing.spaceL),
                 Container(

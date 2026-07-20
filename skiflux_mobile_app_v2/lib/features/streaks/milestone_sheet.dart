@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
@@ -8,6 +9,9 @@ import 'data/streaks_store.dart';
 // Figma: **Streak Screen 04** overlay (`2259:13266`) — milestone
 // celebration sheet: purple gradient header with light rays and a laurel
 // "+50 XP" crest, "Milestone Completed!" copy, sticky Close button.
+//
+// Sheet consumption: reads [streaksProvider] for milestone / milestoneXp
+// display values only (no mutations from this sheet).
 
 Future<void> showMilestoneSheet(BuildContext context) {
   return showSkifluxSheet(
@@ -16,11 +20,12 @@ Future<void> showMilestoneSheet(BuildContext context) {
   );
 }
 
-class _MilestoneSheet extends StatelessWidget {
+class _MilestoneSheet extends ConsumerWidget {
   const _MilestoneSheet();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final streaks = ref.watch(streaksProvider);
     final media = MediaQuery.of(context);
     return Material(
       color: SkifluxColors.backgroundPrimary,
@@ -33,7 +38,7 @@ class _MilestoneSheet extends StatelessWidget {
         children: [
           Stack(
             children: [
-              const _CelebrationHeader(),
+              _CelebrationHeader(milestoneXp: streaks.milestoneXp),
               // Close circle over the header (`2259:13267`).
               Positioned(
                 top: SkifluxSpacing.spaceL,
@@ -73,11 +78,11 @@ class _MilestoneSheet extends StatelessWidget {
                 const SizedBox(height: SkifluxSpacing.spaceXs),
                 Text.rich(
                   TextSpan(
-                    text: 'You’ve earned ${StreaksStore.milestoneXp} XP '
+                    text: 'You’ve earned ${streaks.milestoneXp} XP '
                         'for completing a milestone of ',
                     children: [
                       TextSpan(
-                        text: '${StreaksStore.milestone} days streaks',
+                        text: '${streaks.milestone} days streaks',
                         style: SkifluxTypography.bodyP8Semibold.copyWith(
                           color: SkifluxColors.contentSecondary,
                         ),
@@ -115,7 +120,9 @@ class _MilestoneSheet extends StatelessWidget {
 /// Gradient header (`2291:11448`): brand purple fading to white, the
 /// light-ray burst behind a laurel-wreathed "+50 XP / Earned" crest.
 class _CelebrationHeader extends StatelessWidget {
-  const _CelebrationHeader();
+  const _CelebrationHeader({required this.milestoneXp});
+
+  final int milestoneXp;
 
   @override
   Widget build(BuildContext context) {
@@ -162,7 +169,7 @@ class _CelebrationHeader extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        '+${StreaksStore.milestoneXp} XP',
+                        '+$milestoneXp XP',
                         style: SkifluxTypography.headingH6ExtraBold.copyWith(
                           color: SkifluxColors.contentPrimaryInverse,
                         ),

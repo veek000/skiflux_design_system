@@ -1,8 +1,8 @@
 /// Demo data for the Tasks tab (Figma **Task Flow** `1256:12977`).
-/// Session-local [ChangeNotifier] — no persistence, matching other stores.
+/// Session-local Riverpod notifier — no persistence, matching other stores.
 library;
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // ── Enums ────────────────────────────────────────────────────────────
 
@@ -158,15 +158,17 @@ class UploadedFileInfo {
   final String? path;
 }
 
-// ── Store ────────────────────────────────────────────────────────────
+// ── State + Notifier ─────────────────────────────────────────────────
 
-class TasksStore extends ChangeNotifier {
-  TasksStore._();
+/// Snapshot of learning + mission demo lists.
+class TasksState {
+  TasksState({
+    required this.learning,
+    required this.missions,
+  });
 
-  static final TasksStore instance = TasksStore._();
-
-  late final List<LearningTask> learning = _seedLearning();
-  late final List<MissionTask> missions = _seedMissions();
+  final List<LearningTask> learning;
+  final List<MissionTask> missions;
 
   List<LearningTask> learningFiltered(LearningTaskStatus? status) {
     if (status == null) return List.unmodifiable(learning);
@@ -185,20 +187,40 @@ class TasksStore extends ChangeNotifier {
     }
     return null;
   }
+}
+
+/// Riverpod choice: [NotifierProvider] — learning/mission status mutate
+/// via markInReview / markCompleted / recordQuizResult / completeMission
+/// (was ChangeNotifier singleton). Single provider keeps learning +
+/// missions in one session snapshot (list filters stay local UI state).
+class TasksNotifier extends Notifier<TasksState> {
+  @override
+  TasksState build() {
+    return TasksState(
+      learning: _seedLearning(),
+      missions: _seedMissions(),
+    );
+  }
 
   void markInReview(String id) {
-    final t = byId(id);
+    final t = state.byId(id);
     if (t == null) return;
     t.status = LearningTaskStatus.inReview;
     t.feedback = null;
-    notifyListeners();
+    state = TasksState(
+      learning: List<LearningTask>.of(state.learning),
+      missions: state.missions,
+    );
   }
 
   void markCompleted(String id) {
-    final t = byId(id);
+    final t = state.byId(id);
     if (t == null) return;
     t.status = LearningTaskStatus.completed;
-    notifyListeners();
+    state = TasksState(
+      learning: List<LearningTask>.of(state.learning),
+      missions: state.missions,
+    );
   }
 
   /// Persist quiz answers + score and mark the task completed when passed.
@@ -208,19 +230,25 @@ class TasksStore extends ChangeNotifier {
     required int correct,
     required bool passed,
   }) {
-    final t = byId(id);
+    final t = state.byId(id);
     if (t == null) return;
     t.quizAnswers = List<int?>.from(answers);
     t.quizCorrect = correct;
     if (passed) t.status = LearningTaskStatus.completed;
-    notifyListeners();
+    state = TasksState(
+      learning: List<LearningTask>.of(state.learning),
+      missions: state.missions,
+    );
   }
 
   void completeMission(String id) {
-    for (final m in missions) {
+    for (final m in state.missions) {
       if (m.id == id && !m.completed) {
         m.completed = true;
-        notifyListeners();
+        state = TasksState(
+          learning: state.learning,
+          missions: List<MissionTask>.of(state.missions),
+        );
         return;
       }
     }
@@ -483,3 +511,7 @@ class TasksStore extends ChangeNotifier {
     ];
   }
 }
+
+final tasksProvider = NotifierProvider<TasksNotifier, TasksState>(
+  TasksNotifier.new,
+);

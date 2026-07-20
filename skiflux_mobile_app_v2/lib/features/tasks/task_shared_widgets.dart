@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../subscriptions/data/subscriptions_store.dart';
@@ -131,15 +132,24 @@ class TaskEpisodeRow extends StatelessWidget {
 }
 
 /// Opens the existing episode player sheet for a learning task's episode.
-void openTaskEpisode(BuildContext context, LearningTask task) {
+///
+/// Takes [ref] (not [ProviderScope.containerOf]) so callers that already
+/// have a [WidgetRef] use the same pattern as the rest of the app.
+void openTaskEpisode(
+  BuildContext context,
+  WidgetRef ref,
+  LearningTask task,
+) {
   final match = RegExp(r'EP\s*(\d+)', caseSensitive: false)
       .firstMatch(task.episodeLabel);
   final epNumber = int.tryParse(match?.group(1) ?? '') ?? 1;
 
+  final subs = ref.read(subscriptionsProvider);
+
   // Prefer a feed episode with the same number; fall back to a synthetic one
   // so the row always opens a real player sheet.
   SubscriptionEpisode? fromFeed;
-  for (final e in SubscriptionsStore.feed()) {
+  for (final e in subs.feed()) {
     if (e.epNumber == epNumber) {
       fromFeed = e;
       break;
@@ -150,7 +160,7 @@ void openTaskEpisode(BuildContext context, LearningTask task) {
       SubscriptionEpisode(
         epNumber: epNumber,
         title: task.episodeTitle,
-        creatorUsername: SubscriptionsStore.creators.first.username,
+        creatorUsername: subs.creators.first.username,
         duration: '12:40',
         views: '2.1k',
         postedAgo: '1d ago',

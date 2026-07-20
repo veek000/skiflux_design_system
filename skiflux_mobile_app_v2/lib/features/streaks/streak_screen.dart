@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/sheets/share_sheet.dart';
@@ -10,19 +11,20 @@ import 'week_picker_sheet.dart';
 // Screen 01 (`2231:11212`) = broken streak (0, missed days), 02
 // (`2217:11294`) = active streak 5, 03 (`2259:12919`) = streak 7, 04
 // (`2259:13122`) = 03 + milestone sheet. One parameterized screen renders
-// all variants from [StreaksStore]; the demo data matches 03/04 so the
+// all variants from [streaksProvider]; the demo data matches 03/04 so the
 // milestone celebration is reachable.
 
-class StreakScreen extends StatefulWidget {
+class StreakScreen extends ConsumerStatefulWidget {
   const StreakScreen({super.key});
 
   @override
-  State<StreakScreen> createState() => _StreakScreenState();
+  ConsumerState<StreakScreen> createState() => _StreakScreenState();
 }
 
-class _StreakScreenState extends State<StreakScreen> {
+class _StreakScreenState extends ConsumerState<StreakScreen> {
   /// Week shown in the tracker card; switchable via the date-range pill.
-  StreakWeek _week = StreaksStore.currentWeek;
+  /// Null until first frame so we seed from the provider.
+  StreakWeek? _week;
 
   @override
   void initState() {
@@ -30,19 +32,24 @@ class _StreakScreenState extends State<StreakScreen> {
     // Screen 04: the milestone sheet opens over the screen when a
     // milestone was just reached (once per session for the demo).
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && StreaksStore.consumeCelebration()) {
+      if (!mounted) return;
+      if (ref.read(streaksProvider.notifier).consumeCelebration()) {
         showMilestoneSheet(context);
       }
     });
   }
 
   Future<void> _pickWeek() async {
-    final picked = await showWeekPickerSheet(context, selected: _week);
+    final current = _week ?? ref.read(streaksProvider).currentWeek;
+    final picked = await showWeekPickerSheet(context, selected: current);
     if (picked != null && mounted) setState(() => _week = picked);
   }
 
   @override
   Widget build(BuildContext context) {
+    final streaks = ref.watch(streaksProvider);
+    final week = _week ?? streaks.currentWeek;
+
     return Scaffold(
       backgroundColor: SkifluxColors.backgroundPrimary,
       appBar: SkifluxTopNavBar(
@@ -60,11 +67,18 @@ class _StreakScreenState extends State<StreakScreen> {
       body: ListView(
         padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
         children: [
-          const _StreakHero(),
+          _StreakHero(streak: streaks.streak),
           const SizedBox(height: SkifluxSpacing.spaceL),
-          _ThisWeekCard(week: _week, onPickWeek: _pickWeek),
+          _ThisWeekCard(
+            week: week,
+            isCurrent: week.isCurrentFor(streaks.currentWeek.start),
+            onPickWeek: _pickWeek,
+          ),
           const SizedBox(height: SkifluxSpacing.spaceL),
-          const _StatCards(),
+          _StatCards(
+            bestStreak: streaks.bestStreak,
+            xpEarned: streaks.xpEarned,
+          ),
         ],
       ),
       bottomNavigationBar: _stickyShareButton(context),
@@ -98,7 +112,9 @@ class _StreakScreenState extends State<StreakScreen> {
 // ── Hero: flame · count · pending-task pill ──────────────────────────
 
 class _StreakHero extends StatelessWidget {
-  const _StreakHero();
+  const _StreakHero({required this.streak});
+
+  final int streak;
 
   /// Figma `2224:11556` hero palette (primitive Orange ramp — the streak
   /// flow is orange-accented by design, like the My Profile streak pill).
@@ -106,13 +122,13 @@ class _StreakHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const active = StreaksStore.streak > 0;
+    final active = streak > 0;
     return Column(
       children: [
-        const SkifluxFlame(active: active),
+        SkifluxFlame(active: active),
         const SizedBox(height: SkifluxSpacing.spaceM),
         Text(
-          '${StreaksStore.streak}',
+          '$streak',
           textAlign: TextAlign.center,
           // Figma: H1 ExtraBold 72 with line-height 1 (leading-none);
           // inactive count (streak 0) goes disabled-grey like the flame.
@@ -189,9 +205,14 @@ class _PendingTaskPill extends StatelessWidget {
 /// `2226:11596`: grey card with header row (title + white date pill) and
 /// the 7-day tracker for [week].
 class _ThisWeekCard extends StatelessWidget {
-  const _ThisWeekCard({required this.week, required this.onPickWeek});
+  const _ThisWeekCard({
+    required this.week,
+    required this.isCurrent,
+    required this.onPickWeek,
+  });
 
   final StreakWeek week;
+  final bool isCurrent;
   final VoidCallback onPickWeek;
 
   @override
@@ -208,7 +229,7 @@ class _ThisWeekCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                week.isCurrent ? 'This Week' : 'Past Week',
+                isCurrent ? 'This Week' : 'Past Week',
                 style: SkifluxTypography.uiButtonLarge.copyWith(
                   color: SkifluxColors.contentPrimary,
                 ),
@@ -354,17 +375,20 @@ class _DayCell extends StatelessWidget {
 /// `2226:11888`: Best Streak (notice-subtle → notice gradient, trophy) and
 /// XP Earned (brand-opacity-50 → brand gradient, flashlight).
 class _StatCards extends StatelessWidget {
-  const _StatCards();
+  const _StatCards({required this.bestStreak, required this.xpEarned});
+
+  final int bestStreak;
+  final int xpEarned;
 
   @override
   Widget build(BuildContext context) {
-    return const Row(
+    return Row(
       children: [
         Expanded(
           child: _StatCard(
-            value: '${StreaksStore.bestStreak}',
+            value: '$bestStreak',
             label: 'Best Streak',
-            gradient: [
+            gradient: const [
               SkifluxColors.backgroundNoticeSubtle,
               SkifluxColors.backgroundNotice,
             ],
@@ -373,12 +397,12 @@ class _StatCards extends StatelessWidget {
             iconColor: SkifluxColors.contentNoticeBold,
           ),
         ),
-        SizedBox(width: SkifluxSpacing.spaceL),
+        const SizedBox(width: SkifluxSpacing.spaceL),
         Expanded(
           child: _StatCard(
-            value: '${StreaksStore.xpEarned}',
+            value: '$xpEarned',
             label: 'XP Earned',
-            gradient: [
+            gradient: const [
               SkifluxColors.backgroundBrandOpacity50,
               SkifluxColors.backgroundBrand,
             ],

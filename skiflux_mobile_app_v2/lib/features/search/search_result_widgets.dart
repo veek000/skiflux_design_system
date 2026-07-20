@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/widgets/playlist_deck.dart';
 import 'data/recent_searches_store.dart';
 import 'data/search_index.dart';
 
@@ -11,10 +12,9 @@ import 'data/search_index.dart';
 /// Figma tags these "Outfit SemiBold 10" — an authoring slip; DM Sans is the
 /// project body face (same call as the ComposeBar audit).
 class _ThumbChip extends StatelessWidget {
-  const _ThumbChip({required this.label, this.leading});
+  const _ThumbChip({required this.label});
 
   final String label;
-  final Widget? leading;
 
   @override
   Widget build(BuildContext context) {
@@ -27,21 +27,12 @@ class _ThumbChip extends StatelessWidget {
         color: SkifluxColors.brand100,
         borderRadius: SkifluxRadii.borderX,
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (leading != null) ...[
-            leading!,
-            const SizedBox(width: SkifluxSpacing.spaceXs),
-          ],
-          Text(
-            label,
-            style: SkifluxTypography.bodyP11Semibold.copyWith(
-              color: SkifluxColors.brand500,
-              height: 1.4,
-            ),
-          ),
-        ],
+      child: Text(
+        label,
+        style: SkifluxTypography.bodyP11Semibold.copyWith(
+          color: SkifluxColors.brand500,
+          height: 1.4,
+        ),
       ),
     );
   }
@@ -215,53 +206,11 @@ class PlaylistResultCard extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Fractional geometry straight from Figma 304:9583 (stacked deck).
-            SizedBox(
+            // Stacked deck thumbnail — shared geometry (Figma 304:9583).
+            PlaylistDeck(
               width: 126,
-              child: Stack(
-                children: [
-                  Positioned(
-                    left: 6.14,
-                    top: 0,
-                    child: Container(
-                      width: 113.72,
-                      height: 85.16,
-                      decoration: BoxDecoration(
-                        color: SkifluxColors.magenta200,
-                        borderRadius: BorderRadius.circular(14.44),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: 0,
-                    top: 3.64,
-                    child: Container(
-                      width: 126,
-                      height: 94.36,
-                      decoration: BoxDecoration(
-                        color: SkifluxColors.magenta900,
-                        borderRadius: SkifluxRadii.borderL,
-                      ),
-                      child: Stack(
-                        children: [
-                          Positioned(
-                            right: SkifluxSpacing.spaceM,
-                            bottom: SkifluxSpacing.spaceM,
-                            child: _ThumbChip(
-                              label: '${playlist.episodeCount}',
-                              leading: const Icon(
-                                RemixIcons.menu_fold_line,
-                                size: 12,
-                                color: SkifluxColors.brand500,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              height: 98,
+              episodeCount: playlist.episodeCount,
             ),
             Expanded(
               child: Padding(

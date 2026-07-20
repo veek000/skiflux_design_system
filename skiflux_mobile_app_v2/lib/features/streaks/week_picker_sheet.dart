@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/sheets/skiflux_sheet.dart';
@@ -10,6 +11,9 @@ import 'data/streaks_store.dart';
 // month grid styled like the This-Week day cells. Tapping any date
 // selects its whole Sun–Sat week (start → end); weeks without tracked
 // history are disabled.
+//
+// Sheet consumption: reads [streaksProvider] for [StreaksState.weekContaining]
+// only — selection/month paging stay local to the sheet.
 
 /// Shows the picker and resolves with the chosen week, or null when
 /// dismissed. [selected] is the currently shown week.
@@ -23,16 +27,16 @@ Future<StreakWeek?> showWeekPickerSheet(
   );
 }
 
-class _WeekPickerSheet extends StatefulWidget {
+class _WeekPickerSheet extends ConsumerStatefulWidget {
   const _WeekPickerSheet({required this.selected});
 
   final StreakWeek selected;
 
   @override
-  State<_WeekPickerSheet> createState() => _WeekPickerSheetState();
+  ConsumerState<_WeekPickerSheet> createState() => _WeekPickerSheetState();
 }
 
-class _WeekPickerSheetState extends State<_WeekPickerSheet> {
+class _WeekPickerSheetState extends ConsumerState<_WeekPickerSheet> {
   late StreakWeek _selected = widget.selected;
 
   /// First day of the month currently shown in the grid.
@@ -48,6 +52,8 @@ class _WeekPickerSheetState extends State<_WeekPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final streaks = ref.watch(streaksProvider);
+
     return SkifluxSheetShell(
       title: 'Select Week',
       child: SingleChildScrollView(
@@ -59,7 +65,7 @@ class _WeekPickerSheetState extends State<_WeekPickerSheet> {
             const SizedBox(height: SkifluxSpacing.spaceL),
             _weekdayLabels(),
             const SizedBox(height: SkifluxSpacing.spaceS),
-            ..._weekRows(),
+            ..._weekRows(streaks),
             const SizedBox(height: SkifluxSpacing.spaceL),
             SkifluxButton(
               label: 'Apply',
@@ -132,7 +138,7 @@ class _WeekPickerSheetState extends State<_WeekPickerSheet> {
 
   /// Sun-first rows from the Sunday on/before the 1st through the week
   /// containing the month's last day.
-  List<Widget> _weekRows() {
+  List<Widget> _weekRows(StreaksState streaks) {
     final first = DateTime(_month.year, _month.month, 1);
     final last = DateTime(_month.year, _month.month + 1, 0);
     // DateTime.weekday: Mon=1 … Sun=7 → Sun-first offset is weekday % 7.
@@ -143,6 +149,7 @@ class _WeekPickerSheetState extends State<_WeekPickerSheet> {
         sunday: cursor,
         month: _month.month,
         selected: _selected,
+        weekContaining: streaks.weekContaining,
         onSelect: (week) => setState(() => _selected = week),
       ));
       cursor = cursor.add(const Duration(days: 7));
@@ -159,17 +166,19 @@ class _WeekRow extends StatelessWidget {
     required this.sunday,
     required this.month,
     required this.selected,
+    required this.weekContaining,
     required this.onSelect,
   });
 
   final DateTime sunday;
   final int month;
   final StreakWeek selected;
+  final StreakWeek? Function(DateTime day) weekContaining;
   final ValueChanged<StreakWeek> onSelect;
 
   @override
   Widget build(BuildContext context) {
-    final week = StreaksStore.weekContaining(sunday);
+    final week = weekContaining(sunday);
     final isSelected =
         week != null && StreakWeek.sameDay(week.start, selected.start);
     return Padding(

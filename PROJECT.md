@@ -14,6 +14,235 @@
 
 ---
 
+## Current Architecture (as of 2026-07-19)
+
+**State management: Riverpod — 100% complete for feature-level state
+across the entire app (Passes 1–4 + full-app cross-check on 2026-07-20).
+No legacy setState/singleton pattern remaining for feature/business
+state.**
+
+App root is wrapped in `ProviderScope` (`skiflux_mobile_app_v2/lib/main.dart`).
+Dependency: `flutter_riverpod` ^3.3.2. Full audit:
+[RIVERPOD_MIGRATION_AUDIT.md](RIVERPOD_MIGRATION_AUDIT.md). Pass 4
+closed the last known exceptions (comments + home feed review).
+
+All feature domains use Riverpod providers:
+
+| Domain | Provider(s) | Type |
+|--------|-------------|------|
+| notifications | `notificationsProvider` | `NotifierProvider` |
+| leaderboard | `leaderboardProvider` | `Provider` (static demo data) |
+| streaks | `streaksProvider` | `NotifierProvider` |
+| playlists | `playlistsProvider` + `playerPrefsProvider` | `NotifierProvider` + `NotifierProvider` |
+| search | `searchIndexProvider` + `recentSearchesProvider` | `Provider` + `AsyncNotifierProvider` |
+| subscriptions | `subscriptionsProvider` | `NotifierProvider` |
+| tasks | `tasksProvider` | `NotifierProvider` |
+| comments (home sheet) | `commentsProvider` | `NotifierProvider.autoDispose` |
+
+Provider definitions live under each feature’s `data/*_store.dart` (or
+`search_index.dart` for the search index). Screens consume them via
+`ConsumerWidget` / `ConsumerStatefulWidget` and `ref.watch` / `ref.read`.
+
+**Known, deliberate design choices (not gaps):**
+
+- `search_results_screen.dart` receives results via constructor from the
+  search screen rather than watching a provider directly — intentional
+  (ephemeral query results owned by the search route).
+- Home bottom-nav `_tabIndex`, video like-button animation, form drafts,
+  sheet draft selection, quiz-in-progress answers/timer, etc. remain
+  `setState` — purely local / ephemeral UI (see Pass 4 cross-check).
+- `*_store.dart` filenames remain even though these files now contain
+  Riverpod providers, not the old store/singleton pattern — naming is
+  legacy, functionality is fully migrated.
+
+### Standard consumption pattern
+
+Example from `leaderboard_screen.dart` (simplest static `Provider`):
+
+```dart
+class LeaderboardScreen extends ConsumerStatefulWidget {
+  const LeaderboardScreen({super.key});
+
+  @override
+  ConsumerState<LeaderboardScreen> createState() => _LeaderboardScreenState();
+}
+
+class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
+  int _leagueIndex = 0; // local UI only — league pill selection
+
+  @override
+  Widget build(BuildContext context) {
+    final board = ref.watch(leaderboardProvider);
+    // ... use board.leagues, board.podium, board.ranked, etc.
+  }
+}
+```
+
+Mutations use the notifier: `ref.read(someProvider.notifier).method(...)`.
+Pure local UI (tabs, form drafts, animation toggles) may still use
+`setState` on the widget.
+
+### ⚠️ RULE FOR ANY NEW WORK (including UI conversion from Figma)
+
+- Every new screen/component must consume feature-level state via
+  Riverpod providers (`ConsumerWidget` / `ConsumerStatefulWidget`,
+  `ref.watch` / `ref.read`). Never introduce `setState` for
+  feature/business state — `setState` remains correct only for purely
+  local, ephemeral UI state (tab selection, form field drafts, animation
+  toggles).
+- When a provider needs to be read from a non-widget context (a
+  standalone function, not inside a build method), pass `WidgetRef` in as
+  a parameter from the calling widget — do **not** use
+  `ProviderScope.containerOf(context)` as a shortcut. This pattern was
+  found and corrected once already (`task_shared_widgets.dart` /
+  `openTaskEpisode`); do not reintroduce it.
+- Reference examples by complexity: **leaderboard** (simplest, static
+  `Provider`), **streaks** or **notifications** (`NotifierProvider` with
+  mutation), **playlists** or **subscriptions** (multiple related
+  providers), **tasks** (most complex single provider handling multiple
+  sub-states), **comments** (`NotifierProvider.autoDispose` for
+  sheet-scoped session state).
+- Do not introduce a new store pattern, global singleton, or any other
+  state approach without explicit approval.
+
+### Error Handling
+
+Centralized layer lives under
+`skiflux_mobile_app_v2/lib/shared/error_handling/`:
+
+| File | Role |
+|------|------|
+| `error_handler.dart` | `SkifluxErrorKind`, `SkifluxFailure`, `ClassifiedError`, `ErrorHandler.classify`, crash-report hook, `errorHandlerProvider` |
+| `error_display.dart` | `ErrorDisplay.show(context, ref, error)` — toast or modal |
+
+**Riverpod:** `errorHandlerProvider` is a plain `Provider<ErrorHandler>`
+(pure classification, no session state). Screens call
+`ref.read(errorHandlerProvider)` only through `ErrorDisplay.show` in
+normal UI code; notifiers may throw `SkifluxFailure(kind)` so the
+screen’s catch path stays uniform.
+
+**Decision rule (toast vs modal):** If the user spent real effort or
+money, or the failure blocks them from proceeding, use **modal**.
+Everything else defaults to **toast**.
+
+| Kind | UI | User copy |
+|------|----|-----------|
+| Network timeout / no connection | toast | Couldn't connect. Check your internet and try again. |
+| Like / comment / reaction failed | toast | That didn't send. Please try again. |
+| Search/filter error | toast | Something went wrong with your search. Please try again. |
+| Task submission failed | modal | Your submission didn't go through. Please try again — your progress hasn't been lost. |
+| Quiz/assessment submission failed | modal | (same as task submission) |
+| SkillCoin withdrawal failed | modal | We couldn't process your withdrawal. No coins were deducted — please try again or contact support. |
+| Session expired / auth | modal | Your session timed out. Please log in again to continue. |
+| Voicenote recording/upload failed | modal | Your voice note couldn't be sent. Tap to retry. |
+| Content failed to load | modal | We couldn't load this. Please try again. |
+| Unclassified fallback | toast | Something went wrong. Please try again. |
+
+Never show raw exception text or error codes to the user.
+
+**How to call from a new screen:**
+
+```dart
+// Riverpod screens / notifiers' UI handlers:
+try {
+  // feature work that may throw SkifluxFailure or a raw exception
+} catch (e, st) {
+  if (!mounted) return;
+  await ErrorDisplay.show(context, ref, e, stackTrace: st);
+}
+
+// Non-Riverpod widgets (e.g. comments_sheet until migrated):
+await ErrorDisplay.showStandalone(context, e, stackTrace: st);
+```
+
+Prefer `throw const SkifluxFailure(SkifluxErrorKind.taskSubmission)` (or
+the matching kind) from notifiers/services when the failure mode is
+already known. `ErrorDisplay` classifies, optionally reports, then shows
+[SkifluxToast](#toast-notifications) (toast) or `showSkifluxSheet` /
+`SkifluxSheetShell` (modal). `showStandalone` uses `const ErrorHandler()`
+because the classifier is pure — no `WidgetRef` required.
+
+**UI building blocks:** Modal/Dialog is not a design-system component;
+error **modals** reuse the app-wide overlay pattern
+`showSkifluxSheet` + `SkifluxSheetShell` (`shared/sheets/skiflux_sheet.dart`)
+— blur + scrim + white card with title/close — same shell as comments,
+more-menu, share, unlock, notify, etc. Sheet content is message +
+`SkifluxButton` (dismiss/retry); no shell API extension was required.
+Non-blocking error **toasts** go through [SkifluxToast](#toast-notifications)
+with `type: error`.
+
+**Crash-reporting hook:** `ErrorHandler.reportTechnicalError` in
+`error_handler.dart`. Today it `debugPrint`s. When Phase 1 item 4
+(Sentry) lands, replace only that method body — call sites stay
+unchanged. Marked `TODO(Phase 1 item 4)`.
+
+**Rollout status (screens wired):**
+
+| Screen / path | Kind | Notes |
+|---------------|------|--------|
+| `submission_task_screen.dart` | `taskSubmission` (modal) | Invalid http(s) link / missing task |
+| `quiz_assessment_screen.dart` | `quizSubmission` (modal) | `_finish` / `recordQuizResult` failure path |
+| `quiz_assessment_screen.dart` | `contentLoadFailed` (modal) | Missing task/quiz on open |
+| `search_screen.dart` | `searchFailed` (toast) | Query / recents add/remove/clear failures |
+| `search_screen.dart` | `contentLoadFailed` (modal) | `recentSearchesProvider` AsyncError |
+| `comments_sheet.dart` | `voicenoteFailed` (modal) | Empty/invalid voice path via `ErrorDisplay.show` (Riverpod) |
+| `comments_sheet.dart` | `likeCommentReactionFailed` (toast) | Text send catch via `ErrorDisplay.show` (Riverpod) |
+
+**Skipped (no real implementation to attach to yet):**
+
+| Item | Reason |
+|------|--------|
+| SkillCoin **withdrawal** | Not implemented — only spend-to-unlock exists (`playlists` wallet). Notifications mention withdrawals as demo copy only. |
+| Session expired / auth | No auth layer (`my_profile_screen` notes “no auth yet”). |
+| Network/connection wrapper | No shared network client pre-backend; no general call wrapper. |
+| `tasks_screen` list load | Demo catalog is in-memory seed data; no async fetch that can fail. |
+
+### Toast Notifications
+
+Generalized helper: `skiflux_mobile_app_v2/lib/shared/toast/skiflux_toast.dart`
+(`SkifluxToast` / `SkifluxToastType`). Lives in the **app** (not the
+design system) because Figma’s Task Toaster is not implemented as a DS
+component and presentation depends on `ScaffoldMessenger`.
+
+| Type | Background token | Foreground token | Icon (Remix) |
+|------|------------------|------------------|--------------|
+| `success` | `backgroundPositive` | `contentPrimaryInverse` | `checkbox_circle_fill` |
+| `error` | `backgroundNegative` | `contentPrimaryInverse` | `error_warning_fill` |
+| `info` | `backgroundInfo` | `contentPrimaryInverse` | `information_fill` |
+
+- **Duration:** 3.5s default (`SkifluxToast.defaultDuration`).
+- **Queuing:** relies on Flutter’s built-in `ScaffoldMessenger` SnackBar
+  queue — successive `showSnackBar` calls display in order. The helper
+  never calls `hideCurrentSnackBar`, so a second toast does not replace
+  the first.
+- **API shape:** still a floating `SnackBar` under the hood (compatible
+  with the old subscribe pattern).
+
+```dart
+// Success (e.g. subscribe)
+SkifluxToast.success(context, 'Subscribed to Amara Design');
+
+// Error (used by ErrorDisplay toast path)
+SkifluxToast.error(context, "Couldn't connect. Check your internet and try again.");
+
+// Info
+SkifluxToast.info(context, 'Download started');
+
+// Or explicit type:
+SkifluxToast.show(
+  context,
+  message: '…',
+  type: SkifluxToastType.success,
+);
+```
+
+**Migrated call sites:** profile subscribe/unsubscribe (`success`);
+error-handling toast branch (`error`). Remaining raw `SnackBar` call
+sites (follow-up): notify settings on profile, more-menu actions,
+episode resources, public user profile, playlist screen, playlist menu.
+
+---
+
 ## 1. Repository layout
 
 ```
@@ -665,3 +894,87 @@ as a new app — uninstall the old "skiflux_example" install manually.
 - Real video playback / downloads if product requires it.
 - Widget tests per component (only a home smoke test exists).
 - If dark mode ever ships in Figma, extend tokens with a second semantic mode.
+- Riverpod migration complete (Passes 1–3). Next: real data layer.
+
+## CI/CD
+
+GitHub Actions workflow at
+[`.github/workflows/flutter-ci.yml`](.github/workflows/flutter-ci.yml).
+
+| | |
+|---|---|
+| **Triggers** | `push` to `main`, `pull_request` targeting `main` |
+| **Runner** | `ubuntu-latest` |
+| **Pinned Flutter** | **3.41.6** (stable) — matches the local SDK used for development (Dart 3.11.4). Not `latest`, so a new Flutter release cannot silently break CI. |
+| **Steps** | Checkout → set up Flutter → `pub get` design system → `pub get` app → `flutter analyze` both packages → `flutter test` app |
+| **Monorepo** | App depends on `../skiflux_design_system` via path; CI resolves the design system first, then the app (same layout as local). |
+| **Design system tests** | None yet (`test/` missing) — only analyze runs for that package. |
+| **App tests** | `skiflux_mobile_app_v2/test/widget_test.dart` (home smoke). |
+| **analysis_options** | App has `analysis_options.yaml` (includes `flutter_lints`). Design system has none (defaults). CI runs plain `flutter analyze` in each package so each uses its own config. |
+
+**Intentionally not included (follow-ups):**
+
+- Full `flutter build apk` (or iOS) on every PR — keeps CI fast; add later if desired.
+- Branch protection requiring this check before merge — **not configured** on the GitHub repo as of setup; must be enabled manually (Settings → Branches → protect `main` → require status check **Analyze & Test** / `Flutter CI`).
+
+## Session Log
+
+### 2026-07-20 — Grok — CI/CD Setup
+- Status: Complete
+- What was done: Added `.github/workflows/flutter-ci.yml` — Flutter **3.41.6** pinned via `subosito/flutter-action@v2`; monorepo path dependency handled (pub get + analyze design system then app; test app only). Local baseline: design system analyze clean (no tests); app analyze clean + widget test passed. YAML validated with Python `yaml.safe_load`. Branch protection checked via `gh api` → **not protected**.
+- Verification run: Local `flutter analyze` both packages → No issues found; `flutter test` app → All tests passed! YAML parse → OK. Live GitHub Actions run not executed (no throwaway PR pushed from this session).
+- Notes for next session: Branch protection is **off** — Veek needs to enable "require status checks to pass" manually in GitHub repo settings for this to actually block bad PRs. Full APK build step not included — follow-up if desired. Push/merge the workflow file to `main` (or open a PR) so Actions starts running.
+
+### 2026-07-20 — Grok — Riverpod Migration Pass 4 (FINAL) + Full-App Cross-Check
+- Status: Complete
+- What was done: **Part A** — Migrated `comments_sheet` to Riverpod: `commentsProvider` = `NotifierProvider.autoDispose<CommentsNotifier, CommentsState>` holding comments list + compose state + playingIndex; `TextEditingController` stays local; `ErrorDisplay.showStandalone` → `ErrorDisplay.show(context, ref, …)`. **Part B** — Home feed reviewed: `home_screen` only has `_tabIndex` (local nav UI); `VideoFeedCard` like toggle is ephemeral animation UI — neither is feature-level state; no home feed provider added. **Part C** — Full `lib/` cross-check: no ChangeNotifier/singleton/`containerOf` leftovers; all setState usages classified as local UI; zero feature-state gaps.
+- Verification run: flutter analyze → No issues found! (ran in 15.3s), flutter build apk → √ Built build\app\outputs\flutter-apk\app-debug.apk
+- Notes for next session: Riverpod migration is now complete across the entire app. No remaining setState for feature-level state anywhere in lib/. Any new work must follow the established pattern.
+
+### 2026-07-20 — Grok — Error handling rollout
+- Status: Complete
+- What was done: Rolled centralized `ErrorDisplay` beyond submission POC. Wired: quiz_assessment (`quizSubmission` + `contentLoadFailed`), search_screen (`searchFailed` on query/recents ops + `contentLoadFailed` on recents AsyncError), comments_sheet (`voicenoteFailed` + `likeCommentReactionFailed` via new `ErrorDisplay.showStandalone` — no full Riverpod migration of comments). Skipped: SkillCoin withdrawal (feature not built), auth/session (no auth), network wrapper (none), tasks_screen load (in-memory seed only).
+- Verification run: flutter analyze → No issues found! (ran in 16.5s), flutter build apk → √ Built build\app\outputs\flutter-apk\app-debug.apk
+- Notes for next session: When backend/auth/withdrawal land, attach the matching SkifluxErrorKind at those call sites. comments_sheet still uses ad hoc setState; showStandalone is the bridge until Riverpod migration.
+
+### 2026-07-20 — Grok — Toast Generalization
+- Status: Complete
+- What was done: Added `lib/shared/toast/skiflux_toast.dart` with `SkifluxToastType` success/error/info, free-form message, token-mapped colors + Remix icons, 3.5s duration, ScaffoldMessenger queue (no hideCurrentSnackBar). Wired profile subscribe/unsubscribe → `SkifluxToast.success`; error_display toast branch → `SkifluxToast.error`. Design system untouched.
+- Verification run: flutter analyze → No issues found! (prior baseline after toast files present), flutter build apk → pending co-verification with error rollout
+- Notes for next session: subscribe/unsubscribe and the error handling layer's toast path now use the generalized helper. Other SnackBar-like call sites found: profile notify settings, more_menu_sheet (4), episode_resources_sheet, public_user_profile_screen, playlist_screen, playlist_menu_sheet — not yet migrated, follow-up work.
+
+### 2026-07-20 — Grok — Centralized Error Handling Layer
+- Status: Complete
+- What was done: Built Riverpod-based error layer under `lib/shared/error_handling/` (`errorHandlerProvider` + `ErrorHandler.classify` + classification table for toast vs modal, `ErrorDisplay.show`, Sentry-ready `reportTechnicalError` hook with debugPrint). Toast = themed Material SnackBar (confirmed at profile subscribe/unsubscribe call site — no custom Toast widget). Modal = `showSkifluxSheet` / `SkifluxSheetShell` (same blur+scrim+card shell as all other overlays; not a plain Material Dialog). Proof-of-concept: `submission_task_screen.dart` submit path try/catch → `ErrorDisplay.show`; invalid http(s) link throws `SkifluxFailure(taskSubmission)` → error sheet. Design system package untouched.
+- Verification run: flutter analyze → No issues found! (ran in 9.9s), flutter build apk → √ Built build\app\outputs\flutter-apk\app-debug.apk
+- Notes for next session: Only submission_task_screen.dart uses the new centralized error layer so far — rolling out to remaining screens is follow-up work, not done in this task. Sentry hook exists but is not yet connected (Phase 1 item 4).
+
+### 2026-07-20 — Grok — Error modal display correction
+- Status: Complete
+- What was done: Replaced plain Material `Dialog` in `ErrorDisplay` modal path with `showSkifluxSheet` + `SkifluxSheetShell` so error overlays match comments/more-menu/share/unlock/etc. Classification, copy, Riverpod architecture unchanged (display-layer only). Shell already supports title + content child — no extension needed. Re-confirmed toast path is SnackBar-only at the subscribe call site.
+- Verification run: flutter analyze → No issues found! (ran in 20.4s), flutter build apk → √ Built build\app\outputs\flutter-apk\app-debug.apk
+- Notes: Amends the modal implementation detail from the earlier error-handling session entry.
+
+### 2026-07-19 — Grok — Riverpod Migration Pass 1
+- Status: Complete
+- What was done: Migrated notifications, leaderboard, and streaks to Riverpod (`flutter_riverpod` ^3.3.2 + root `ProviderScope`). Provider types: **notifications** → `NotifierProvider` (mutable mark-read / mark-all-read; was ChangeNotifier); **leaderboard** → plain `Provider` (fully static demo data, no mutations); **streaks** → `NotifierProvider` (static stats/history + mutable once-per-session `consumeCelebration` flag). Screens/sheets converted to Consumer widgets; My Profile streak pill reads `streaksProvider`; design system package untouched; tasks/subscriptions/playlists/search not touched.
+- Verification run: flutter analyze → No issues found! (ran in 163.6s), flutter build apk → √ Built build\app\outputs\flutter-apk\app-debug.apk
+- Notes for next session: tasks_store.dart, subscriptions_store.dart, playlists_store.dart, and search files were NOT touched — reserved for Pass 2/3.
+
+### 2026-07-19 — Grok — Riverpod Migration Pass 2
+- Status: Complete
+- What was done: Migrated playlists, search, and subscriptions to Riverpod (ProviderScope already present from Pass 1). Provider types: **playlists** → `NotifierProvider` (`playlistsProvider` for wallet + playlist unlock) + `NotifierProvider` (`playerPrefsProvider` for speed/captions/auto-scroll); **search** → plain `Provider` (`searchIndexProvider` for pure demo index) + `AsyncNotifierProvider` (`recentSearchesProvider` for SharedPreferences-backed recents); **subscriptions** → `NotifierProvider` (`subscriptionsProvider` for creators list + feed/sort/unsubscribe). Consumers updated across playlist/search/subscriptions screens, home sheets (unlock/more-menu/playback speed), profile screens, and `task_shared_widgets` (read-only via `ProviderScope.containerOf` — tasks store itself untouched). Design system package untouched.
+- Verification run: flutter analyze → No issues found! (ran in 13.8s), flutter build apk → √ Built build\app\outputs\flutter-apk\app-debug.apk
+- Notes for next session: tasks_store.dart and Tasks feature were NOT touched — reserved for Pass 3 (isolation given size/complexity).
+
+### 2026-07-19 — Grok — Riverpod Migration Pass 3 (FINAL)
+- Status: Complete
+- What was done: Migrated tasks feature to Riverpod. Provider structure: one shared `NotifierProvider` (`tasksProvider` / `TasksState`) for the session task catalog — both project-based (submission) and assessment (quiz/MCQ) learning tasks live in the same `learning` list differentiated by `LearningTaskKind`; missions share the same provider. Active quiz UI state (timer, answers index, review mode) and submission form state (link/file/note) stay local to their screens and reset per attempt/navigation — only durable outcomes (`recordQuizResult`, `markInReview`, `completeMission`) write to the provider. Consumers: `tasks_screen`, `submission_task_screen`, `quiz_intro_screen`, `quiz_assessment_screen`, `quiz_result_screen`, `task_shared_widgets` (episode open only), home `more_menu_sheet` View Task. Design system untouched.
+- Verification run: flutter analyze → No issues found! (ran in 13.2s), flutter build apk → √ Built build\app\outputs\flutter-apk\app-debug.apk
+- Notes for next session: All 9 features (notifications, leaderboard, streaks, playlists, search, subscriptions, tasks) are now fully migrated to Riverpod. The Riverpod migration (Phase 1, item 1) is complete.
+
+### 2026-07-19 — Grok — Riverpod Migration Cleanup (post-audit)
+- Status: Complete
+- What was done: (1) `openTaskEpisode` now takes `WidgetRef` and uses `ref.read(subscriptionsProvider)` instead of `ProviderScope.containerOf(context)` — callers in `quiz_intro_screen` and `submission_task_screen` pass `ref`. (2) `submission_task_screen` watches `tasksProvider` in `build` via `ref.watch` (read only in submit handler). (3) Removed redundant empty `setState(() {})` `onRefresh` callbacks on `SubscriptionStoriesRow` in `subscriptions_screen` (body + creator channel); `ref.watch` rebuilds when store mutates.
+- Verification run: flutter analyze → No issues found! (ran in 38.8s), flutter build apk → √ Built build\app\outputs\flutter-apk\app-debug.apk
+- Notes: Riverpod migration (Pass 1-3) is now fully clean per audit RIVERPOD_MIGRATION_AUDIT.md, with all identified gaps resolved. Ready for the Current Architecture documentation update.

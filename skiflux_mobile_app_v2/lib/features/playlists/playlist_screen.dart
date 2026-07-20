@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/sheets/share_sheet.dart';
+import '../../shared/toast/skiflux_toast.dart';
 import '../home/sheets/episode_unlock_sheet.dart';
 import '../subscriptions/data/subscriptions_store.dart';
 import '../subscriptions/subscriptions_screen.dart';
@@ -10,35 +12,20 @@ import 'playlist_description_sheet.dart';
 
 // Figma: **Home & In-app Flow 05** (`198:14183`) — playlist detail page.
 
-class PlaylistScreen extends StatefulWidget {
+class PlaylistScreen extends ConsumerStatefulWidget {
   const PlaylistScreen({super.key});
 
   @override
-  State<PlaylistScreen> createState() => _PlaylistScreenState();
+  ConsumerState<PlaylistScreen> createState() => _PlaylistScreenState();
 }
 
-class _PlaylistScreenState extends State<PlaylistScreen> {
-  final _store = PlaylistsStore.instance;
+class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
   bool _liked = false;
   bool _saved = false;
 
   @override
-  void initState() {
-    super.initState();
-    _store.addListener(_onStore);
-  }
-
-  @override
-  void dispose() {
-    _store.removeListener(_onStore);
-    super.dispose();
-  }
-
-  void _onStore() => setState(() {});
-
-  @override
   Widget build(BuildContext context) {
-    final pl = _store.defaultPlaylist;
+    final pl = ref.watch(playlistsProvider).defaultPlaylist;
     return Scaffold(
       backgroundColor: SkifluxColors.backgroundPrimary,
       appBar: SkifluxTopNavBar(
@@ -162,12 +149,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                       child: InkWell(
                         customBorder: const CircleBorder(),
                         onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Following creator'),
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
+                          SkifluxToast.success(context, 'Following creator');
                         },
                         child: const SizedBox(
                           width: 40,
@@ -217,7 +199,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                 for (final ep in pl.episodes) ...[
                   _PlaylistEpisodeRow(
                     episode: ep,
-                    onTap: () => _openEpisode(context, ep),
+                    onTap: () => _openEpisode(context, ep, pl),
                   ),
                   const SizedBox(height: SkifluxSpacing.spaceL),
                 ],
@@ -229,7 +211,11 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     );
   }
 
-  Future<void> _openEpisode(BuildContext context, PlaylistEpisode ep) async {
+  Future<void> _openEpisode(
+    BuildContext context,
+    PlaylistEpisode ep,
+    Playlist pl,
+  ) async {
     if (ep.isLocked) {
       await showEpisodeUnlockSheet(context, episodeId: ep.id);
       return;
@@ -237,7 +223,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     final sub = SubscriptionEpisode(
       epNumber: ep.number,
       title: ep.title,
-      creatorUsername: _store.defaultPlaylist.creatorUsername,
+      creatorUsername: pl.creatorUsername,
       duration: ep.duration,
       views: '22k',
       postedAgo: '5 hrs ago',

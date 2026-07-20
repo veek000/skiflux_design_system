@@ -2,7 +2,7 @@
 /// (Home & In-app + Other Video Player).
 library;
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 enum PlaylistEpisodeState { unlocked, locked, completed }
 
@@ -61,16 +61,15 @@ class Playlist {
       '$viewsLabel · $episodeCount Episodes';
 }
 
-/// Session store: coins + default playlist (UI Design System).
-class PlaylistsStore extends ChangeNotifier {
-  PlaylistsStore._();
+/// Snapshot of wallet + default playlist.
+class PlaylistsState {
+  PlaylistsState({
+    required this.skillCoins,
+    required this.defaultPlaylist,
+  });
 
-  static final PlaylistsStore instance = PlaylistsStore._();
-
-  /// Demo wallet — enough to unlock a few 25-coin episodes.
-  int skillCoins = 100;
-
-  late final Playlist defaultPlaylist = _seedPlaylist();
+  int skillCoins;
+  final Playlist defaultPlaylist;
 
   PlaylistEpisode? byId(String id) {
     for (final e in defaultPlaylist.episodes) {
@@ -85,29 +84,50 @@ class PlaylistsStore extends ChangeNotifier {
     }
     return null;
   }
+}
+
+/// Riverpod choice: [NotifierProvider] — skillCoins and episode lock state
+/// mutate via unlock (was ChangeNotifier). Matches notifications Pass 1.
+class PlaylistsNotifier extends Notifier<PlaylistsState> {
+  @override
+  PlaylistsState build() {
+    return PlaylistsState(
+      skillCoins: 100,
+      defaultPlaylist: _seedPlaylist(),
+    );
+  }
 
   /// Returns `true` if unlock succeeded, `false` if not enough coins.
   bool tryUnlock(String episodeId) {
-    final ep = byId(episodeId);
+    final ep = state.byId(episodeId);
     if (ep == null || !ep.isLocked) return true;
-    if (skillCoins < ep.coinCost) {
-      notifyListeners();
+    if (state.skillCoins < ep.coinCost) {
+      state = PlaylistsState(
+        skillCoins: state.skillCoins,
+        defaultPlaylist: state.defaultPlaylist,
+      );
       return false;
     }
-    skillCoins -= ep.coinCost;
+    state.skillCoins -= ep.coinCost;
     ep.state = PlaylistEpisodeState.unlocked;
-    notifyListeners();
+    state = PlaylistsState(
+      skillCoins: state.skillCoins,
+      defaultPlaylist: state.defaultPlaylist,
+    );
     return true;
   }
 
   void unlockForDemo(String episodeId) {
-    final ep = byId(episodeId);
+    final ep = state.byId(episodeId);
     if (ep == null) return;
-    if (ep.isLocked && skillCoins >= ep.coinCost) {
-      skillCoins -= ep.coinCost;
+    if (ep.isLocked && state.skillCoins >= ep.coinCost) {
+      state.skillCoins -= ep.coinCost;
     }
     ep.state = PlaylistEpisodeState.unlocked;
-    notifyListeners();
+    state = PlaylistsState(
+      skillCoins: state.skillCoins,
+      defaultPlaylist: state.defaultPlaylist,
+    );
   }
 
   static Playlist _seedPlaylist() {
@@ -191,33 +211,59 @@ class PlaylistsStore extends ChangeNotifier {
   }
 }
 
+final playlistsProvider =
+    NotifierProvider<PlaylistsNotifier, PlaylistsState>(PlaylistsNotifier.new);
+
 /// Playback prefs for More Menu chips (session-local).
-class PlayerPrefsStore extends ChangeNotifier {
-  PlayerPrefsStore._();
+class PlayerPrefsState {
+  const PlayerPrefsState({
+    this.speed = 1.0,
+    this.captionsOn = false,
+    this.autoScrollOn = false,
+  });
 
-  static final PlayerPrefsStore instance = PlayerPrefsStore._();
-
-  double speed = 1.0;
-  bool captionsOn = false;
-  bool autoScrollOn = false;
+  final double speed;
+  final bool captionsOn;
+  final bool autoScrollOn;
 
   String get speedLabel {
     if (speed == speed.roundToDouble()) return '${speed.toInt()}.0x';
     return '${speed}x';
   }
 
+  PlayerPrefsState copyWith({
+    double? speed,
+    bool? captionsOn,
+    bool? autoScrollOn,
+  }) {
+    return PlayerPrefsState(
+      speed: speed ?? this.speed,
+      captionsOn: captionsOn ?? this.captionsOn,
+      autoScrollOn: autoScrollOn ?? this.autoScrollOn,
+    );
+  }
+}
+
+/// Riverpod choice: [NotifierProvider] — speed/captions/auto-scroll toggle
+/// (was ChangeNotifier). Separate from playlists wallet.
+class PlayerPrefsNotifier extends Notifier<PlayerPrefsState> {
+  @override
+  PlayerPrefsState build() => const PlayerPrefsState();
+
   void setSpeed(double value) {
-    speed = value;
-    notifyListeners();
+    state = state.copyWith(speed: value);
   }
 
   void toggleCaptions() {
-    captionsOn = !captionsOn;
-    notifyListeners();
+    state = state.copyWith(captionsOn: !state.captionsOn);
   }
 
   void toggleAutoScroll() {
-    autoScrollOn = !autoScrollOn;
-    notifyListeners();
+    state = state.copyWith(autoScrollOn: !state.autoScrollOn);
   }
 }
+
+final playerPrefsProvider =
+    NotifierProvider<PlayerPrefsNotifier, PlayerPrefsState>(
+  PlayerPrefsNotifier.new,
+);

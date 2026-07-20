@@ -1,30 +1,31 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/error_handling/error_display.dart';
+import '../../shared/error_handling/error_handler.dart';
 import 'data/tasks_store.dart';
 import 'task_shared_widgets.dart';
 
 // Figma: Task flow 12–09 — submission detail (`1256:14112`, upload
 // `1256:14245`, file row `1256:14313`).
 
-class SubmissionTaskScreen extends StatefulWidget {
+class SubmissionTaskScreen extends ConsumerStatefulWidget {
   const SubmissionTaskScreen({super.key, required this.taskId});
 
   final String taskId;
 
   @override
-  State<SubmissionTaskScreen> createState() => _SubmissionTaskScreenState();
+  ConsumerState<SubmissionTaskScreen> createState() =>
+      _SubmissionTaskScreenState();
 }
 
-class _SubmissionTaskScreenState extends State<SubmissionTaskScreen> {
-  final TasksStore _store = TasksStore.instance;
+class _SubmissionTaskScreenState extends ConsumerState<SubmissionTaskScreen> {
   int _method = 0; // 0 = Link URL, 1 = File Upload
   final _linkController = TextEditingController();
   final _noteController = TextEditingController();
   UploadedFileInfo? _file;
-
-  LearningTask? get _task => _store.byId(widget.taskId);
 
   /// Extensions accepted by the demo uploader (Figma lists a subset;
   /// product supports the broader set below).
@@ -89,24 +90,48 @@ class _SubmissionTaskScreenState extends State<SubmissionTaskScreen> {
   }
 
   Future<void> _submit() async {
-    if (!_canSubmit || _task == null) return;
-    _store.markInReview(widget.taskId);
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => _TaskSubmittedDialog(
-        onClose: () {
-          Navigator.of(ctx).pop();
-          Navigator.of(context).pop();
-        },
-      ),
-    );
+    if (!_canSubmit) return;
+    try {
+      // Link method: require a usable http(s) URL before "sending".
+      // Invalid input surfaces as a task-submission failure (modal) via
+      // the centralized error layer — proof-of-concept for the pattern.
+      if (_method == 0) {
+        final link = _linkController.text.trim();
+        final uri = Uri.tryParse(link);
+        final valid = uri != null &&
+            (uri.scheme == 'http' || uri.scheme == 'https') &&
+            uri.host.isNotEmpty;
+        if (!valid) {
+          throw const SkifluxFailure(SkifluxErrorKind.taskSubmission);
+        }
+      }
+
+      if (ref.read(tasksProvider).byId(widget.taskId) == null) {
+        throw const SkifluxFailure(SkifluxErrorKind.taskSubmission);
+      }
+      ref.read(tasksProvider.notifier).markInReview(widget.taskId);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => _TaskSubmittedDialog(
+          onClose: () {
+            Navigator.of(ctx).pop();
+            Navigator.of(context).pop();
+          },
+        ),
+      );
+    } catch (e, st) {
+      if (!mounted) return;
+      // Centralized classify → toast/modal + crash-report hook.
+      await ErrorDisplay.show(context, ref, e, stackTrace: st);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final task = _task;
+    // Watch so the detail screen rebuilds if task status mutates while open.
+    final task = ref.watch(tasksProvider).byId(widget.taskId);
     if (task == null) {
       return Scaffold(
         appBar: SkifluxTopNavBar(
@@ -153,7 +178,7 @@ class _SubmissionTaskScreenState extends State<SubmissionTaskScreen> {
                 TaskEpisodeRow(
                   title: task.episodeTitle,
                   subtitle: task.episodeSubtitle,
-                  onTap: () => openTaskEpisode(context, task),
+                  onTap: () => openTaskEpisode(context, ref, task),
                 ),
                 const SizedBox(height: SkifluxSpacing.spaceL),
                 _BriefCard(

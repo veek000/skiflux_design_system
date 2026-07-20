@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/error_handling/error_display.dart';
+import '../../shared/error_handling/error_handler.dart';
 import '../playlists/playlist_screen.dart';
 import '../profile/profile_screen.dart';
 import '../profile/public_user_profile_screen.dart';
@@ -19,27 +22,23 @@ import 'search_results_screen.dart';
 /// - Typing, hits → grouped overview with See-all sections + bottom
 ///   "See all results" link (flow 04)
 /// - Typing, no hits → Nothing-found empty state (flow 05)
-class SearchScreen extends StatefulWidget {
+class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});
 
   @override
-  State<SearchScreen> createState() => _SearchScreenState();
+  ConsumerState<SearchScreen> createState() => _SearchScreenState();
 }
 
-class _SearchScreenState extends State<SearchScreen> {
+class _SearchScreenState extends ConsumerState<SearchScreen> {
   final _controller = TextEditingController();
-  final _store = RecentSearchesStore();
 
-  List<RecentSearch> _recents = [];
-  SearchResults _results = SearchIndex.search('');
-
-  @override
-  void initState() {
-    super.initState();
-    _store.load().then((entries) {
-      if (mounted) setState(() => _recents = entries);
-    });
-  }
+  SearchResults _results = const SearchResults(
+    query: '',
+    episodes: [],
+    creators: [],
+    users: [],
+    playlists: [],
+  );
 
   @override
   void dispose() {
@@ -48,20 +47,41 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   void _onQueryChanged(String query) {
-    setState(() => _results = SearchIndex.search(query));
+    try {
+      final index = ref.read(searchIndexProvider);
+      setState(() => _results = index.search(query));
+    } catch (e, st) {
+      if (!mounted) return;
+      ErrorDisplay.show(
+        context,
+        ref,
+        SkifluxFailure(SkifluxErrorKind.searchFailed, cause: e),
+        stackTrace: st,
+      );
+    }
   }
 
   /// Commit the query to history, then open the results screen on [tab].
   Future<void> _openResults(SearchCategory tab) async {
     final results = _results;
     if (results.query.isEmpty) return;
-    final updated = await _store.add(RecentSearch(
-      query: results.query,
-      topCategory: results.topCategory,
-      resultCount: results.total,
-    ));
+    try {
+      await ref.read(recentSearchesProvider.notifier).add(RecentSearch(
+            query: results.query,
+            topCategory: results.topCategory,
+            resultCount: results.total,
+          ));
+    } catch (e, st) {
+      if (!mounted) return;
+      await ErrorDisplay.show(
+        context,
+        ref,
+        SkifluxFailure(SkifluxErrorKind.searchFailed, cause: e),
+        stackTrace: st,
+      );
+      return;
+    }
     if (!mounted) return;
-    setState(() => _recents = updated);
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => SearchResultsScreen(results: results, initialTab: tab),
@@ -75,13 +95,31 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Future<void> _removeRecent(RecentSearch entry) async {
-    final updated = await _store.remove(entry.query);
-    if (mounted) setState(() => _recents = updated);
+    try {
+      await ref.read(recentSearchesProvider.notifier).remove(entry.query);
+    } catch (e, st) {
+      if (!mounted) return;
+      await ErrorDisplay.show(
+        context,
+        ref,
+        SkifluxFailure(SkifluxErrorKind.searchFailed, cause: e),
+        stackTrace: st,
+      );
+    }
   }
 
   Future<void> _clearRecents() async {
-    await _store.clear();
-    if (mounted) setState(() => _recents = []);
+    try {
+      await ref.read(recentSearchesProvider.notifier).clear();
+    } catch (e, st) {
+      if (!mounted) return;
+      await ErrorDisplay.show(
+        context,
+        ref,
+        SkifluxFailure(SkifluxErrorKind.searchFailed, cause: e),
+        stackTrace: st,
+      );
+    }
   }
 
   void _openCreatorProfile() {
@@ -105,6 +143,27 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // SharedPreferences load failure → content-load modal (not a search query error).
+    ref.listen<AsyncValue<List<RecentSearch>>>(recentSearchesProvider, (
+      previous,
+      next,
+    ) {
+      if (!next.hasError) return;
+      if (previous?.hasError == true) return; // avoid re-firing while still error
+      ErrorDisplay.show(
+        context,
+        ref,
+        SkifluxFailure(
+          SkifluxErrorKind.contentLoadFailed,
+          cause: next.error,
+        ),
+        stackTrace: next.stackTrace,
+      );
+    });
+
+    final recentsAsync = ref.watch(recentSearchesProvider);
+    final recents = recentsAsync.value ?? const <RecentSearch>[];
+
     return Scaffold(
       backgroundColor: SkifluxColors.backgroundPrimary,
       body: SafeArea(
@@ -115,7 +174,7 @@ class _SearchScreenState extends State<SearchScreen> {
             children: [
               _topBar(),
               const SizedBox(height: SkifluxSpacing.spaceL),
-              Expanded(child: _body()),
+              Expanded(child: _body(recents)),
             ],
           ),
         ),
@@ -157,9 +216,9 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  Widget _body() {
+  Widget _body(List<RecentSearch> recents) {
     if (_results.query.isEmpty) {
-      return _recents.isEmpty ? _firstUseState() : _recentList();
+      return recents.isEmpty ? _firstUseState() : _recentList(recents);
     }
     return _results.isEmpty ? _nothingFoundState() : _overview();
   }
@@ -199,7 +258,7 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   /// Flow 08 (`304:9423`) — Recent header with Clear all + rows.
-  Widget _recentList() {
+  Widget _recentList(List<RecentSearch> recents) {
     return ListView(
       padding: EdgeInsets.zero,
       children: [
@@ -214,7 +273,7 @@ class _SearchScreenState extends State<SearchScreen> {
           onAction: _clearRecents,
         ),
         const SizedBox(height: SkifluxSpacing.spaceL),
-        for (final entry in _recents) ...[
+        for (final entry in recents) ...[
           RecentSearchRow(
             entry: entry,
             onTap: () => _runRecent(entry),

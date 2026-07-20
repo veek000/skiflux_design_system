@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/sheets/share_sheet.dart';
+import '../../shared/toast/skiflux_toast.dart';
 
 // Figma: **Public User Profile view Screen** (`3092:14632`).
 // Learner profile (not creator): XP / rank / tasks, skills, badges,
@@ -346,12 +347,7 @@ class _Header extends StatelessWidget {
                       size: SkifluxButtonSize.s,
                       type: SkifluxButtonType.secondary,
                       onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Messaging coming soon'),
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
+                        SkifluxToast.info(context, 'Messaging coming soon');
                       },
                     ),
                   ],

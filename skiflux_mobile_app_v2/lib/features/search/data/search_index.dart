@@ -7,6 +7,8 @@
 /// empty tabs, nothing-found).
 library;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 enum SearchCategory { episodes, creators, users, playlists }
 
 extension SearchCategoryLabel on SearchCategory {
@@ -115,7 +117,13 @@ class SearchResults {
 }
 
 /// Case-insensitive substring search over the demo dataset.
-abstract final class SearchIndex {
+///
+/// Riverpod choice: plain [Provider] — pure read-only index, no session
+/// mutations (like leaderboard Pass 1). Live query results stay in the
+/// screen; this provider only exposes [search].
+class SearchIndex {
+  const SearchIndex();
+
   static const List<EpisodeResult> _episodes = [
     EpisodeResult(
       epNumber: 1,
@@ -195,10 +203,10 @@ abstract final class SearchIndex {
     ),
   ];
 
-  static bool _matches(String haystack, String query) =>
+  bool _matches(String haystack, String query) =>
       haystack.toLowerCase().contains(query.toLowerCase());
 
-  static SearchResults search(String query) {
+  SearchResults search(String query) {
     final q = query.trim();
     if (q.isEmpty) {
       return SearchResults(
@@ -226,3 +234,7 @@ abstract final class SearchIndex {
     );
   }
 }
+
+final searchIndexProvider = Provider<SearchIndex>((ref) {
+  return const SearchIndex();
+});

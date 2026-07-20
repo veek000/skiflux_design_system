@@ -1,14 +1,17 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/error_handling/error_display.dart';
+import '../../shared/error_handling/error_handler.dart';
 import 'data/tasks_store.dart';
 import 'quiz_result_screen.dart';
 
 // Figma: Task flow 07–03 — Assessment; Review frame `1256:14533`.
 
-class QuizAssessmentScreen extends StatefulWidget {
+class QuizAssessmentScreen extends ConsumerStatefulWidget {
   const QuizAssessmentScreen({
     super.key,
     required this.taskId,
@@ -21,12 +24,13 @@ class QuizAssessmentScreen extends StatefulWidget {
   final List<int?>? priorAnswers;
 
   @override
-  State<QuizAssessmentScreen> createState() => _QuizAssessmentScreenState();
+  ConsumerState<QuizAssessmentScreen> createState() =>
+      _QuizAssessmentScreenState();
 }
 
-class _QuizAssessmentScreenState extends State<QuizAssessmentScreen> {
-  late final LearningTask? _task = TasksStore.instance.byId(widget.taskId);
-  late final QuizData? _quiz = _task?.quiz;
+class _QuizAssessmentScreenState extends ConsumerState<QuizAssessmentScreen> {
+  LearningTask? _task;
+  QuizData? _quiz;
 
   int _index = 0;
   late List<int?> _answers;
@@ -36,6 +40,9 @@ class _QuizAssessmentScreenState extends State<QuizAssessmentScreen> {
   @override
   void initState() {
     super.initState();
+    // ConsumerState allows [ref] in initState (Riverpod 2+).
+    _task = ref.read(tasksProvider).byId(widget.taskId);
+    _quiz = _task?.quiz;
     final q = _quiz;
     _answers = widget.priorAnswers != null
         ? List<int?>.from(widget.priorAnswers!)
@@ -50,6 +57,18 @@ class _QuizAssessmentScreenState extends State<QuizAssessmentScreen> {
           return;
         }
         setState(() => _remaining--);
+      });
+    }
+
+    // Content failed to load — task/quiz missing from the session catalog.
+    if (_task == null || _quiz == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ErrorDisplay.show(
+          context,
+          ref,
+          const SkifluxFailure(SkifluxErrorKind.contentLoadFailed),
+        );
       });
     }
   }
@@ -85,34 +104,53 @@ class _QuizAssessmentScreenState extends State<QuizAssessmentScreen> {
     _finish();
   }
 
-  void _finish() {
+  Future<void> _finish() async {
     _timer?.cancel();
     final quiz = _quiz;
     if (quiz == null || !mounted) return;
 
-    var correct = 0;
-    for (var i = 0; i < quiz.questions.length; i++) {
-      if (_answers[i] == quiz.questions[i].correctIndex) correct++;
-    }
-    final passed = correct == quiz.questions.length;
-    TasksStore.instance.recordQuizResult(
-      id: widget.taskId,
-      answers: _answers,
-      correct: correct,
-      passed: passed,
-    );
+    try {
+      var correct = 0;
+      for (var i = 0; i < quiz.questions.length; i++) {
+        if (_answers[i] == quiz.questions[i].correctIndex) correct++;
+      }
+      final passed = correct == quiz.questions.length;
 
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => QuizResultScreen(
-          taskId: widget.taskId,
-          correct: correct,
-          total: quiz.questions.length,
-          answers: _answers,
-          passed: passed,
+      // Demo store returns silently if the task vanished — treat that as
+      // a submission failure so the user is not left without feedback.
+      if (ref.read(tasksProvider).byId(widget.taskId) == null) {
+        throw const SkifluxFailure(SkifluxErrorKind.quizSubmission);
+      }
+      ref.read(tasksProvider.notifier).recordQuizResult(
+            id: widget.taskId,
+            answers: _answers,
+            correct: correct,
+            passed: passed,
+          );
+
+      if (!mounted) return;
+      await Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => QuizResultScreen(
+            taskId: widget.taskId,
+            correct: correct,
+            total: quiz.questions.length,
+            answers: _answers,
+            passed: passed,
+          ),
         ),
-      ),
-    );
+      );
+    } catch (e, st) {
+      if (!mounted) return;
+      await ErrorDisplay.show(
+        context,
+        ref,
+        e is SkifluxFailure
+            ? e
+            : SkifluxFailure(SkifluxErrorKind.quizSubmission, cause: e),
+        stackTrace: st,
+      );
+    }
   }
 
   @override

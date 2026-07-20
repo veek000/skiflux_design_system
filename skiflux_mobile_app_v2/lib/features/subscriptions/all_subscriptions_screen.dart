@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import 'data/subscriptions_store.dart';
@@ -12,34 +13,37 @@ import 'subscriptions_screen.dart';
 /// filters the creator list; the "Filter" link sorts it (Most relevant /
 /// New activity / A–Z); each row's bell pill opens the notification-level
 /// dropdown (All / Personalized / None / Unsubscribe).
-class AllSubscriptionsScreen extends StatefulWidget {
+class AllSubscriptionsScreen extends ConsumerStatefulWidget {
   const AllSubscriptionsScreen({super.key});
 
   @override
-  State<AllSubscriptionsScreen> createState() => _AllSubscriptionsScreenState();
+  ConsumerState<AllSubscriptionsScreen> createState() =>
+      _AllSubscriptionsScreenState();
 }
 
-class _AllSubscriptionsScreenState extends State<AllSubscriptionsScreen> {
+class _AllSubscriptionsScreenState
+    extends ConsumerState<AllSubscriptionsScreen> {
   String _query = '';
   SubscriptionListSort _sort = SubscriptionListSort.mostRelevant;
 
   Future<void> _onBellTap(SubscribedCreator creator) async {
     final action = await showBellSheet(context, creator: creator);
     if (action == null || !mounted) return;
-    setState(() {
-      switch (action) {
-        case SetNotificationMode(:final mode):
-          creator.notificationMode = mode;
-        case Unsubscribe():
-          SubscriptionsStore.unsubscribe(creator);
-      }
-    });
+    final notifier = ref.read(subscriptionsProvider.notifier);
+    switch (action) {
+      case SetNotificationMode(:final mode):
+        notifier.setNotificationMode(creator, mode);
+      case Unsubscribe():
+        notifier.unsubscribe(creator);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final q = _query.trim().toLowerCase();
-    final creators = SubscriptionsStore.sortedCreators(_sort)
+    final creators = ref
+        .watch(subscriptionsProvider)
+        .sortedCreators(_sort)
         .where((c) =>
             q.isEmpty ||
             c.name.toLowerCase().contains(q) ||

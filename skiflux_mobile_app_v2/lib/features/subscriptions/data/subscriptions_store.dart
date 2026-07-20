@@ -5,6 +5,8 @@
 /// unsubscribing everything surfaces the empty state (flow 04).
 library;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 /// Feed filter — the "Recent" control's sheet options (user-specified).
 enum SubscriptionFeedFilter { recent, today, continueWatching, unwatched }
 
@@ -103,38 +105,126 @@ class SubscriptionEpisode {
   String get meta => '$views · $postedAgo';
 }
 
-/// In-memory store for the subscriptions tab. Static so the tab keeps its
-/// state (bell toggles, unsubscribes) while the app runs; nothing persists.
-abstract final class SubscriptionsStore {
-  static final List<SubscribedCreator> creators = [
-    SubscribedCreator(
-      name: 'Amara Design',
-      username: 'amara',
-      initials: 'A',
-      notificationMode: CreatorNotificationMode.all,
-      hasUnseen: true,
-    ),
-    SubscribedCreator(
-      name: 'Kojo Sketches',
-      username: 'kojosketch',
-      initials: 'K',
-      hasUnseen: true,
-    ),
-    SubscribedCreator(
-      name: 'Design Dan',
-      username: 'designdan',
-      initials: 'D',
-      notificationMode: CreatorNotificationMode.none,
-    ),
-    SubscribedCreator(
-      name: 'Lola Motion',
-      username: 'lolamotion',
-      initials: 'L',
-      hasUnseen: true,
-    ),
-  ];
+/// In-memory snapshot for the subscriptions tab.
+class SubscriptionsState {
+  SubscriptionsState({
+    required this.creators,
+    required this.episodes,
+  });
 
-  static const List<SubscriptionEpisode> episodes = [
+  final List<SubscribedCreator> creators;
+  final List<SubscriptionEpisode> episodes;
+
+  SubscribedCreator creatorOf(SubscriptionEpisode e) =>
+      creators.firstWhere((c) => c.username == e.creatorUsername);
+
+  int newCountFor(SubscribedCreator c) =>
+      episodes.where((e) => e.creatorUsername == c.username && e.isNew).length;
+
+  /// All Subscriptions list, sorted per the "Filter" sheet choice.
+  List<SubscribedCreator> sortedCreators(SubscriptionListSort sort) {
+    final list = List<SubscribedCreator>.of(creators);
+    switch (sort) {
+      case SubscriptionListSort.mostRelevant:
+        break; // seed order = relevance for the demo dataset
+      case SubscriptionListSort.newActivity:
+        list.sort((a, b) {
+          if (a.hasUnseen != b.hasUnseen) return a.hasUnseen ? -1 : 1;
+          return newCountFor(b).compareTo(newCountFor(a));
+        });
+      case SubscriptionListSort.aToZ:
+        list.sort(
+          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+        );
+    }
+    return list;
+  }
+
+  /// Feed for the home / creator-filtered screens: New first, then the rest,
+  /// each group keeping seed order (already newest-first).
+  List<SubscriptionEpisode> feed({
+    String? creatorUsername,
+    SubscriptionFeedFilter filter = SubscriptionFeedFilter.recent,
+  }) {
+    Iterable<SubscriptionEpisode> list = episodes.where(
+      // Unsubscribed creators drop out of the feed.
+      (e) => creators.any((c) => c.username == e.creatorUsername),
+    );
+    if (creatorUsername != null) {
+      list = list.where((e) => e.creatorUsername == creatorUsername);
+    }
+    list = switch (filter) {
+      SubscriptionFeedFilter.recent => list,
+      SubscriptionFeedFilter.today => list.where((e) => e.postedToday),
+      SubscriptionFeedFilter.continueWatching =>
+        list.where((e) => e.isContinueWatching),
+      SubscriptionFeedFilter.unwatched => list.where((e) => e.isUnwatched),
+    };
+    final sorted = list.toList()
+      ..sort((a, b) {
+        if (a.isNew != b.isNew) return a.isNew ? -1 : 1;
+        return 0; // stable: keeps seed (recency) order within groups
+      });
+    return sorted;
+  }
+}
+
+/// Riverpod choice: [NotifierProvider] — creators list mutates (bell mode /
+/// unsubscribe). Episodes are fixed demo seed. Was a static abstract store.
+class SubscriptionsNotifier extends Notifier<SubscriptionsState> {
+  @override
+  SubscriptionsState build() {
+    return SubscriptionsState(
+      creators: [
+        SubscribedCreator(
+          name: 'Amara Design',
+          username: 'amara',
+          initials: 'A',
+          notificationMode: CreatorNotificationMode.all,
+          hasUnseen: true,
+        ),
+        SubscribedCreator(
+          name: 'Kojo Sketches',
+          username: 'kojosketch',
+          initials: 'K',
+          hasUnseen: true,
+        ),
+        SubscribedCreator(
+          name: 'Design Dan',
+          username: 'designdan',
+          initials: 'D',
+          notificationMode: CreatorNotificationMode.none,
+        ),
+        SubscribedCreator(
+          name: 'Lola Motion',
+          username: 'lolamotion',
+          initials: 'L',
+          hasUnseen: true,
+        ),
+      ],
+      episodes: _seedEpisodes,
+    );
+  }
+
+  void unsubscribe(SubscribedCreator c) {
+    state = SubscriptionsState(
+      creators: state.creators.where((x) => x.username != c.username).toList(),
+      episodes: state.episodes,
+    );
+  }
+
+  void setNotificationMode(
+    SubscribedCreator c,
+    CreatorNotificationMode mode,
+  ) {
+    c.notificationMode = mode;
+    state = SubscriptionsState(
+      creators: List<SubscribedCreator>.of(state.creators),
+      episodes: state.episodes,
+    );
+  }
+
+  static const List<SubscriptionEpisode> _seedEpisodes = [
     // Amara — 3 new (matches the "3 new" story badge in Figma).
     SubscriptionEpisode(
       epNumber: 6,
@@ -215,59 +305,9 @@ abstract final class SubscriptionsStore {
       watchProgress: 1,
     ),
   ];
-
-  static SubscribedCreator creatorOf(SubscriptionEpisode e) =>
-      creators.firstWhere((c) => c.username == e.creatorUsername);
-
-  static int newCountFor(SubscribedCreator c) =>
-      episodes.where((e) => e.creatorUsername == c.username && e.isNew).length;
-
-  static void unsubscribe(SubscribedCreator c) => creators.remove(c);
-
-  /// All Subscriptions list, sorted per the "Filter" sheet choice.
-  static List<SubscribedCreator> sortedCreators(SubscriptionListSort sort) {
-    final list = List<SubscribedCreator>.of(creators);
-    switch (sort) {
-      case SubscriptionListSort.mostRelevant:
-        break; // seed order = relevance for the demo dataset
-      case SubscriptionListSort.newActivity:
-        list.sort((a, b) {
-          if (a.hasUnseen != b.hasUnseen) return a.hasUnseen ? -1 : 1;
-          return newCountFor(b).compareTo(newCountFor(a));
-        });
-      case SubscriptionListSort.aToZ:
-        list.sort(
-          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-        );
-    }
-    return list;
-  }
-
-  /// Feed for the home / creator-filtered screens: New first, then the rest,
-  /// each group keeping seed order (already newest-first).
-  static List<SubscriptionEpisode> feed({
-    String? creatorUsername,
-    SubscriptionFeedFilter filter = SubscriptionFeedFilter.recent,
-  }) {
-    Iterable<SubscriptionEpisode> list = episodes.where(
-      // Unsubscribed creators drop out of the feed.
-      (e) => creators.any((c) => c.username == e.creatorUsername),
-    );
-    if (creatorUsername != null) {
-      list = list.where((e) => e.creatorUsername == creatorUsername);
-    }
-    list = switch (filter) {
-      SubscriptionFeedFilter.recent => list,
-      SubscriptionFeedFilter.today => list.where((e) => e.postedToday),
-      SubscriptionFeedFilter.continueWatching =>
-        list.where((e) => e.isContinueWatching),
-      SubscriptionFeedFilter.unwatched => list.where((e) => e.isUnwatched),
-    };
-    final sorted = list.toList()
-      ..sort((a, b) {
-        if (a.isNew != b.isNew) return a.isNew ? -1 : 1;
-        return 0; // stable: keeps seed (recency) order within groups
-      });
-    return sorted;
-  }
 }
+
+final subscriptionsProvider =
+    NotifierProvider<SubscriptionsNotifier, SubscriptionsState>(
+  SubscriptionsNotifier.new,
+);

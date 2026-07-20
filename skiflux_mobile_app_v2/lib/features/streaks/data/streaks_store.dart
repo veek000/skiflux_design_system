@@ -1,7 +1,9 @@
 /// Demo streak state backing the Streaks screen (Figma Streak Flow
 /// `3092:14400`). Static in-memory only — no persistence/backend yet,
-/// mirroring [SubscriptionsStore].
+/// mirroring the other feature stores.
 library;
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// One day cell in the "This Week" tracker.
 enum StreakDayState {
@@ -38,7 +40,8 @@ class StreakWeek {
   final DateTime start;
   final List<StreakDay> days;
 
-  bool get isCurrent => sameDay(start, StreaksStore.currentWeek.start);
+  /// Whether this week is the demo "current" week ([currentStart]).
+  bool isCurrentFor(DateTime currentStart) => sameDay(start, currentStart);
 
   /// Figma pill label, e.g. "May 20th - 27th" / "Apr 29th - May 6th".
   String get label {
@@ -70,70 +73,30 @@ class StreakWeek {
   }
 }
 
-/// Static demo store — streak 7 matches Figma Streak Screen 03/04 so the
-/// 7-day milestone celebration is reachable.
-abstract final class StreaksStore {
-  static const int streak = 7;
-  static const int bestStreak = 14;
-  static const int xpEarned = 240;
+/// Immutable snapshot of streak demo data + session celebration flag.
+class StreaksState {
+  const StreaksState({
+    required this.streak,
+    required this.bestStreak,
+    required this.xpEarned,
+    required this.milestone,
+    required this.milestoneXp,
+    required this.history,
+    this.celebrated = false,
+  });
 
-  /// Milestone celebrated by the sheet on Streak Screen 04.
-  static const int milestone = 7;
-  static const int milestoneXp = 50;
+  final int streak;
+  final int bestStreak;
+  final int xpEarned;
+  final int milestone;
+  final int milestoneXp;
+  final List<StreakWeek> history;
+  final bool celebrated;
 
-  static const _completed = StreakDayState.completed;
-  static const _missed = StreakDayState.missed;
-
-  /// Four weeks of demo history, newest last (= the current week). Year
-  /// 2029 puts May 20 on a Sunday, matching the Figma "May 20th - 27th"
-  /// label against the Sun-first tracker. Current week: Sun–Fri
-  /// completed, Sat ahead. (Figma screen 03's Sat cell reads "5" — an
-  /// authoring slip; the real next streak number after 7 is 8.) The
-  /// May 13 week ends completed so today's streak of 7 adds up
-  /// (Sat + Sun–Fri).
-  static final List<StreakWeek> history = [
-    StreakWeek(DateTime(2029, 4, 29), const [
-      StreakDay('Sun', _completed),
-      StreakDay('Mon', _completed),
-      StreakDay('Tue', _completed),
-      StreakDay('Wed', _completed),
-      StreakDay('Thu', _completed),
-      StreakDay('Fri', _completed),
-      StreakDay('Sat', _completed),
-    ]),
-    StreakWeek(DateTime(2029, 5, 6), const [
-      StreakDay('Sun', _completed),
-      StreakDay('Mon', _completed),
-      StreakDay('Tue', _completed),
-      StreakDay('Wed', _completed),
-      StreakDay('Thu', _completed),
-      StreakDay('Fri', _completed),
-      StreakDay('Sat', _missed),
-    ]),
-    StreakWeek(DateTime(2029, 5, 13), const [
-      StreakDay('Sun', _missed),
-      StreakDay('Mon', _completed),
-      StreakDay('Tue', _completed),
-      StreakDay('Wed', _missed),
-      StreakDay('Thu', _completed),
-      StreakDay('Fri', _completed),
-      StreakDay('Sat', _completed),
-    ]),
-    StreakWeek(DateTime(2029, 5, 20), const [
-      StreakDay('Sun', _completed),
-      StreakDay('Mon', _completed),
-      StreakDay('Tue', _completed),
-      StreakDay('Wed', _completed),
-      StreakDay('Thu', _completed),
-      StreakDay('Fri', _completed),
-      StreakDay('Sat', StreakDayState.future, 8),
-    ]),
-  ];
-
-  static StreakWeek get currentWeek => history.last;
+  StreakWeek get currentWeek => history.last;
 
   /// The tracked week whose Sun–Sat range contains [day], if any.
-  static StreakWeek? weekContaining(DateTime day) {
+  StreakWeek? weekContaining(DateTime day) {
     for (final week in history) {
       final delta = DateTime(day.year, day.month, day.day)
           .difference(week.start)
@@ -143,13 +106,92 @@ abstract final class StreaksStore {
     return null;
   }
 
+  StreaksState copyWith({bool? celebrated}) {
+    return StreaksState(
+      streak: streak,
+      bestStreak: bestStreak,
+      xpEarned: xpEarned,
+      milestone: milestone,
+      milestoneXp: milestoneXp,
+      history: history,
+      celebrated: celebrated ?? this.celebrated,
+    );
+  }
+}
+
+/// Riverpod choice: [NotifierProvider] — stats/history are static demo
+/// data, but [consumeCelebration] mutates a once-per-session flag (was
+/// static `_celebrated`). Plain Provider cannot own that mutation.
+class StreaksNotifier extends Notifier<StreaksState> {
+  static const _completed = StreakDayState.completed;
+  static const _missed = StreakDayState.missed;
+
+  @override
+  StreaksState build() {
+    // Streak 7 matches Figma Streak Screen 03/04 so the 7-day milestone
+    // celebration is reachable. Four weeks of demo history, newest last
+    // (= the current week). Year 2029 puts May 20 on a Sunday, matching
+    // the Figma "May 20th - 27th" label against the Sun-first tracker.
+    // Current week: Sun–Fri completed, Sat ahead. (Figma screen 03's Sat
+    // cell reads "5" — an authoring slip; the real next streak number
+    // after 7 is 8.) The May 13 week ends completed so today's streak of
+    // 7 adds up (Sat + Sun–Fri).
+    return StreaksState(
+      streak: 7,
+      bestStreak: 14,
+      xpEarned: 240,
+      milestone: 7,
+      milestoneXp: 50,
+      history: [
+        StreakWeek(DateTime(2029, 4, 29), const [
+          StreakDay('Sun', _completed),
+          StreakDay('Mon', _completed),
+          StreakDay('Tue', _completed),
+          StreakDay('Wed', _completed),
+          StreakDay('Thu', _completed),
+          StreakDay('Fri', _completed),
+          StreakDay('Sat', _completed),
+        ]),
+        StreakWeek(DateTime(2029, 5, 6), const [
+          StreakDay('Sun', _completed),
+          StreakDay('Mon', _completed),
+          StreakDay('Tue', _completed),
+          StreakDay('Wed', _completed),
+          StreakDay('Thu', _completed),
+          StreakDay('Fri', _completed),
+          StreakDay('Sat', _missed),
+        ]),
+        StreakWeek(DateTime(2029, 5, 13), const [
+          StreakDay('Sun', _missed),
+          StreakDay('Mon', _completed),
+          StreakDay('Tue', _completed),
+          StreakDay('Wed', _missed),
+          StreakDay('Thu', _completed),
+          StreakDay('Fri', _completed),
+          StreakDay('Sat', _completed),
+        ]),
+        StreakWeek(DateTime(2029, 5, 20), const [
+          StreakDay('Sun', _completed),
+          StreakDay('Mon', _completed),
+          StreakDay('Tue', _completed),
+          StreakDay('Wed', _completed),
+          StreakDay('Thu', _completed),
+          StreakDay('Fri', _completed),
+          StreakDay('Sat', StreakDayState.future, 8),
+        ]),
+      ],
+    );
+  }
+
   /// The milestone sheet shows once per session, when the Streaks screen
   /// first opens with the milestone reached.
-  static bool _celebrated = false;
-
-  static bool consumeCelebration() {
-    if (_celebrated || streak < milestone) return false;
-    _celebrated = true;
+  bool consumeCelebration() {
+    if (state.celebrated || state.streak < state.milestone) return false;
+    state = state.copyWith(celebrated: true);
     return true;
   }
 }
+
+final streaksProvider = NotifierProvider<StreaksNotifier, StreaksState>(
+  StreaksNotifier.new,
+);

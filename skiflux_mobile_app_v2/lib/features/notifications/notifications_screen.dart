@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 import 'package:timeago/timeago.dart' as timeago;
 
@@ -31,34 +32,23 @@ const Map<String, IconData> _kNotificationIcons = {
   'megaphone': RemixIcons.megaphone_fill,
 };
 
-class NotificationsScreen extends StatefulWidget {
+class NotificationsScreen extends ConsumerStatefulWidget {
   const NotificationsScreen({super.key});
 
   @override
-  State<NotificationsScreen> createState() => _NotificationsScreenState();
+  ConsumerState<NotificationsScreen> createState() =>
+      _NotificationsScreenState();
 }
 
-class _NotificationsScreenState extends State<NotificationsScreen> {
-  final NotificationsStore _store = NotificationsStore.instance;
+class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   int _tabIndex = 0;
 
   @override
-  void initState() {
-    super.initState();
-    _store.addListener(_onStoreChanged);
-  }
-
-  @override
-  void dispose() {
-    _store.removeListener(_onStoreChanged);
-    super.dispose();
-  }
-
-  void _onStoreChanged() => setState(() {});
-
-  @override
   Widget build(BuildContext context) {
-    final notifications = _tabIndex == 0 ? _store.all : _store.unread;
+    final all = ref.watch(notificationsProvider);
+    final notifier = ref.read(notificationsProvider.notifier);
+    final unreadCount = notifier.unreadCount;
+    final notifications = _tabIndex == 0 ? all : notifier.unread;
 
     return Scaffold(
       backgroundColor: SkifluxColors.backgroundPrimary,
@@ -72,8 +62,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         ),
         // Figma `1256:30744`: "Mark all read" text action on the right.
         trailingText: 'Mark all read',
-        onTrailingTextTap:
-            _store.unreadCount == 0 ? null : _store.markAllRead,
+        onTrailingTextTap: unreadCount == 0 ? null : notifier.markAllRead,
       ),
       body: Column(
         children: [
@@ -89,7 +78,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 const SkifluxTextTab(label: 'All'),
                 SkifluxTextTab(
                   label: 'Unread',
-                  count: _store.unreadCount,
+                  count: unreadCount,
                 ),
               ],
               selectedIndex: _tabIndex,
@@ -212,7 +201,7 @@ class _Section extends StatelessWidget {
 /// H10 Bold title + p10 body, optional small primary action pill,
 /// p11 disabled timestamp, 8px unread dot. Unread cards are tinted
 /// backgroundBrandOpacity50; tapping marks read.
-class _NotificationCard extends StatelessWidget {
+class _NotificationCard extends ConsumerWidget {
   const _NotificationCard(this.notification, {required this.showDivider});
 
   final AppNotification notification;
@@ -222,14 +211,14 @@ class _NotificationCard extends StatelessWidget {
   final bool showDivider;
 
   @override
-  Widget build(BuildContext context) {
-    final store = NotificationsStore.instance;
+  Widget build(BuildContext context, WidgetRef ref) {
     return Material(
       color: notification.unread
           ? SkifluxColors.backgroundBrandOpacity50
           : SkifluxColors.backgroundPrimary,
       child: InkWell(
-        onTap: () => store.markRead(notification),
+        onTap: () =>
+            ref.read(notificationsProvider.notifier).markRead(notification),
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.all(SkifluxSpacing.spaceL),

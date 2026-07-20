@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../../shared/sheets/skiflux_sheet.dart';
+import '../../../shared/toast/skiflux_toast.dart';
 
 // Figma: Episode Resources from More Menu (`1256:27145`).
 
@@ -78,12 +79,7 @@ class _EpisodeResourcesSheet extends StatelessWidget {
                 ),
                 IconButton(
                   onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Downloading $name…'),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
+                    SkifluxToast.info(context, 'Downloading $name…');
                   },
                   icon: const Icon(
                     RemixIcons.download_2_line,

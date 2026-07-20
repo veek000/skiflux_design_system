@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../leaderboard/leaderboard_screen.dart';
@@ -25,14 +26,15 @@ abstract final class _MyProfileDemo {
   static const leaderboardRank = '#12 in Master';
 }
 
-class MyProfileBody extends StatelessWidget {
+class MyProfileBody extends ConsumerWidget {
   const MyProfileBody({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final history = SubscriptionsStore.creators.isEmpty
+  Widget build(BuildContext context, WidgetRef ref) {
+    final subs = ref.watch(subscriptionsProvider);
+    final history = subs.creators.isEmpty
         ? const <SubscriptionEpisode>[]
-        : SubscriptionsStore.feed().take(5).toList();
+        : subs.feed().take(5).toList();
     return Column(
       children: [
         _topBar(context),
@@ -87,11 +89,12 @@ class MyProfileBody extends StatelessWidget {
 
 // ── Header: avatar · name/handle · stat pills · Design World ─────────
 
-class _ProfileHeader extends StatelessWidget {
+class _ProfileHeader extends ConsumerWidget {
   const _ProfileHeader();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final streak = ref.watch(streaksProvider).streak;
     return Column(
       children: [
         const SkifluxAvatar(
@@ -134,7 +137,7 @@ class _ProfileHeader extends StatelessWidget {
             const SizedBox(width: SkifluxSpacing.spaceS),
             _StatPill(
               icon: RemixIcons.fire_fill,
-              label: '${StreaksStore.streak}',
+              label: '$streak',
               background: SkifluxColors.orange100,
               foreground: SkifluxColors.orange500,
               chevron: true,
@@ -319,14 +322,14 @@ class _WatchHistoryRail extends StatelessWidget {
 
 /// 128px column: thumbnail (EP chip on brand + duration chip on overlay),
 /// 2-line title, creator name + "more" glyph.
-class _WatchHistoryCard extends StatelessWidget {
+class _WatchHistoryCard extends ConsumerWidget {
   const _WatchHistoryCard({required this.episode});
 
   final SubscriptionEpisode episode;
 
   @override
-  Widget build(BuildContext context) {
-    final creator = SubscriptionsStore.creatorOf(episode);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final creator = ref.watch(subscriptionsProvider).creatorOf(episode);
     return SizedBox(
       width: 128,
       child: Column(

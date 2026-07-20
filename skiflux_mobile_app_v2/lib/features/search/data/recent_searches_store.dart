@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'search_index.dart';
@@ -50,11 +51,18 @@ class RecentSearch {
 
 /// Persists recent searches as a JSON list in shared_preferences.
 /// Newest first, de-duplicated by query (case-insensitive), capped.
-class RecentSearchesStore {
+///
+/// Riverpod choice: [AsyncNotifierProvider] — load/add/remove/clear are
+/// async (SharedPreferences). Distinct from [searchIndexProvider] (pure
+/// index) so UI can watch recents independently of live query results.
+class RecentSearchesNotifier extends AsyncNotifier<List<RecentSearch>> {
   static const _prefsKey = 'search.recent';
   static const _maxEntries = 10;
 
-  Future<List<RecentSearch>> load() async {
+  @override
+  Future<List<RecentSearch>> build() => _load();
+
+  Future<List<RecentSearch>> _load() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_prefsKey);
     if (raw == null) return [];
@@ -71,8 +79,8 @@ class RecentSearchesStore {
     }
   }
 
-  Future<List<RecentSearch>> add(RecentSearch entry) async {
-    final current = await load();
+  Future<void> add(RecentSearch entry) async {
+    final current = state.value ?? await _load();
     final updated = [
       entry,
       ...current.where(
@@ -80,20 +88,22 @@ class RecentSearchesStore {
       ),
     ].take(_maxEntries).toList();
     await _save(updated);
-    return updated;
+    state = AsyncData(updated);
   }
 
-  Future<List<RecentSearch>> remove(String query) async {
-    final updated = (await load())
+  Future<void> remove(String query) async {
+    final current = state.value ?? await _load();
+    final updated = current
         .where((e) => e.query.toLowerCase() != query.toLowerCase())
         .toList();
     await _save(updated);
-    return updated;
+    state = AsyncData(updated);
   }
 
   Future<void> clear() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_prefsKey);
+    state = const AsyncData([]);
   }
 
   Future<void> _save(List<RecentSearch> entries) async {
@@ -104,3 +114,8 @@ class RecentSearchesStore {
     );
   }
 }
+
+final recentSearchesProvider =
+    AsyncNotifierProvider<RecentSearchesNotifier, List<RecentSearch>>(
+  RecentSearchesNotifier.new,
+);

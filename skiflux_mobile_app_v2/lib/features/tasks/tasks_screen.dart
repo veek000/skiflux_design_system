@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../notifications/notifications_screen.dart';
@@ -14,35 +15,22 @@ import 'submission_task_screen.dart';
 // TF13 Marketplace empty (`1256:14057`).
 
 /// Body of the bottom-nav Tasks tab (tab bar lives in HomeScreen).
-class TasksBody extends StatefulWidget {
+class TasksBody extends ConsumerStatefulWidget {
   const TasksBody({super.key});
 
   @override
-  State<TasksBody> createState() => _TasksBodyState();
+  ConsumerState<TasksBody> createState() => _TasksBodyState();
 }
 
-class _TasksBodyState extends State<TasksBody> {
-  final TasksStore _store = TasksStore.instance;
+class _TasksBodyState extends ConsumerState<TasksBody> {
   int _segment = 0; // Learning / Mission / Marketplace
   // null = All; otherwise maps to status (Revision → actionNeeded).
   LearningTaskStatus? _filter;
 
   @override
-  void initState() {
-    super.initState();
-    _store.addListener(_onStore);
-  }
-
-  @override
-  void dispose() {
-    _store.removeListener(_onStore);
-    super.dispose();
-  }
-
-  void _onStore() => setState(() {});
-
-  @override
   Widget build(BuildContext context) {
+    final tasks = ref.watch(tasksProvider);
+    final notifier = ref.read(tasksProvider.notifier);
     return Column(
       children: [
         SubscriptionsTopBar(
@@ -64,11 +52,14 @@ class _TasksBodyState extends State<TasksBody> {
         Expanded(
           child: switch (_segment) {
             0 => _LearningList(
-                store: _store,
+                state: tasks,
                 filter: _filter,
                 onFilter: (f) => setState(() => _filter = f),
               ),
-            1 => _MissionList(store: _store),
+            1 => _MissionList(
+                state: tasks,
+                onComplete: notifier.completeMission,
+              ),
             _ => _MarketplaceEmpty(
                 onKeepLearning: () => setState(() => _segment = 0),
               ),
@@ -83,18 +74,18 @@ class _TasksBodyState extends State<TasksBody> {
 
 class _LearningList extends StatelessWidget {
   const _LearningList({
-    required this.store,
+    required this.state,
     required this.filter,
     required this.onFilter,
   });
 
-  final TasksStore store;
+  final TasksState state;
   final LearningTaskStatus? filter;
   final ValueChanged<LearningTaskStatus?> onFilter;
 
   @override
   Widget build(BuildContext context) {
-    final tasks = store.learningFiltered(filter);
+    final tasks = state.learningFiltered(filter);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -105,35 +96,35 @@ class _LearningList extends StatelessWidget {
             children: [
               _FilterPill(
                 label: 'All',
-                count: store.countFor(null),
+                count: state.countFor(null),
                 selected: filter == null,
                 onTap: () => onFilter(null),
               ),
               const SizedBox(width: SkifluxSpacing.spaceS),
               _FilterPill(
                 label: 'Pending',
-                count: store.countFor(LearningTaskStatus.pending),
+                count: state.countFor(LearningTaskStatus.pending),
                 selected: filter == LearningTaskStatus.pending,
                 onTap: () => onFilter(LearningTaskStatus.pending),
               ),
               const SizedBox(width: SkifluxSpacing.spaceS),
               _FilterPill(
                 label: 'In Review',
-                count: store.countFor(LearningTaskStatus.inReview),
+                count: state.countFor(LearningTaskStatus.inReview),
                 selected: filter == LearningTaskStatus.inReview,
                 onTap: () => onFilter(LearningTaskStatus.inReview),
               ),
               const SizedBox(width: SkifluxSpacing.spaceS),
               _FilterPill(
                 label: 'Revision',
-                count: store.countFor(LearningTaskStatus.actionNeeded),
+                count: state.countFor(LearningTaskStatus.actionNeeded),
                 selected: filter == LearningTaskStatus.actionNeeded,
                 onTap: () => onFilter(LearningTaskStatus.actionNeeded),
               ),
               const SizedBox(width: SkifluxSpacing.spaceS),
               _FilterPill(
                 label: 'Completed',
-                count: store.countFor(LearningTaskStatus.completed),
+                count: state.countFor(LearningTaskStatus.completed),
                 selected: filter == LearningTaskStatus.completed,
                 onTap: () => onFilter(LearningTaskStatus.completed),
               ),
@@ -610,9 +601,13 @@ class _CardActionButton extends StatelessWidget {
 // ── Mission (TF14 · card `2902:13732`) ───────────────────────────────
 
 class _MissionList extends StatelessWidget {
-  const _MissionList({required this.store});
+  const _MissionList({
+    required this.state,
+    required this.onComplete,
+  });
 
-  final TasksStore store;
+  final TasksState state;
+  final ValueChanged<String> onComplete;
 
   static const _icons = <String, IconData>{
     'instagram': RemixIcons.instagram_fill,
@@ -630,11 +625,11 @@ class _MissionList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView.separated(
-      itemCount: store.missions.length,
+      itemCount: state.missions.length,
       separatorBuilder: (_, __) =>
           const SizedBox(height: SkifluxSpacing.spaceM),
       itemBuilder: (context, i) {
-        final m = store.missions[i];
+        final m = state.missions[i];
         // Figma `2902:13732`: 16px pad, border, radius L; top-aligned
         // 30px brand icon + text column (title · body · coin/CTA row).
         return Container(
@@ -703,7 +698,7 @@ class _MissionList extends StatelessWidget {
                           size: SkifluxButtonSize.s,
                           onPressed: m.completed
                               ? null
-                              : () => store.completeMission(m.id),
+                              : () => onComplete(m.id),
                         ),
                       ],
                     ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/sheets/skiflux_sheet.dart';
@@ -19,19 +20,19 @@ import 'subscription_widgets.dart';
 /// Body of the bottom-nav Subscriptions tab (the tab bar itself lives in
 /// HomeScreen's scaffold). Shows the empty state when nothing is
 /// subscribed, otherwise stories row + "Latest from Creators" feed.
-class SubscriptionsBody extends StatefulWidget {
+class SubscriptionsBody extends ConsumerStatefulWidget {
   const SubscriptionsBody({super.key});
 
   @override
-  State<SubscriptionsBody> createState() => _SubscriptionsBodyState();
+  ConsumerState<SubscriptionsBody> createState() => _SubscriptionsBodyState();
 }
 
-class _SubscriptionsBodyState extends State<SubscriptionsBody> {
+class _SubscriptionsBodyState extends ConsumerState<SubscriptionsBody> {
   SubscriptionFeedFilter _filter = SubscriptionFeedFilter.recent;
 
   @override
   Widget build(BuildContext context) {
-    final creators = SubscriptionsStore.creators;
+    final creators = ref.watch(subscriptionsProvider).creators;
     return Column(
       children: [
         SubscriptionsTopBar(
@@ -83,13 +84,13 @@ class _SubscriptionsBodyState extends State<SubscriptionsBody> {
   // ── Flow 05 — populated feed ───────────────────────────────────────
 
   Widget _feed(List<SubscribedCreator> creators) {
-    final episodes = SubscriptionsStore.feed(filter: _filter);
+    final episodes =
+        ref.watch(subscriptionsProvider).feed(filter: _filter);
     return ListView(
       padding: const EdgeInsets.only(top: SkifluxSpacing.spaceL),
       children: [
         SubscriptionStoriesRow(
           creators: creators,
-          onRefresh: () => setState(() {}),
         ),
         const SizedBox(height: SkifluxSpacing.spaceXl),
         Row(
@@ -358,20 +359,22 @@ class SubscriptionStoriesRow extends StatelessWidget {
 
 /// Figma: **Subscription Flow 03** (`1256:29613`) — pushed from a story
 /// avatar. Stories rail persists; feed is filtered to one creator.
-class CreatorChannelScreen extends StatefulWidget {
+class CreatorChannelScreen extends ConsumerStatefulWidget {
   const CreatorChannelScreen({super.key, required this.creator});
 
   final SubscribedCreator creator;
 
   @override
-  State<CreatorChannelScreen> createState() => _CreatorChannelScreenState();
+  ConsumerState<CreatorChannelScreen> createState() =>
+      _CreatorChannelScreenState();
 }
 
-class _CreatorChannelScreenState extends State<CreatorChannelScreen> {
+class _CreatorChannelScreenState extends ConsumerState<CreatorChannelScreen> {
   @override
   Widget build(BuildContext context) {
+    final subs = ref.watch(subscriptionsProvider);
     final episodes =
-        SubscriptionsStore.feed(creatorUsername: widget.creator.username);
+        subs.feed(creatorUsername: widget.creator.username);
     return Scaffold(
       backgroundColor: SkifluxColors.backgroundPrimary,
       body: SafeArea(
@@ -395,9 +398,8 @@ class _CreatorChannelScreenState extends State<CreatorChannelScreen> {
                 child: ListView(
                   children: [
                     SubscriptionStoriesRow(
-                      creators: SubscriptionsStore.creators,
+                      creators: subs.creators,
                       activeUsername: widget.creator.username,
-                      onRefresh: () => setState(() {}),
                     ),
                     const SizedBox(height: SkifluxSpacing.spaceXl),
                     _creatorHeader(context),
@@ -513,16 +515,16 @@ Future<void> showEpisodePlayerModal(
 
 /// Figma Home Flow 03 (`827:36229`) + Subscription Flow 02 player modal:
 /// title, View Playlist, video card, scrubber + CC / speed / minimize.
-class EpisodePlayerSheet extends StatefulWidget {
+class EpisodePlayerSheet extends ConsumerStatefulWidget {
   const EpisodePlayerSheet({super.key, required this.episode});
 
   final SubscriptionEpisode episode;
 
   @override
-  State<EpisodePlayerSheet> createState() => _EpisodePlayerSheetState();
+  ConsumerState<EpisodePlayerSheet> createState() => _EpisodePlayerSheetState();
 }
 
-class _EpisodePlayerSheetState extends State<EpisodePlayerSheet> {
+class _EpisodePlayerSheetState extends ConsumerState<EpisodePlayerSheet> {
   // Demo scrub position (static visual matching Figma ~00:01 of 12:03).
   double _progress = 1 / (12 * 60 + 3);
 
@@ -531,7 +533,10 @@ class _EpisodePlayerSheetState extends State<EpisodePlayerSheet> {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
-    final prefs = PlayerPrefsStore.instance;
+    final prefs = ref.watch(playerPrefsProvider);
+    final prefsNotifier = ref.read(playerPrefsProvider.notifier);
+    final creatorName =
+        ref.watch(subscriptionsProvider).creatorOf(episode).name;
     return Material(
       color: SkifluxColors.backgroundPrimary,
       borderRadius: const BorderRadius.vertical(
@@ -554,7 +559,7 @@ class _EpisodePlayerSheetState extends State<EpisodePlayerSheet> {
                 child: VideoFeedCard(
                   epTag: episode.epTag,
                   title: episode.title,
-                  description: SubscriptionsStore.creatorOf(episode).name,
+                  description: creatorName,
                 ),
               ),
             ),
@@ -608,22 +613,16 @@ class _EpisodePlayerSheetState extends State<EpisodePlayerSheet> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      ListenableBuilder(
-                        listenable: prefs,
-                        builder: (_, __) => _ChromeChip(
-                          label: prefs.captionsOn ? 'CC On' : 'CC',
-                          selected: prefs.captionsOn,
-                          onTap: prefs.toggleCaptions,
-                        ),
+                      _ChromeChip(
+                        label: prefs.captionsOn ? 'CC On' : 'CC',
+                        selected: prefs.captionsOn,
+                        onTap: prefsNotifier.toggleCaptions,
                       ),
                       const SizedBox(width: SkifluxSpacing.spaceS),
-                      ListenableBuilder(
-                        listenable: prefs,
-                        builder: (_, __) => _ChromeChip(
-                          label: prefs.speedLabel,
-                          selected: prefs.speed != 1.0,
-                          onTap: () => showPlaybackSpeedSheet(context),
-                        ),
+                      _ChromeChip(
+                        label: prefs.speedLabel,
+                        selected: prefs.speed != 1.0,
+                        onTap: () => showPlaybackSpeedSheet(context),
                       ),
                       const SizedBox(width: SkifluxSpacing.spaceS),
                       IconButton(

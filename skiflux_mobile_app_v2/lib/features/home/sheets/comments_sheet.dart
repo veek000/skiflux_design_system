@@ -1,14 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../../shared/error_handling/error_display.dart';
+import '../../../shared/error_handling/error_handler.dart';
 import '../../../shared/sheets/skiflux_sheet.dart';
 import '../../profile/public_user_profile_screen.dart';
+import '../data/comments_store.dart';
 
 /// Figma: **Home & In-app Flow 10 / 09** (`198:13767`, `848:39525`)
 ///
 /// Comments bottom sheet — comment list + compose bar. The compose bar
 /// switches to its recording state via the mic button (`848:39483`); a
 /// sent recording is appended to the list as a real playable voicenote.
+///
+/// Feature state: [commentsProvider] (autoDispose). Local only:
+/// [TextEditingController].
 Future<void> showCommentsSheet(BuildContext context) {
   return showSkifluxSheet(
     context: context,
@@ -16,74 +23,15 @@ Future<void> showCommentsSheet(BuildContext context) {
   );
 }
 
-/// Demo comment data. Voicenotes recorded in this session carry a real
-/// [audioPath]; the two seeded Figma voicenotes have none (static bars).
-class _CommentData {
-  const _CommentData({
-    required this.author,
-    required this.body,
-    this.authorName = 'Amara Design',
-    this.handle = '@amara',
-    this.message,
-    this.audioPath,
-    this.timeLabel = '30min',
-  });
-
-  final SkifluxCommentAuthor author;
-  final SkifluxCommentBody body;
-  final String authorName;
-  final String handle;
-  final String? message;
-  final String? audioPath;
-  final String timeLabel;
-}
-
-class _CommentsSheet extends StatefulWidget {
+class _CommentsSheet extends ConsumerStatefulWidget {
   const _CommentsSheet();
 
   @override
-  State<_CommentsSheet> createState() => _CommentsSheetState();
+  ConsumerState<_CommentsSheet> createState() => _CommentsSheetState();
 }
 
-class _CommentsSheetState extends State<_CommentsSheet> {
-  SkifluxComposeState _composeState = SkifluxComposeState.idle;
+class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
   final TextEditingController _controller = TextEditingController();
-
-  /// Index of the voicenote currently playing, if any. Passing `playing`
-  /// down flips each comment's own PlayerController, so switching index
-  /// really pauses the previous player (not just its icon).
-  int? _playingIndex;
-
-  static const _messageText =
-      "Hello, I need help tracking my order #NXC-8821. It's been 3 days "
-      "and I haven't received any update.";
-
-  // Figma order: personal message, other message, other voicenote,
-  // personal voicenote.
-  final List<_CommentData> _comments = [
-    const _CommentData(
-      author: SkifluxCommentAuthor.own,
-      body: SkifluxCommentBody.message,
-      message: _messageText,
-    ),
-    const _CommentData(
-      author: SkifluxCommentAuthor.other,
-      body: SkifluxCommentBody.message,
-      authorName: 'Kofi Mensah',
-      handle: '@kofisketch',
-      message: _messageText,
-    ),
-    const _CommentData(
-      author: SkifluxCommentAuthor.other,
-      body: SkifluxCommentBody.voicenote,
-      authorName: 'Lola Motion',
-      handle: '@lolamotion',
-    ),
-    const _CommentData(
-      author: SkifluxCommentAuthor.own,
-      body: SkifluxCommentBody.voicenote,
-    ),
-  ];
 
   @override
   void dispose() {
@@ -91,23 +39,53 @@ class _CommentsSheetState extends State<_CommentsSheet> {
     super.dispose();
   }
 
-  void _togglePlay(int index) {
-    setState(() => _playingIndex = _playingIndex == index ? null : index);
+  Future<void> _sendVoiceNote(String path) async {
+    try {
+      // Local validation until an upload API exists — empty/invalid path
+      // is a real failure of the record→send path.
+      if (path.trim().isEmpty) {
+        throw const SkifluxFailure(SkifluxErrorKind.voicenoteFailed);
+      }
+      ref.read(commentsProvider.notifier).addVoiceNote(path);
+    } catch (e, st) {
+      if (!mounted) return;
+      await ErrorDisplay.show(
+        context,
+        ref,
+        e is SkifluxFailure
+            ? e
+            : SkifluxFailure(SkifluxErrorKind.voicenoteFailed, cause: e),
+        stackTrace: st,
+      );
+    }
   }
 
-  void _sendVoiceNote(String path) {
-    setState(() {
-      _comments.add(_CommentData(
-        author: SkifluxCommentAuthor.own,
-        body: SkifluxCommentBody.voicenote,
-        audioPath: path,
-        timeLabel: 'now',
-      ));
-    });
+  Future<void> _sendComment() async {
+    try {
+      final text = _controller.text.trim();
+      if (text.isEmpty) return;
+      ref.read(commentsProvider.notifier).addMessage(text);
+      _controller.clear();
+    } catch (e, st) {
+      if (!mounted) return;
+      // Toast: like/comment/reaction failed (classification table).
+      await ErrorDisplay.show(
+        context,
+        ref,
+        SkifluxFailure(
+          SkifluxErrorKind.likeCommentReactionFailed,
+          cause: e,
+        ),
+        stackTrace: st,
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final session = ref.watch(commentsProvider);
+    final notifier = ref.read(commentsProvider.notifier);
+
     return SkifluxSheetShell(
       title: 'Comments',
       count: 2,
@@ -119,9 +97,9 @@ class _CommentsSheetState extends State<_CommentsSheet> {
               shrinkWrap: true,
               padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
               children: [
-                for (var i = 0; i < _comments.length; i++) ...[
+                for (var i = 0; i < session.comments.length; i++) ...[
                   if (i > 0) const SizedBox(height: SkifluxSpacing.spaceL),
-                  _buildComment(i),
+                  _buildComment(i, session, notifier),
                 ],
               ],
             ),
@@ -131,19 +109,14 @@ class _CommentsSheetState extends State<_CommentsSheet> {
               horizontal: SkifluxSpacing.spaceL,
             ),
             child: SkifluxComposeBar(
-              state: _composeState,
+              state: session.composeState,
               controller: _controller,
-              onMicTap: () => setState(
-                () => _composeState = SkifluxComposeState.recording,
-              ),
-              onDeleteTap: () => setState(
-                () => _composeState = SkifluxComposeState.idle,
-              ),
+              onMicTap: () =>
+                  notifier.setComposeState(SkifluxComposeState.recording),
+              onDeleteTap: () =>
+                  notifier.setComposeState(SkifluxComposeState.idle),
               onSendVoiceNote: _sendVoiceNote,
-              onSend: () {
-                _controller.clear();
-                setState(() => _composeState = SkifluxComposeState.idle);
-              },
+              onSend: _sendComment,
             ),
           ),
         ],
@@ -151,8 +124,12 @@ class _CommentsSheetState extends State<_CommentsSheet> {
     );
   }
 
-  Widget _buildComment(int index) {
-    final data = _comments[index];
+  Widget _buildComment(
+    int index,
+    CommentsState session,
+    CommentsNotifier notifier,
+  ) {
+    final data = session.comments[index];
     final isVoice = data.body == SkifluxCommentBody.voicenote;
     return SkifluxComment(
       authorName: data.authorName,
@@ -162,10 +139,9 @@ class _CommentsSheetState extends State<_CommentsSheet> {
       message: data.message,
       audioPath: data.audioPath,
       timeLabel: data.timeLabel,
-      playing: isVoice && _playingIndex == index,
-      onPlayToggle: isVoice ? () => _togglePlay(index) : null,
-      onPlaybackComplete:
-          isVoice ? () => setState(() => _playingIndex = null) : null,
+      playing: isVoice && session.playingIndex == index,
+      onPlayToggle: isVoice ? () => notifier.togglePlay(index) : null,
+      onPlaybackComplete: isVoice ? notifier.clearPlaying : null,
       onAuthorTap: () {
         // Dismiss comments, then open public learner profile.
         Navigator.of(context).pop();

@@ -1,9 +1,9 @@
 /// Demo notifications backing the Notifications screen (Figma
 /// Notification Flow `1256:28688`). Read state is session-local
-/// ([ChangeNotifier]) — no persistence, matching the other stores.
+/// ([NotificationsNotifier]) — no persistence, matching the other stores.
 library;
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// One notification card (Figma `Frame 5818`… variants). [action] is the
 /// optional pill-button label ("Watch EP. 04", "View Reply", …).
@@ -33,31 +33,31 @@ class AppNotification {
 }
 
 /// Session store: seeded demo cards + unread bookkeeping.
-class NotificationsStore extends ChangeNotifier {
-  NotificationsStore._();
-
-  static final NotificationsStore instance = NotificationsStore._();
-
-  /// Seeded relative to now so timeago labels look alive ("2 min ago")
-  /// and the Today/Yesterday split holds whenever the demo runs.
-  late final List<AppNotification> all = _seed(DateTime.now());
+///
+/// Riverpod choice: [NotifierProvider] — the list is mutable (mark read /
+/// mark all read), matching the previous ChangeNotifier. A plain [Provider]
+/// cannot own mutations; StateNotifier is legacy in Riverpod 3.
+class NotificationsNotifier extends Notifier<List<AppNotification>> {
+  @override
+  List<AppNotification> build() => _seed(DateTime.now());
 
   List<AppNotification> get unread =>
-      all.where((n) => n.unread).toList(growable: false);
+      state.where((n) => n.unread).toList(growable: false);
 
-  int get unreadCount => all.where((n) => n.unread).length;
+  int get unreadCount => state.where((n) => n.unread).length;
 
   void markAllRead() {
-    for (final n in all) {
+    for (final n in state) {
       n.unread = false;
     }
-    notifyListeners();
+    // Reassign so listeners rebuild (in-place mutation alone is silent).
+    state = List<AppNotification>.of(state);
   }
 
   void markRead(AppNotification notification) {
     if (!notification.unread) return;
     notification.unread = false;
-    notifyListeners();
+    state = List<AppNotification>.of(state);
   }
 
   static List<AppNotification> _seed(DateTime now) {
@@ -191,3 +191,8 @@ class NotificationsStore extends ChangeNotifier {
     ];
   }
 }
+
+final notificationsProvider =
+    NotifierProvider<NotificationsNotifier, List<AppNotification>>(
+  NotificationsNotifier.new,
+);
