@@ -218,6 +218,34 @@ class SkifluxIconButtonCompact extends StatelessWidget {
               null
             );
         }
+      case SkifluxButtonType.negative:
+        // Destructive fill — mirrors SkifluxButton's negative type.
+        switch (state) {
+          case SkifluxButtonState.defaultState:
+            return (
+              SkifluxColors.backgroundNegative,
+              SkifluxColors.contentPrimaryInverse,
+              null
+            );
+          case SkifluxButtonState.hover:
+            return (
+              SkifluxColors.contentNegativeBold,
+              SkifluxColors.contentPrimaryInverse,
+              null
+            );
+          case SkifluxButtonState.pressed:
+            return (
+              SkifluxColors.red700,
+              SkifluxColors.contentPrimaryInverse,
+              null
+            );
+          case SkifluxButtonState.disabled:
+            return (
+              SkifluxColors.red200,
+              SkifluxColors.contentPrimaryInverse,
+              null
+            );
+        }
     }
   }
 }

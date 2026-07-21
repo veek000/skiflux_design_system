@@ -107,8 +107,14 @@ abstract final class ErrorDisplay {
 
   /// Modal path — app-wide overlay shell (blur + scrim + sheet card).
   ///
-  /// [SkifluxSheetShell] already provides title + close; content is a
-  /// single message + primary action — no shell API extension needed.
+  /// Headerless variant (`showHeader: false`): no X button, no divider —
+  /// content starts directly with the icon. Dismissal via backdrop tap
+  /// (showSkifluxSheet scrim) or the primary action button.
+  ///
+  /// Centered content pattern (icon-in-circle → title → description →
+  /// full-width primary button), matching the quiz-result fail state
+  /// (`quiz_result_screen.dart`): 98px negative-subtle circle, 48px
+  /// negative glyph.
   static Future<void> _showModal(
     BuildContext context, {
     required String message,
@@ -118,11 +124,14 @@ abstract final class ErrorDisplay {
     return showSkifluxSheet<void>(
       context: context,
       builder: (ctx) => SkifluxSheetShell(
-        title: 'Something went wrong',
+        title: '',
+        showHeader: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(
             SkifluxSpacing.spaceL,
-            SkifluxSpacing.spaceL,
+            // Extra top clearance — headerless card, so the icon must sit
+            // clear of the grabber pill (top 8px + 4px tall).
+            SkifluxSpacing.space2xl,
             SkifluxSpacing.spaceL,
             0,
           ),
@@ -130,22 +139,32 @@ abstract final class ErrorDisplay {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // Icon in a negative-subtle circle — same 98px circle /
+              // 48px glyph proportions as the quiz-result fail state.
               Center(
                 child: Container(
-                  width: 64,
-                  height: 64,
+                  width: 98,
+                  height: 98,
                   decoration: const BoxDecoration(
                     color: SkifluxColors.backgroundNegativeSubtle,
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
                     RemixIcons.error_warning_fill,
-                    size: 32,
+                    size: 48,
                     color: SkifluxColors.contentNegative,
                   ),
                 ),
               ),
               const SizedBox(height: SkifluxSpacing.spaceL),
+              Text(
+                'Something went wrong',
+                textAlign: TextAlign.center,
+                style: SkifluxTypography.headingH7Bold.copyWith(
+                  color: SkifluxColors.contentPrimary,
+                ),
+              ),
+              const SizedBox(height: SkifluxSpacing.spaceS),
               Text(
                 message,
                 textAlign: TextAlign.center,
@@ -154,6 +173,7 @@ abstract final class ErrorDisplay {
                 ),
               ),
               const SizedBox(height: SkifluxSpacing.spaceXl),
+              // Single primary action only — no secondary/Cancel.
               SkifluxButton(
                 label: actionLabel,
                 expanded: true,

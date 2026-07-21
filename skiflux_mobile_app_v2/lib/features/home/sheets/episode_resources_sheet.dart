@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../../shared/sheets/skiflux_sheet.dart';
@@ -29,6 +30,8 @@ class _EpisodeResourcesSheet extends StatelessWidget {
       title: 'Episode Resources',
       child: ListView.separated(
         shrinkWrap: true,
+        // Sheet drags down only when the list is at its top.
+        controller: ModalScrollController.of(context),
         padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
         itemCount: _files.length,
         separatorBuilder: (_, __) =>

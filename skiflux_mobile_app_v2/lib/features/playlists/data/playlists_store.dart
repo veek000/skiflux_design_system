@@ -61,6 +61,45 @@ class Playlist {
       '$viewsLabel · $episodeCount Episodes';
 }
 
+/// Badge shown on a coin pack card.
+enum CoinPackBadge { none, bestValue, save }
+
+/// A SkillCoin bundle offered in the Buy Coins flow (Other Video Player
+/// Flow 04, `1256:27630`). Price is in Naira; rate is 1 coin = ₦6.
+class CoinPack {
+  const CoinPack({
+    required this.coins,
+    required this.priceNaira,
+    this.badge = CoinPackBadge.none,
+    this.savePercent,
+  });
+
+  final int coins;
+  final int priceNaira;
+  final CoinPackBadge badge;
+  final int? savePercent;
+
+  /// "₦600" / "₦1,100" — thousands-separated Naira.
+  String get priceLabel => '₦${thousands(priceNaira)}';
+
+  String? get badgeLabel => switch (badge) {
+        CoinPackBadge.none => null,
+        CoinPackBadge.bestValue => 'Best Value',
+        CoinPackBadge.save => 'Save $savePercent%',
+      };
+
+  /// Thousands-separates an integer: 1240 → "1,240".
+  static String thousands(int value) {
+    final digits = value.toString();
+    final buf = StringBuffer();
+    for (var i = 0; i < digits.length; i++) {
+      if (i > 0 && (digits.length - i) % 3 == 0) buf.write(',');
+      buf.write(digits[i]);
+    }
+    return buf.toString();
+  }
+}
+
 /// Snapshot of wallet + default playlist.
 class PlaylistsState {
   PlaylistsState({
@@ -115,6 +154,24 @@ class PlaylistsNotifier extends Notifier<PlaylistsState> {
       defaultPlaylist: state.defaultPlaylist,
     );
     return true;
+  }
+
+  /// Credits [coins] to the wallet (Buy Coins success).
+  void topUp(int coins) {
+    state.skillCoins += coins;
+    state = PlaylistsState(
+      skillCoins: state.skillCoins,
+      defaultPlaylist: state.defaultPlaylist,
+    );
+  }
+
+  /// Debits [coins] from the wallet (withdrawal), clamped at zero.
+  void withdraw(int coins) {
+    state.skillCoins = (state.skillCoins - coins).clamp(0, 1 << 31);
+    state = PlaylistsState(
+      skillCoins: state.skillCoins,
+      defaultPlaylist: state.defaultPlaylist,
+    );
   }
 
   void unlockForDemo(String episodeId) {
@@ -213,6 +270,27 @@ class PlaylistsNotifier extends Notifier<PlaylistsState> {
 
 final playlistsProvider =
     NotifierProvider<PlaylistsNotifier, PlaylistsState>(PlaylistsNotifier.new);
+
+/// SkillCoin packs offered in Buy Coins (Other Video Player Flow 04).
+/// Rate: 1 coin = ₦6 (Flow 03 `1256:27795`).
+const int kCoinRateNaira = 6;
+
+const List<CoinPack> kCoinPacks = [
+  CoinPack(coins: 100, priceNaira: 600),
+  CoinPack(coins: 200, priceNaira: 1100, badge: CoinPackBadge.bestValue),
+  CoinPack(
+    coins: 500,
+    priceNaira: 2500,
+    badge: CoinPackBadge.save,
+    savePercent: 17,
+  ),
+  CoinPack(
+    coins: 1000,
+    priceNaira: 4500,
+    badge: CoinPackBadge.save,
+    savePercent: 25,
+  ),
+];
 
 /// Playback prefs for More Menu chips (session-local).
 class PlayerPrefsState {

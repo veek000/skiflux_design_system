@@ -20,7 +20,7 @@ import '../tokens/typography.dart';
 /// - padding L → 12 (`Space/M`) all sides; S → 4/8 (`Space/XS` / `Space/S`)
 enum SkifluxButtonSize { l, s }
 
-enum SkifluxButtonType { primary, secondary, tertiary, tertiaryMono }
+enum SkifluxButtonType { primary, secondary, tertiary, tertiaryMono, negative }
 
 enum SkifluxButtonState { defaultState, hover, pressed, disabled }
 
@@ -225,6 +225,31 @@ class SkifluxButton extends StatelessWidget {
             return const _ButtonColors(
               background: SkifluxColors.backgroundHover,
               foreground: SkifluxColors.contentDisabled,
+            );
+        }
+      case SkifluxButtonType.negative:
+        // Destructive primary — fill `Background/Negative`, label inverse.
+        // Used by the insufficient-coins "Buy Coins" CTA (`1256:27566`).
+        switch (state) {
+          case SkifluxButtonState.defaultState:
+            return const _ButtonColors(
+              background: SkifluxColors.backgroundNegative,
+              foreground: SkifluxColors.contentPrimaryInverse,
+            );
+          case SkifluxButtonState.hover:
+            return const _ButtonColors(
+              background: SkifluxColors.contentNegativeBold,
+              foreground: SkifluxColors.contentPrimaryInverse,
+            );
+          case SkifluxButtonState.pressed:
+            return const _ButtonColors(
+              background: SkifluxColors.red700,
+              foreground: SkifluxColors.contentPrimaryInverse,
+            );
+          case SkifluxButtonState.disabled:
+            return const _ButtonColors(
+              background: SkifluxColors.red200,
+              foreground: SkifluxColors.contentPrimaryInverse,
             );
         }
     }

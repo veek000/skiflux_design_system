@@ -1,213 +1,77 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/sheets/skiflux_sheet.dart';
-import '../../shared/toast/skiflux_toast.dart';
 import '../home/sheets/episode_unlock_sheet.dart';
 import 'data/playlists_store.dart';
+import 'playlist_episode_row.dart';
 import 'playlist_screen.dart';
 
-// Figma: playlist picker over the player — Other Video Player Flow 07
-// (`1256:27214`): title, creator · N episodes, unlocked / locked rows.
-
-Future<void> showPlaylistMenuSheet(BuildContext context) {
+/// Figma: **Other Video Player Flow 07** (`1256:27214`) — playlist picker
+/// over the player, opened from the EP chip on the video card.
+///
+/// Header: playlist title (H7 Bold) over "Creator • N Episodes" + close
+/// circle. Body: the same 128×98-thumb episode rows as the playlist detail
+/// page; the episode currently playing renders highlighted (`1256:27298`,
+/// brand100 fill + "Playing EP 0X" status, no trailing control).
+Future<void> showPlaylistMenuSheet(
+  BuildContext context, {
+  int? playingEpisodeNumber,
+}) {
   return showSkifluxSheet(
     context: context,
-    builder: (_) => const _PlaylistMenuSheet(),
+    builder: (_) => _PlaylistMenuSheet(
+      playingEpisodeNumber: playingEpisodeNumber,
+    ),
   );
 }
 
 class _PlaylistMenuSheet extends ConsumerWidget {
-  const _PlaylistMenuSheet();
+  const _PlaylistMenuSheet({this.playingEpisodeNumber});
+
+  final int? playingEpisodeNumber;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final pl = ref.watch(playlistsProvider).defaultPlaylist;
     return SkifluxSheetShell(
       title: pl.title,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              SkifluxSpacing.spaceL,
-              0,
-              SkifluxSpacing.spaceL,
-              SkifluxSpacing.spaceS,
-            ),
-            child: Text(
-              pl.metaLine,
-              style: SkifluxTypography.bodyP10Regular.copyWith(
-                color: SkifluxColors.contentTertiary,
-              ),
-            ),
-          ),
-          ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.sizeOf(context).height * 0.45,
-            ),
-            child: ListView.separated(
-              shrinkWrap: true,
-              padding: const EdgeInsets.fromLTRB(
-                SkifluxSpacing.spaceL,
-                0,
-                SkifluxSpacing.spaceL,
-                SkifluxSpacing.spaceL,
-              ),
-              itemCount: pl.episodes.length,
-              separatorBuilder: (_, __) =>
-                  const SizedBox(height: SkifluxSpacing.spaceS),
-              itemBuilder: (context, i) {
-                final ep = pl.episodes[i];
-                return _EpisodeRow(
-                  episode: ep,
-                  onTap: () => _onEpisodeTap(context, ep),
-                );
-              },
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              SkifluxSpacing.spaceL,
-              0,
-              SkifluxSpacing.spaceL,
-              SkifluxSpacing.spaceL,
-            ),
-            child: SkifluxButton(
-              label: 'Open full playlist',
-              type: SkifluxButtonType.secondary,
-              expanded: true,
-              onPressed: () {
-                Navigator.of(context).pop();
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const PlaylistScreen(),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
+      subtitle: pl.metaLine,
+      child: ListView.separated(
+        shrinkWrap: true,
+        // Sheet drags down only when this list is scrolled to its top.
+        controller: ModalScrollController.of(context),
+        padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
+        itemCount: pl.episodes.length,
+        separatorBuilder: (_, __) =>
+            const SizedBox(height: SkifluxSpacing.spaceL),
+        itemBuilder: (context, i) {
+          final ep = pl.episodes[i];
+          final playing = ep.number == playingEpisodeNumber;
+          return PlaylistEpisodeRow(
+            episode: ep,
+            playing: playing,
+            onTap: playing ? null : () => _onEpisodeTap(context, ep, pl),
+          );
+        },
       ),
     );
   }
 
-  Future<void> _onEpisodeTap(BuildContext context, PlaylistEpisode ep) async {
+  Future<void> _onEpisodeTap(
+    BuildContext context,
+    PlaylistEpisode ep,
+    Playlist pl,
+  ) async {
     if (ep.isLocked) {
       await showEpisodeUnlockSheet(context, episodeId: ep.id);
       return;
     }
-    // Unlocked — dismiss menu; player already shows current EP in demo.
-    if (context.mounted) Navigator.of(context).pop();
-    if (context.mounted) {
-      SkifluxToast.info(context, 'Playing ${ep.epTag} · ${ep.title}');
-    }
-  }
-}
-
-class _EpisodeRow extends StatelessWidget {
-  const _EpisodeRow({required this.episode, required this.onTap});
-
-  final PlaylistEpisode episode;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final locked = episode.isLocked;
-    final statusLabel = switch (episode.state) {
-      PlaylistEpisodeState.completed => 'Completed',
-      PlaylistEpisodeState.unlocked => 'Unlocked',
-      PlaylistEpisodeState.locked => 'Locked',
-    };
-    final statusColor = switch (episode.state) {
-      PlaylistEpisodeState.completed => SkifluxColors.contentPositive,
-      PlaylistEpisodeState.unlocked => SkifluxColors.contentNotice,
-      PlaylistEpisodeState.locked => SkifluxColors.contentTertiary,
-    };
-
-    return Material(
-      color: SkifluxColors.backgroundHover,
-      borderRadius: SkifluxRadii.borderL,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: SkifluxRadii.borderL,
-        child: Padding(
-          padding: const EdgeInsets.all(SkifluxSpacing.spaceM),
-          child: Row(
-            children: [
-              Container(
-                width: SkifluxUnit.u40,
-                height: SkifluxUnit.u40,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: locked
-                      ? SkifluxColors.backgroundPressed
-                      : SkifluxColors.backgroundBrand,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  locked
-                      ? RemixIcons.lock_2_fill
-                      : RemixIcons.play_circle_fill,
-                  size: 20,
-                  color: locked
-                      ? SkifluxColors.contentTertiary
-                      : SkifluxColors.contentPrimaryInverse,
-                ),
-              ),
-              const SizedBox(width: SkifluxSpacing.spaceM),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${episode.epTag} · ${episode.title}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: SkifluxTypography.headingH10Bold.copyWith(
-                        color: SkifluxColors.contentPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: SkifluxSpacing.space2xs),
-                    Row(
-                      children: [
-                        Text(
-                          statusLabel,
-                          style: SkifluxTypography.uiBadgeTagSmall.copyWith(
-                            color: statusColor,
-                          ),
-                        ),
-                        Text(
-                          ' · ${episode.duration}',
-                          style: SkifluxTypography.bodyP11Regular.copyWith(
-                            color: SkifluxColors.contentTertiary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              if (locked) ...[
-                const Icon(
-                  RemixIcons.copper_coin_fill,
-                  size: 16,
-                  color: SkifluxColors.contentNoticeBold,
-                ),
-                const SizedBox(width: SkifluxSpacing.space2xs),
-                Text(
-                  '${episode.coinCost}',
-                  style: SkifluxTypography.uiButtonSmall.copyWith(
-                    color: SkifluxColors.contentNoticeBold,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
+    // Swap to the picked episode: close the picker, open its player.
+    if (!context.mounted) return;
+    Navigator.of(context).pop();
+    await openPlaylistEpisode(context, ep, pl);
   }
 }

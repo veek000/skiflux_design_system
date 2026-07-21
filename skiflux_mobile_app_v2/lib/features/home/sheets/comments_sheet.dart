@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../../shared/error_handling/error_display.dart';
@@ -95,6 +96,8 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
           Flexible(
             child: ListView(
               shrinkWrap: true,
+              // Sheet drags down only when the list is at its top.
+              controller: ModalScrollController.of(context),
               padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
               children: [
                 for (var i = 0; i < session.comments.length; i++) ...[

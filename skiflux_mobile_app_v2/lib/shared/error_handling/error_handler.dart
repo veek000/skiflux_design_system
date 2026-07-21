@@ -159,8 +159,8 @@ class ErrorHandler {
         return const ClassifiedError(
           uiType: ErrorUiType.modal,
           message:
-              "Your submission didn't go through. Please try again — "
-              "your progress hasn't been lost.",
+              "Your submission didn't go through. Please try again. "
+              "Your progress hasn't been lost.",
           kind: SkifluxErrorKind.taskSubmission,
           shouldReportToCrashReporting: true,
           actionLabel: 'Try Again',
@@ -169,8 +169,8 @@ class ErrorHandler {
         return const ClassifiedError(
           uiType: ErrorUiType.modal,
           message:
-              "Your submission didn't go through. Please try again — "
-              "your progress hasn't been lost.",
+              "Your submission didn't go through. Please try again. "
+              "Your progress hasn't been lost.",
           kind: SkifluxErrorKind.quizSubmission,
           shouldReportToCrashReporting: true,
           actionLabel: 'Try Again',
@@ -180,7 +180,7 @@ class ErrorHandler {
           uiType: ErrorUiType.modal,
           message:
               "We couldn't process your withdrawal. No coins were "
-              'deducted — please try again or contact support.',
+              'deducted. Please try again or contact support.',
           kind: SkifluxErrorKind.skillCoinWithdrawal,
           shouldReportToCrashReporting: true,
           actionLabel: 'OK',

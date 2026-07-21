@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/sheets/skiflux_sheet.dart';
@@ -57,6 +58,8 @@ class _WeekPickerSheetState extends ConsumerState<_WeekPickerSheet> {
     return SkifluxSheetShell(
       title: 'Select Week',
       child: SingleChildScrollView(
+        // Sheet drags down only when scrolled to the top.
+        controller: ModalScrollController.of(context),
         padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
         child: Column(
           mainAxisSize: MainAxisSize.min,

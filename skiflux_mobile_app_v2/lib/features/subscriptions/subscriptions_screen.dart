@@ -5,11 +5,9 @@ import 'package:skiflux_design_system/skiflux_design_system.dart';
 import '../../shared/sheets/skiflux_sheet.dart';
 import '../../shared/widgets/video_feed_card.dart';
 import '../notifications/notifications_screen.dart';
+import '../playlists/playlist_screen.dart';
 import '../profile/profile_screen.dart';
 import '../search/search_screen.dart';
-import '../home/sheets/playback_speed_sheet.dart';
-import '../playlists/data/playlists_store.dart';
-import '../playlists/playlist_screen.dart';
 import 'all_subscriptions_screen.dart';
 import 'data/subscriptions_store.dart';
 import 'filter_sheet.dart';
@@ -503,38 +501,44 @@ class _CreatorChannelScreenState extends ConsumerState<CreatorChannelScreen> {
 /// (previous screen stays visible, dimmed, behind the rounded top): white
 /// header with episode title + "View Playlist ›" link + close circle,
 /// then the home player inset with rounded corners underneath.
+///
+/// [showViewPlaylist] hides the link when the modal is opened from the
+/// playlist screen itself (already in the playlist section).
 Future<void> showEpisodePlayerModal(
   BuildContext context,
-  SubscriptionEpisode episode,
-) {
+  SubscriptionEpisode episode, {
+  bool showViewPlaylist = true,
+}) {
   return showSkifluxSheet<void>(
     context: context,
-    builder: (_) => EpisodePlayerSheet(episode: episode),
+    builder: (_) => EpisodePlayerSheet(
+      episode: episode,
+      showViewPlaylist: showViewPlaylist,
+    ),
   );
 }
 
 /// Figma Home Flow 03 (`827:36229`) + Subscription Flow 02 player modal:
-/// title, View Playlist, video card, scrubber + CC / speed / minimize.
-class EpisodePlayerSheet extends ConsumerStatefulWidget {
-  const EpisodePlayerSheet({super.key, required this.episode});
+/// white card header (episode title + "View Playlist ›" link + close
+/// circle), then the home video card inset 16px with rounded corners. All
+/// transport chrome (scrubber, CC / speed chips, minimize) is intentionally
+/// absent — the video card itself carries the purple top progress bar, EP
+/// chip, and action rail, exactly like the home feed.
+class EpisodePlayerSheet extends ConsumerWidget {
+  const EpisodePlayerSheet({
+    super.key,
+    required this.episode,
+    this.showViewPlaylist = true,
+  });
 
   final SubscriptionEpisode episode;
 
-  @override
-  ConsumerState<EpisodePlayerSheet> createState() => _EpisodePlayerSheetState();
-}
-
-class _EpisodePlayerSheetState extends ConsumerState<EpisodePlayerSheet> {
-  // Demo scrub position (static visual matching Figma ~00:01 of 12:03).
-  double _progress = 1 / (12 * 60 + 3);
-
-  SubscriptionEpisode get episode => widget.episode;
+  /// False when opened from the playlist page — no self-link.
+  final bool showViewPlaylist;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final media = MediaQuery.of(context);
-    final prefs = ref.watch(playerPrefsProvider);
-    final prefsNotifier = ref.read(playerPrefsProvider.notifier);
     final creatorName =
         ref.watch(subscriptionsProvider).creatorOf(episode).name;
     return Material(
@@ -550,11 +554,11 @@ class _EpisodePlayerSheetState extends ConsumerState<EpisodePlayerSheet> {
             _header(context),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(
+                padding: EdgeInsets.fromLTRB(
                   SkifluxSpacing.spaceL,
                   0,
                   SkifluxSpacing.spaceL,
-                  SkifluxSpacing.spaceS,
+                  SkifluxSpacing.spaceL + media.padding.bottom,
                 ),
                 child: VideoFeedCard(
                   epTag: episode.epTag,
@@ -563,90 +567,14 @@ class _EpisodePlayerSheetState extends ConsumerState<EpisodePlayerSheet> {
                 ),
               ),
             ),
-            // Scrubber + transport chrome (Home Flow 03).
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                SkifluxSpacing.spaceL,
-                0,
-                SkifluxSpacing.spaceL,
-                SkifluxSpacing.spaceL + media.padding.bottom,
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        _format(Duration(seconds: (_progress * 723).round())),
-                        style: SkifluxTypography.uiBadgeTagSmall.copyWith(
-                          color: SkifluxColors.contentTertiary,
-                        ),
-                      ),
-                      Expanded(
-                        child: SliderTheme(
-                          data: SliderTheme.of(context).copyWith(
-                            trackHeight: 3,
-                            thumbShape: const RoundSliderThumbShape(
-                              enabledThumbRadius: 6,
-                            ),
-                            overlayShape: const RoundSliderOverlayShape(
-                              overlayRadius: 12,
-                            ),
-                            activeTrackColor: SkifluxColors.contentBrand,
-                            inactiveTrackColor:
-                                SkifluxColors.backgroundPressed,
-                            thumbColor: SkifluxColors.contentBrand,
-                          ),
-                          child: Slider(
-                            value: _progress.clamp(0, 1),
-                            onChanged: (v) => setState(() => _progress = v),
-                          ),
-                        ),
-                      ),
-                      Text(
-                        '12:03',
-                        style: SkifluxTypography.uiBadgeTagSmall.copyWith(
-                          color: SkifluxColors.contentTertiary,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _ChromeChip(
-                        label: prefs.captionsOn ? 'CC On' : 'CC',
-                        selected: prefs.captionsOn,
-                        onTap: prefsNotifier.toggleCaptions,
-                      ),
-                      const SizedBox(width: SkifluxSpacing.spaceS),
-                      _ChromeChip(
-                        label: prefs.speedLabel,
-                        selected: prefs.speed != 1.0,
-                        onTap: () => showPlaybackSpeedSheet(context),
-                      ),
-                      const SizedBox(width: SkifluxSpacing.spaceS),
-                      IconButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(RemixIcons.picture_in_picture_2_line),
-                        color: SkifluxColors.contentPrimary,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
       ),
     );
   }
 
-  String _format(Duration d) {
-    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '$m:$s';
-  }
-
+  /// Figma `1256:29882` — title (H9 Bold, up to 2 lines) over the
+  /// "View Playlist ›" link, grey close circle trailing.
   Widget _header(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -656,10 +584,12 @@ class _EpisodePlayerSheetState extends ConsumerState<EpisodePlayerSheet> {
         SkifluxSpacing.spaceS,
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   episode.title,
@@ -669,34 +599,43 @@ class _EpisodePlayerSheetState extends ConsumerState<EpisodePlayerSheet> {
                     color: SkifluxColors.contentPrimary,
                   ),
                 ),
-                const SizedBox(height: SkifluxSpacing.space2xs),
-                InkWell(
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const PlaylistScreen(),
-                      ),
-                    );
-                  },
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'View Playlist',
-                        style: SkifluxTypography.bodyP10Regular.copyWith(
-                          color: SkifluxColors.contentLink,
+                if (showViewPlaylist)
+                  // Figma 1256:29885 — brand/400 link + 16px chevron
+                  // (frame font "Outfit" is the known slip → DM Sans).
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      // Leave the modal, then open the playlist page.
+                      Navigator.of(context).pop();
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const PlaylistScreen(),
                         ),
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: SkifluxSpacing.spaceXs,
                       ),
-                      const SizedBox(width: SkifluxSpacing.spaceXs),
-                      const Icon(
-                        RemixIcons.arrow_right_s_line,
-                        size: SkifluxIcons.sizeS,
-                        color: SkifluxColors.contentLink,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'View Playlist',
+                            style: SkifluxTypography.bodyP10Regular.copyWith(
+                              color: SkifluxColors.contentLink,
+                            ),
+                          ),
+                          const SizedBox(width: SkifluxSpacing.spaceXs),
+                          const Icon(
+                            RemixIcons.arrow_right_s_line,
+                            size: SkifluxIcons.sizeS,
+                            color: SkifluxColors.contentLink,
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -706,46 +645,6 @@ class _EpisodePlayerSheetState extends ConsumerState<EpisodePlayerSheet> {
             onTap: () => Navigator.of(context).pop(),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _ChromeChip extends StatelessWidget {
-  const _ChromeChip({
-    required this.label,
-    required this.onTap,
-    this.selected = false,
-  });
-
-  final String label;
-  final VoidCallback onTap;
-  final bool selected;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: selected
-          ? SkifluxColors.backgroundSelected
-          : SkifluxColors.backgroundHover,
-      borderRadius: SkifluxRadii.borderPill,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: SkifluxRadii.borderPill,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: SkifluxSpacing.spaceM,
-            vertical: SkifluxSpacing.spaceS,
-          ),
-          child: Text(
-            label,
-            style: SkifluxTypography.uiButtonSmall.copyWith(
-              color: selected
-                  ? SkifluxColors.contentBrand
-                  : SkifluxColors.contentPrimary,
-            ),
-          ),
-        ),
       ),
     );
   }

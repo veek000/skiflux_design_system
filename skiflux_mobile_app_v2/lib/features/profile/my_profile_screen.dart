@@ -3,11 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../leaderboard/leaderboard_screen.dart';
+import '../playlists/data/playlists_store.dart';
 import '../search/search_screen.dart';
 import '../streaks/data/streaks_store.dart';
 import '../streaks/streak_screen.dart';
 import '../subscriptions/data/subscriptions_store.dart';
 import '../subscriptions/subscriptions_screen.dart' show CircleTapTarget;
+import '../wallet/wallet_screen.dart';
+import 'badges_screen.dart';
+import 'downloads_screen.dart';
+import 'liked_videos_screen.dart';
+import 'saved_videos_screen.dart';
+import 'watch_history_screen.dart';
 
 // Figma: **Profile Flow 17** (`1256:23812`) — "My Profile" bottom-nav tab
 // root. Header (avatar, name/handle, coins · XP · streak pills, gradient
@@ -15,12 +22,12 @@ import '../subscriptions/subscriptions_screen.dart' show CircleTapTarget;
 // (Leaderboard / Downloads / Saved / Liked / Badges). Detail screens are
 // deferred — rows and pills are inert stubs for now.
 
-/// Demo identity/stats shown on the tab (no auth yet).
+/// Demo identity/stats shown on the tab (no auth yet). Coins now come live
+/// from [playlistsProvider] (see _ProfileHeader).
 abstract final class _MyProfileDemo {
   static const name = 'Amara Design';
   static const handle = '@amara';
   static const initials = 'AD';
-  static const coins = '1,240';
   static const xp = '2,450';
   static const world = 'Design World';
   static const leaderboardRank = '#12 in Master';
@@ -95,6 +102,8 @@ class _ProfileHeader extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final streak = ref.watch(streaksProvider).streak;
+    // Live wallet balance — updates after buy-coins / unlock / withdraw.
+    final coins = ref.watch(playlistsProvider).skillCoins;
     return Column(
       children: [
         const SkifluxAvatar(
@@ -120,12 +129,15 @@ class _ProfileHeader extends ConsumerWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const _StatPill(
+            _StatPill(
               icon: RemixIcons.copper_coin_fill,
-              label: _MyProfileDemo.coins,
+              label: CoinPack.thousands(coins),
               background: SkifluxColors.backgroundNoticeSubtle,
               foreground: SkifluxColors.contentNotice,
               chevron: true,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const WalletScreen()),
+              ),
             ),
             const SizedBox(width: SkifluxSpacing.spaceS),
             const _StatPill(
@@ -287,11 +299,16 @@ class _WatchHistoryHeading extends StatelessWidget {
             ),
           ),
         ),
-        // Watch-history list screen is a deferred stub.
-        Text(
-          'View all',
-          style: SkifluxTypography.uiButtonLarge.copyWith(
-            color: SkifluxColors.contentBrand,
+        // Watch-history list screen (Profile Flow 15).
+        GestureDetector(
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const WatchHistoryScreen()),
+          ),
+          child: Text(
+            'View all',
+            style: SkifluxTypography.uiButtonLarge.copyWith(
+              color: SkifluxColors.contentBrand,
+            ),
           ),
         ),
       ],
@@ -451,10 +468,34 @@ class _MenuList extends StatelessWidget {
             MaterialPageRoute(builder: (_) => const LeaderboardScreen()),
           ),
         ),
-        const _MenuRow(icon: RemixIcons.download_fill, label: 'Downloads'),
-        const _MenuRow(icon: RemixIcons.bookmark_fill, label: 'Saved Videos'),
-        const _MenuRow(icon: RemixIcons.heart_3_fill, label: 'Liked Videos'),
-        const _MenuRow(icon: RemixIcons.award_fill, label: 'Badges'),
+        _MenuRow(
+          icon: RemixIcons.download_fill,
+          label: 'Downloads',
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const DownloadsScreen()),
+          ),
+        ),
+        _MenuRow(
+          icon: RemixIcons.bookmark_fill,
+          label: 'Saved Videos',
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const SavedVideosScreen()),
+          ),
+        ),
+        _MenuRow(
+          icon: RemixIcons.heart_3_fill,
+          label: 'Liked Videos',
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const LikedVideosScreen()),
+          ),
+        ),
+        _MenuRow(
+          icon: RemixIcons.award_fill,
+          label: 'Badges',
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const BadgesScreen()),
+          ),
+        ),
       ],
     );
   }

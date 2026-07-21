@@ -98,12 +98,18 @@ class VideoFeedCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // EP chip → playlist menu sheet (1256:27214).
+                        // EP chip → playlist menu sheet (1256:27214);
+                        // this card's episode shows as the "Playing" row.
                         Material(
                           color: SkifluxColors.backgroundPrimaryBrand,
                           borderRadius: SkifluxRadii.borderPill,
                           child: InkWell(
-                            onTap: () => showPlaylistMenuSheet(context),
+                            onTap: () => showPlaylistMenuSheet(
+                              context,
+                              playingEpisodeNumber: int.tryParse(
+                                epTag.replaceAll(RegExp(r'[^0-9]'), ''),
+                              ),
+                            ),
                             borderRadius: SkifluxRadii.borderPill,
                             child: Padding(
                               padding: const EdgeInsets.only(

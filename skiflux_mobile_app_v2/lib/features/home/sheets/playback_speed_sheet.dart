@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../../shared/sheets/skiflux_sheet.dart';
@@ -32,6 +33,8 @@ class _PlaybackSpeedSheet extends ConsumerWidget {
       title: 'Playback Speed',
       child: ListView(
         shrinkWrap: true,
+        // Sheet drags down only when the list is at its top.
+        controller: ModalScrollController.of(context),
         padding: const EdgeInsets.fromLTRB(
           SkifluxSpacing.spaceL,
           0,

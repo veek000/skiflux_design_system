@@ -6,8 +6,9 @@ import '../../shared/sheets/share_sheet.dart';
 import '../../shared/toast/skiflux_toast.dart';
 
 // Figma: **Public User Profile view Screen** (`3092:14632`).
-// Learner profile (not creator): XP / rank / tasks, skills, badges,
-// completed projects & assessments. Opened from search Users and comments.
+// Learner profile (not creator): league pill, XP / rank / tasks stats card
+// with contact row, Skills / Badges / Completed Task sections. Opened from
+// search Users and comments.
 
 class PublicUserProfile {
   const PublicUserProfile({
@@ -19,7 +20,11 @@ class PublicUserProfile {
     this.leaderboardRank = 12,
     this.tasksDone = 8,
     this.email = 'hello@skiflux.app',
-    this.skills = const ['UI Design', 'Figma', 'Design Systems'],
+    this.skills = const [
+      'Web Design',
+      'Mobile App Development',
+      'Marketing',
+    ],
     this.badges = const [
       ProfileBadgeItem(
         'First Task',
@@ -39,7 +44,7 @@ class PublicUserProfile {
         kind: 'Project',
         title: 'SaaS landing page design',
         meta: 'Submitted Mar 2025 · Verified',
-        actionLabel: 'View Project',
+        actionLabel: 'Open in browser',
       ),
       CompletedTaskItem(
         kind: 'Assessment',
@@ -54,7 +59,7 @@ class PublicUserProfile {
         kind: 'Project',
         title: 'Design system starter kit',
         meta: 'Submitted Feb 2025 · Verified',
-        actionLabel: 'View Project',
+        actionLabel: 'View Submission',
       ),
     ],
   });
@@ -161,6 +166,7 @@ class PublicUserProfileScreen extends StatelessWidget {
               spacing: SkifluxSpacing.spaceS,
               runSpacing: SkifluxSpacing.spaceS,
               children: [
+                // White pills on the grey card (Figma 3092:14691).
                 for (final skill in profile.skills)
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -168,13 +174,13 @@ class PublicUserProfileScreen extends StatelessWidget {
                       vertical: SkifluxSpacing.spaceS,
                     ),
                     decoration: BoxDecoration(
-                      color: SkifluxColors.backgroundSelected,
+                      color: SkifluxColors.backgroundPrimary,
                       borderRadius: SkifluxRadii.borderPill,
                     ),
                     child: Text(
                       skill,
                       style: SkifluxTypography.uiButtonSmall.copyWith(
-                        color: SkifluxColors.contentBrand,
+                        color: SkifluxColors.contentPrimary,
                       ),
                     ),
                   ),
@@ -188,26 +194,9 @@ class PublicUserProfileScreen extends StatelessWidget {
             countLabel: '${profile.badges.length} Badges',
             child: Row(
               children: [
-                for (var i = 0; i < profile.badges.length; i++) ...[
-                  if (i > 0) const SizedBox(width: SkifluxSpacing.spaceS),
-                  Expanded(
-                    child: Column(
-                      children: [
-                        SvgPicture.asset(
-                          profile.badges[i].asset,
-                          width: 80,
-                          height: 80,
-                        ),
-                        const SizedBox(height: SkifluxSpacing.spaceXs),
-                        Text(
-                          'Earned',
-                          style: SkifluxTypography.uiBadgeTagSmall.copyWith(
-                            color: SkifluxColors.contentTertiary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                for (final (i, badge) in profile.badges.indexed) ...[
+                  if (i > 0) const SizedBox(width: SkifluxSpacing.spaceL),
+                  Expanded(child: _BadgeTile(badge: badge)),
                 ],
               ],
             ),
@@ -216,12 +205,13 @@ class PublicUserProfileScreen extends StatelessWidget {
           _SectionCard(
             icon: RemixIcons.clipboard_fill,
             title: 'Completed Task',
-            countLabel: '${profile.tasksDone} Done',
+            // Figma pill reads "8 Badges" — copy slip; real task count used.
+            countLabel: '${profile.tasksDone} Tasks',
             child: Column(
               children: [
-                for (var i = 0; i < profile.completedTasks.length; i++) ...[
-                  if (i > 0) const SizedBox(height: SkifluxSpacing.spaceM),
-                  _CompletedTaskCard(item: profile.completedTasks[i]),
+                for (final (i, task) in profile.completedTasks.indexed) ...[
+                  if (i > 0) const SizedBox(height: SkifluxSpacing.spaceL),
+                  _CompletedTaskCard(item: task),
                 ],
               ],
             ),
@@ -263,7 +253,7 @@ class _Header extends StatelessWidget {
           ),
         ),
         const SizedBox(height: SkifluxSpacing.spaceS),
-        // League pill — Novice + medal.
+        // League pill — Novice + medal (3092:14644).
         Container(
           padding: const EdgeInsets.all(SkifluxSpacing.spaceXs),
           decoration: BoxDecoration(
@@ -279,7 +269,7 @@ class _Header extends StatelessWidget {
             children: [
               const Icon(
                 RemixIcons.medal_fill,
-                size: 16,
+                size: SkifluxIcons.sizeS,
                 color: SkifluxColors.contentBrand,
               ),
               const SizedBox(width: SkifluxSpacing.spaceXs),
@@ -293,7 +283,7 @@ class _Header extends StatelessWidget {
           ),
         ),
         const SizedBox(height: SkifluxSpacing.spaceS),
-        // Stats card: XP | Leaderboard | Task Done.
+        // Stats card: XP | Leaderboard | Task Done + contact row (3092:14649).
         Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(vertical: SkifluxSpacing.spaceS),
@@ -322,35 +312,50 @@ class _Header extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: SkifluxSpacing.spaceS),
+              // Contact row — top hairline inside the card (3092:14676):
+              // mail icon + email (Nav Item, Creato Medium 14) + Contact.
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: SkifluxSpacing.spaceS,
                 ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      RemixIcons.mail_fill,
-                      size: 16,
-                      color: SkifluxColors.contentTertiary,
-                    ),
-                    const SizedBox(width: SkifluxSpacing.spaceS),
-                    Expanded(
-                      child: Text(
-                        profile.email,
-                        style: SkifluxTypography.bodyP10Regular.copyWith(
-                          color: SkifluxColors.contentTertiary,
-                        ),
+                child: Container(
+                  padding: const EdgeInsets.only(top: SkifluxSpacing.spaceS),
+                  decoration: const BoxDecoration(
+                    border: Border(
+                      top: BorderSide(
+                        color: SkifluxColors.contentSecondaryInverse,
+                        width: SkifluxBorderWidth.xs,
                       ),
                     ),
-                    SkifluxButton(
-                      label: 'Message',
-                      size: SkifluxButtonSize.s,
-                      type: SkifluxButtonType.secondary,
-                      onPressed: () {
-                        SkifluxToast.info(context, 'Messaging coming soon');
-                      },
-                    ),
-                  ],
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        RemixIcons.mail_fill,
+                        size: SkifluxIcons.sizeS,
+                        color: SkifluxColors.contentPrimary,
+                      ),
+                      const SizedBox(width: SkifluxSpacing.spaceS),
+                      Expanded(
+                        child: Text(
+                          profile.email,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: SkifluxTypography.uiNavItem.copyWith(
+                            color: SkifluxColors.contentPrimary,
+                          ),
+                        ),
+                      ),
+                      SkifluxButton(
+                        label: 'Contact',
+                        size: SkifluxButtonSize.s,
+                        onPressed: () => SkifluxToast.info(
+                          context,
+                          'Messaging coming soon',
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -362,7 +367,7 @@ class _Header extends StatelessWidget {
 
   Widget _vDivider() {
     return Container(
-      width: 1,
+      width: SkifluxBorderWidth.xs,
       height: 42,
       color: SkifluxColors.contentSecondaryInverse,
     );
@@ -391,6 +396,8 @@ class _StatCell extends StatelessWidget {
           Text(
             label,
             textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: SkifluxTypography.bodyP11Regular.copyWith(
               color: SkifluxColors.contentTertiary,
             ),
@@ -401,6 +408,8 @@ class _StatCell extends StatelessWidget {
   }
 }
 
+/// Grey `Background/Hover` section card, radius X (3092:14681):
+/// 24px black icon + H9 Bold title + brand100 count pill, then [child].
 class _SectionCard extends StatelessWidget {
   const _SectionCard({
     required this.icon,
@@ -420,18 +429,19 @@ class _SectionCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
       decoration: BoxDecoration(
-        borderRadius: SkifluxRadii.borderL,
-        border: Border.all(
-          color: SkifluxColors.borderTertiary,
-          width: SkifluxBorderWidth.xs,
-        ),
+        color: SkifluxColors.backgroundHover,
+        borderRadius: SkifluxRadii.borderX,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, size: 24, color: SkifluxColors.contentBrand),
+              Icon(
+                icon,
+                size: SkifluxIcons.sizeM,
+                color: SkifluxColors.contentPrimary,
+              ),
               const SizedBox(width: SkifluxSpacing.spaceS),
               Expanded(
                 child: Text(
@@ -447,13 +457,13 @@ class _SectionCard extends StatelessWidget {
                   vertical: SkifluxSpacing.spaceXs,
                 ),
                 decoration: BoxDecoration(
-                  color: SkifluxColors.backgroundHover,
-                  borderRadius: SkifluxRadii.borderPill,
+                  color: SkifluxColors.backgroundPrimaryBrand,
+                  borderRadius: SkifluxRadii.borderX,
                 ),
                 child: Text(
                   countLabel,
                   style: SkifluxTypography.uiBadgeTagSmall.copyWith(
-                    color: SkifluxColors.contentTertiary,
+                    color: SkifluxColors.contentBrand,
                   ),
                 ),
               ),
@@ -467,6 +477,46 @@ class _SectionCard extends StatelessWidget {
   }
 }
 
+/// Gradient badge tile (3092:14703): brand50 → brand200 vertical gradient,
+/// 80px badge art, "Earned" in Button Small on `Content/Link Pressed`.
+class _BadgeTile extends StatelessWidget {
+  const _BadgeTile({required this.badge});
+
+  final ProfileBadgeItem badge;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      // Figma tile: radius 9.982, padding 14.973 (non-token frame values).
+      padding: const EdgeInsets.all(14.97),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [SkifluxColors.brand50, SkifluxColors.brand200],
+        ),
+        borderRadius: BorderRadius.circular(9.98),
+      ),
+      child: Column(
+        children: [
+          SvgPicture.asset(badge.asset, width: 80, height: 80),
+          const SizedBox(height: SkifluxSpacing.spaceXs),
+          Text(
+            'Earned',
+            style: SkifluxTypography.uiButtonSmall.copyWith(
+              color: SkifluxColors.contentLinkPressed,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Completed-task card (3092:14725 project / 3092:14742 assessment):
+/// white card, 1px `Content/Secondary Inverse` stroke, radius L.
+/// Projects get a 128px `Background/Selected` thumb strip + outlined
+/// action pill; assessments get a brand score ring + band + Passed pill.
 class _CompletedTaskCard extends StatelessWidget {
   const _CompletedTaskCard({required this.item});
 
@@ -476,158 +526,234 @@ class _CompletedTaskCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: SkifluxColors.backgroundHover,
+        color: SkifluxColors.backgroundPrimary,
         borderRadius: SkifluxRadii.borderL,
+        border: Border.all(
+          color: SkifluxColors.contentSecondaryInverse,
+          width: SkifluxBorderWidth.xs,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: SkifluxSpacing.spaceS,
-              vertical: SkifluxSpacing.spaceXs,
+          // Thumbnail strip — project cards only (3092:14726).
+          if (item.score == null)
+            Container(
+              height: 128,
+              width: double.infinity,
+              color: SkifluxColors.backgroundSelected,
+              alignment: Alignment.topLeft,
+              padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
+              child: _kindPill(),
             ),
-            decoration: BoxDecoration(
-              color: SkifluxColors.backgroundPrimary,
-              borderRadius: SkifluxRadii.borderPill,
-            ),
-            child: Text(
-              item.kind,
-              style: SkifluxTypography.uiBadgeTagSmall.copyWith(
-                color: SkifluxColors.contentBrand,
-              ),
-            ),
-          ),
-          const SizedBox(height: SkifluxSpacing.spaceS),
-          Text(
-            item.title,
-            style: SkifluxTypography.headingH10Bold.copyWith(
-              color: SkifluxColors.contentPrimary,
-            ),
-          ),
-          const SizedBox(height: SkifluxSpacing.spaceXs),
-          Row(
-            children: [
-              const Icon(
-                RemixIcons.calendar_check_line,
-                size: 16,
-                color: SkifluxColors.contentTertiary,
-              ),
-              const SizedBox(width: SkifluxSpacing.spaceXs),
-              Expanded(
-                child: Text(
-                  item.meta,
-                  style: SkifluxTypography.bodyP10Regular.copyWith(
-                    color: SkifluxColors.contentTertiary,
+          Padding(
+            padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (item.score != null) ...[
+                  _kindPill(),
+                  const SizedBox(height: SkifluxSpacing.spaceS),
+                ],
+                Text(
+                  item.title,
+                  style: SkifluxTypography.headingH10Bold.copyWith(
+                    color: SkifluxColors.contentSecondary,
                   ),
                 ),
+                const SizedBox(height: SkifluxSpacing.spaceXs),
+                Row(
+                  children: [
+                    const Icon(
+                      RemixIcons.calendar_check_line,
+                      size: SkifluxIcons.sizeS,
+                      color: SkifluxColors.contentTertiary,
+                    ),
+                    const SizedBox(width: SkifluxSpacing.spaceXs),
+                    Expanded(
+                      child: Text(
+                        item.meta,
+                        style: SkifluxTypography.bodyP10Regular.copyWith(
+                          color: SkifluxColors.contentTertiary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (item.score != null) ...[
+                  const SizedBox(height: SkifluxSpacing.spaceS),
+                  const Divider(
+                    height: SkifluxSpacing.spaceL,
+                    thickness: SkifluxBorderWidth.xs,
+                    color: SkifluxColors.borderTertiary,
+                  ),
+                  _scoreRow(),
+                ],
+                if (item.actionLabel != null) ...[
+                  const SizedBox(height: SkifluxSpacing.spaceM),
+                  _actionPill(context),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _kindPill() {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: SkifluxSpacing.spaceS,
+        vertical: SkifluxSpacing.spaceXs,
+      ),
+      decoration: BoxDecoration(
+        color: SkifluxColors.backgroundBrand,
+        borderRadius: SkifluxRadii.borderX,
+      ),
+      child: Text(
+        item.kind,
+        style: SkifluxTypography.uiBadgeTagSmall.copyWith(
+          color: SkifluxColors.contentPrimaryInverse,
+        ),
+      ),
+    );
+  }
+
+  /// Outlined full-width pill — brand label on borderTertiary (3092:14741).
+  Widget _actionPill(BuildContext context) {
+    return Material(
+      color: SkifluxColors.backgroundPrimary,
+      borderRadius: SkifluxRadii.borderPill,
+      child: InkWell(
+        borderRadius: SkifluxRadii.borderPill,
+        onTap: () => SkifluxToast.info(context, 'Submission link coming soon'),
+        child: Container(
+          height: SkifluxUnit.u32,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: SkifluxRadii.borderPill,
+            border: Border.all(
+              color: SkifluxColors.borderTertiary,
+              width: SkifluxBorderWidth.xs,
+            ),
+          ),
+          child: Text(
+            item.actionLabel!,
+            style: SkifluxTypography.uiButtonSmall.copyWith(
+              color: SkifluxColors.contentBrand,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Score ring + band row (3092:14759) — brand ring, "88 / 100" stacked,
+  /// band H10 Bold + green "Passed" pill, award detail line.
+  Widget _scoreRow() {
+    return Row(
+      children: [
+        SizedBox(
+          width: SkifluxUnit.u48,
+          height: SkifluxUnit.u48,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              SizedBox(
+                width: SkifluxUnit.u48,
+                height: SkifluxUnit.u48,
+                child: CircularProgressIndicator(
+                  value: (item.score! / 100).clamp(0, 1),
+                  strokeWidth: 4,
+                  strokeCap: StrokeCap.round,
+                  backgroundColor: SkifluxColors.backgroundSelected,
+                  color: SkifluxColors.contentBrand,
+                ),
+              ),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${item.score}',
+                    style: SkifluxTypography.uiInputContent.copyWith(
+                      color: SkifluxColors.contentBrand,
+                      height: 1,
+                    ),
+                  ),
+                  Text(
+                    '/100',
+                    style: SkifluxTypography.uiBadgeTagSmall.copyWith(
+                      color: SkifluxColors.contentDisabled,
+                      height: 1,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-          if (item.score != null) ...[
-            const SizedBox(height: SkifluxSpacing.spaceM),
-            Row(
-              children: [
-                SizedBox(
-                  width: 48,
-                  height: 48,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      SizedBox(
-                        width: 48,
-                        height: 48,
-                        child: CircularProgressIndicator(
-                          value: (item.score! / 100).clamp(0, 1),
-                          strokeWidth: 4,
-                          backgroundColor: SkifluxColors.backgroundPressed,
-                          color: SkifluxColors.contentPositive,
-                        ),
+        ),
+        const SizedBox(width: SkifluxSpacing.spaceM),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    item.band ?? '',
+                    style: SkifluxTypography.headingH10Bold.copyWith(
+                      color: SkifluxColors.contentSecondary,
+                    ),
+                  ),
+                  if (item.passed) ...[
+                    const SizedBox(width: SkifluxSpacing.spaceXs),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: SkifluxSpacing.spaceS,
+                        vertical: SkifluxSpacing.spaceXs,
                       ),
-                      Text(
-                        '${item.score}',
+                      decoration: BoxDecoration(
+                        color: SkifluxColors.backgroundPositiveSubtle,
+                        borderRadius: SkifluxRadii.borderPill,
+                      ),
+                      child: Text(
+                        'Passed',
                         style: SkifluxTypography.uiBadgeTagSmall.copyWith(
-                          color: SkifluxColors.contentPrimary,
+                          color: SkifluxColors.contentPositiveBold,
                         ),
                       ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: SkifluxSpacing.spaceM),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            item.band ?? '',
-                            style: SkifluxTypography.headingH10Bold.copyWith(
-                              color: SkifluxColors.contentPrimary,
-                            ),
-                          ),
-                          if (item.passed) ...[
-                            const SizedBox(width: SkifluxSpacing.spaceS),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: SkifluxSpacing.spaceS,
-                                vertical: SkifluxSpacing.spaceXs,
-                              ),
-                              decoration: BoxDecoration(
-                                color: SkifluxColors.backgroundPositiveSubtle,
-                                borderRadius: SkifluxRadii.borderPill,
-                              ),
-                              child: Text(
-                                'Passed',
-                                style: SkifluxTypography.uiBadgeTagSmall
-                                    .copyWith(
-                                  color: SkifluxColors.contentPositive,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      if (item.bandDetail != null)
-                        Row(
-                          children: [
-                            const Icon(
-                              RemixIcons.award_line,
-                              size: 16,
-                              color: SkifluxColors.contentTertiary,
-                            ),
-                            const SizedBox(width: SkifluxSpacing.spaceXs),
-                            Expanded(
-                              child: Text(
-                                item.bandDetail!,
-                                style:
-                                    SkifluxTypography.bodyP10Regular.copyWith(
-                                  color: SkifluxColors.contentTertiary,
-                                ),
-                              ),
-                            ),
-                          ],
+                    ),
+                  ],
+                ],
+              ),
+              if (item.bandDetail != null) ...[
+                const SizedBox(height: SkifluxSpacing.spaceXs),
+                Row(
+                  children: [
+                    const Icon(
+                      RemixIcons.award_line,
+                      size: SkifluxIcons.sizeS,
+                      color: SkifluxColors.contentTertiary,
+                    ),
+                    const SizedBox(width: SkifluxSpacing.spaceXs),
+                    Expanded(
+                      child: Text(
+                        item.bandDetail!,
+                        style: SkifluxTypography.bodyP10Regular.copyWith(
+                          color: SkifluxColors.contentTertiary,
                         ),
-                    ],
-                  ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
-            ),
-          ],
-          if (item.actionLabel != null) ...[
-            const SizedBox(height: SkifluxSpacing.spaceM),
-            SkifluxButton(
-              label: item.actionLabel!,
-              size: SkifluxButtonSize.s,
-              type: SkifluxButtonType.secondary,
-              expanded: true,
-              onPressed: () {},
-            ),
-          ],
-        ],
-      ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

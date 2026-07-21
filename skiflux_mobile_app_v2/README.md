@@ -46,8 +46,9 @@ lib/
       quiz_result_screen.dart     # pass/fail / task-completed result
       data/tasks_store.dart       # learning + mission demo store
     playlists/
-      playlist_menu_sheet.dart    # EP chip sheet (locked/unlocked list)
-      playlist_screen.dart        # full playlist page (198:14101)
+      playlist_menu_sheet.dart    # EP chip sheet (1256:27214, playing-row highlight)
+      playlist_screen.dart        # playlist detail page (198:14183)
+      playlist_episode_row.dart   # shared episode row (detail page + menu sheet)
       data/playlists_store.dart   # episodes + SkillCoin wallet + player prefs
     home/sheets/
       more_menu_sheet.dart        # ⋯ menu (wired)
@@ -63,6 +64,9 @@ lib/
     sheets/
       skiflux_sheet.dart       # showSkifluxSheet — blur + scrim bottom-sheet shell
       share_sheet.dart         # share overlay (198:13910) — home, streaks, quiz result
+    widgets/
+      video_feed_card.dart     # video player card (home feed + episode player modal)
+      playlist_deck.dart       # stacked playlist thumbnail (search, profile, playlist cover)
 assets/                        # feed placeholders, streak decor, badges
 test/                          # widget smoke tests
 ```

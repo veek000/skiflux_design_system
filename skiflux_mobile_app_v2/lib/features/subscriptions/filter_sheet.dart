@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/sheets/skiflux_sheet.dart';
@@ -16,6 +17,8 @@ Future<SubscriptionFeedFilter?> showSubscriptionFilterSheet(
       title: 'Filter episodes',
       child: ListView(
         shrinkWrap: true,
+        // Sheet drags down only when the list is at its top.
+        controller: ModalScrollController.of(context),
         padding: const EdgeInsets.symmetric(
           horizontal: SkifluxSpacing.spaceL,
           vertical: SkifluxSpacing.spaceS,
@@ -45,6 +48,8 @@ Future<SubscriptionListSort?> showSubscriptionSortSheet(
       title: 'Filter',
       child: ListView(
         shrinkWrap: true,
+        // Sheet drags down only when the list is at its top.
+        controller: ModalScrollController.of(context),
         padding: const EdgeInsets.symmetric(
           horizontal: SkifluxSpacing.spaceL,
           vertical: SkifluxSpacing.spaceS,
@@ -94,6 +99,8 @@ Future<BellAction?> showBellSheet(
       title: creator.name,
       child: ListView(
         shrinkWrap: true,
+        // Sheet drags down only when the list is at its top.
+        controller: ModalScrollController.of(context),
         padding: const EdgeInsets.symmetric(
           horizontal: SkifluxSpacing.spaceL,
           vertical: SkifluxSpacing.spaceS,

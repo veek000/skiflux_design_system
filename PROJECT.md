@@ -130,9 +130,9 @@ Everything else defaults to **toast**.
 | Network timeout / no connection | toast | Couldn't connect. Check your internet and try again. |
 | Like / comment / reaction failed | toast | That didn't send. Please try again. |
 | Search/filter error | toast | Something went wrong with your search. Please try again. |
-| Task submission failed | modal | Your submission didn't go through. Please try again — your progress hasn't been lost. |
+| Task submission failed | modal | Your submission didn't go through. Please try again. Your progress hasn't been lost. |
 | Quiz/assessment submission failed | modal | (same as task submission) |
-| SkillCoin withdrawal failed | modal | We couldn't process your withdrawal. No coins were deducted — please try again or contact support. |
+| SkillCoin withdrawal failed | modal | We couldn't process your withdrawal. No coins were deducted. Please try again or contact support. |
 | Session expired / auth | modal | Your session timed out. Please log in again to continue. |
 | Voicenote recording/upload failed | modal | Your voice note couldn't be sent. Tap to retry. |
 | Content failed to load | modal | We couldn't load this. Please try again. |
@@ -824,7 +824,8 @@ as a new app — uninstall the old "skiflux_example" install manually.
 17. **Home & In-app + Other Video Player flows** (Figma `198:13483` +
     `1256:18498`) — completed the missing branches on top of the existing
     home feed, comments, share, more-menu shell, creator profile, and
-    subscriptions episode player modal:
+    subscriptions episode player modal (⚠️ playlist menu / playlist page /
+    player-modal details below superseded by #21):
 
     - **Playlist menu sheet** (`1256:27214`): `features/playlists/
       playlist_menu_sheet.dart` — title, creator · N episodes, locked/
@@ -864,7 +865,9 @@ as a new app — uninstall the old "skiflux_example" install manually.
       sheet: tap author row → public profile (`onAuthorTap` added to
       package `SkifluxComment`).
 
-19. **Creator playlist + player polish** (Home Flow 05/06/03/04):
+19. **Creator playlist + player polish** (Home Flow 05/06/03/04)
+    (⚠️ superseded by #21 — playlist tab card, playlist page, and player
+    modal were all re-done Figma-accurate):
     - Profile **Playlists** tab: stacked cover card with image + episode
       count chip (Flow 06), not a flat list row.
     - `playlist_screen.dart` rewritten to Flow **05**: cover hero,
@@ -882,6 +885,91 @@ as a new app — uninstall the old "skiflux_example" install manually.
     to be a sibling of `skiflux_design_system` under a shared `skiflux/` root.
     Added a proper root `.gitignore` to block disposable build artifacts and 
     cleanly pushed this restructured state to the GitHub repository.
+
+21. **Playlist / player / public-profile Figma accuracy pass** (supersedes
+    the playlist-detail, description-sheet, player-modal, and playlist-menu
+    implementations described in #17 and #19):
+    - **New shared widget `shared/widgets/playlist_deck.dart`**
+      (`PlaylistDeck`): the stacked magenta "deck" thumbnail (magenta200
+      back card at radius 14.44 peeking above a magenta900 front card with
+      the menu-fold + count chip). Fractional geometry so one widget serves
+      both sizes: search row `304:9583` (126×98, `backWidthFactor` .9025)
+      and the playlist-detail cover `198:14189` (full-width×150, .9336).
+      Used by search results, the profile Playlists tab, and the playlist
+      detail cover.
+    - **Profile Playlists tab** (`profile_screen.dart`): now renders the
+      playlist exactly like the search playlist result row (`304:9582`) —
+      deck + H10 Bold title + `metaLine` ("creator · N Episodes"). The
+      old image-based stacked-cover card (#19) is gone.
+    - **Playlist detail** (`playlist_screen.dart`, Home Flow 05
+      `198:14183`) rewritten: title-less top nav (back + share only),
+      full-width deck cover, H9 Bold title + "#UIDesign #Figma" hashtags,
+      grey `Background/Hover` radius-X creator pill row (48px avatar,
+      H9 semibold name over Badge-Tag-Small handle, trailing chevron →
+      creator ProfileScreen), 2-line p11 description + "View Full
+      Description" (Button Small brand), expanded size-S **Play all**
+      primary pill + 32px hover-grey bookmark/download circles. The old
+      hero image, meta line, follow circle, and like/comment/save/share
+      action rail were NOT in the frame and were removed. Now a
+      `ConsumerWidget` (no local state left).
+    - **Shared episode row** (`playlists/playlist_episode_row.dart`,
+      `PlaylistEpisodeRow`): the 128×98-thumb row used by BOTH the
+      playlist detail page and the playlist menu sheet. Thumb = EP chip
+      (brand pill), duration chip (overlay50), 4px brand/brand100 video
+      progress bar hugging the bottom edge; locked = 5px `ImageFiltered`
+      blur + overlay50 + centered white lock (`827:35485`). Trailing 48px
+      slot: play_circle_fill (contentDisabled) or notice-subtle coin pill.
+      `playing: true` renders the `1256:27298` variant — backgroundSelected
+      row fill, "Playing EP 0X" brand status, partial (0.71) progress, no
+      trailing control, non-tappable.
+    - **Description sheet** (`playlist_description_sheet.dart`, Home Flow
+      04 `827:35820`): just "Description" H7 header + the full description
+      in bodyP11Regular tertiary — dropped the repeated title/meta.
+    - **Episode player modal** (`EpisodePlayerSheet` in
+      `subscriptions_screen.dart`, Home Flow 03 `827:36229`): stripped
+      the scrubber row (slider + timestamps), CC chip, speed chip,
+      minimize button, AND the "View Playlist" link — per user direction
+      those controls are baked into the video itself; the inset
+      `VideoFeedCard` already carries the purple top progress bar, EP
+      chip, and action rail like home. Sheet = title (H9 Bold, 2 lines) +
+      close circle + video card. Now a plain `ConsumerWidget`. Playback
+      speed / captions remain reachable via the More Menu.
+    - **Playlist menu sheet** (`playlist_menu_sheet.dart`, Other Video
+      Player Flow 07 `1256:27214`) rebuilt from the compact grey rows to
+      the real frame: header = playlist title over "Creator · N Episodes"
+      (new `subtitle` slot on `SkifluxSheetShell` — bodyP8Regular
+      tertiary under the H7 title), body = `PlaylistEpisodeRow`s with the
+      currently-playing episode highlighted. `showPlaylistMenuSheet` takes
+      `playingEpisodeNumber`; `VideoFeedCard`'s EP chip parses its own
+      `epTag` and passes it, so the card's episode shows as "Playing".
+      Tapping another unlocked row closes the picker and opens that
+      episode's player (`openPlaylistEpisode`, now a public helper on
+      playlist_screen.dart); locked rows → unlock sheet. The
+      "Open full playlist" button was removed (not in the frame).
+    - **Public user profile** (`public_user_profile_screen.dart`,
+      `3092:14632`) closed the remaining ~20%: stats card gained the
+      contact row (mail_fill + email in `UI Style/Nav Item` + primary
+      size-S **Contact** button, top hairline inside the card) replacing
+      the grey "Message" secondary; section cards are grey
+      `Background/Hover` radius-X with 24px black icons + brand100 count
+      pills (were white bordered cards w/ grey pills); skills = white
+      pills, Figma copy (Web Design / Mobile App Development /
+      Marketing); badges sit on brand50→brand200 vertical-gradient tiles
+      (radius 9.98, pad 14.97 — Figma frame values) with "Earned" in
+      Button Small on `Content/Link Pressed`; completed-task cards =
+      white, 1px contentSecondaryInverse stroke, radius L — projects get
+      a 128px backgroundSelected thumb strip (kind pill inside) +
+      outlined full-width brand action pill ("Open in browser" / "View
+      Submission"), the assessment gets a BRAND score ring (round cap,
+      backgroundSelected track) with stacked "88 / /100", band H10 Bold +
+      positive-subtle "Passed" pill (contentPositiveBold), award detail
+      line. Figma slip: the Completed Task count pill reads "8 Badges" —
+      rendered as "8 Tasks".
+    - Toast migrations along the way: playlist save/download,
+      menu/episode taps, public-profile contact + action pills now use
+      `SkifluxToast` (no raw SnackBars added).
+    - Figma authoring slips handled per precedent: "Outfit" font on
+      chips stays DM Sans (§7.7 call).
 
 ## 8. Suggested next steps
 
@@ -918,6 +1006,41 @@ GitHub Actions workflow at
 - Branch protection requiring this check before merge — **not configured** on the GitHub repo as of setup; must be enabled manually (Settings → Branches → protect `main` → require status check **Analyze & Test** / `Flutter CI`).
 
 ## Session Log
+
+### 2026-07-21 — Claude — Corrections pass + Watch History / Downloads / Saved Videos
+- Status: Complete (verification: analyze clean + widget repro tests passed for the render fixes; final full build skipped per user — verified on emulator)
+- What was done: **(A) Bug fixes from user QA:** (1) `SkifluxSheetShell` subtitle no longer truncates (dropped `maxLines: 1`/ellipsis — wraps freely; fixes the Unlock Episode sub-heading). (2) **Blank buy-coins modal/screen + blank insufficient-coins modal**: root cause was `Row(crossAxisAlignment: stretch)` around the coin-pack cards inside a scrollable — infinite-height constraint blanked the entire sheet/screen (only the scrim rendered). Fixed by wrapping both pack-grid Rows (`buy_coins_sheet.dart`, `buy_coins_screen.dart`) in `IntrinsicHeight`; repro'd and confirmed with widget tests. (3) **Unlock loading state redesigned**: the separate "Unlocking…" processing phase (which swapped the title and resized the sheet around a bare centered spinner) is gone — the summary layout now stays put and the primary pill swaps inline to `_UnlockingButton` (brand fill, small inverse `SkifluxSpinner` + "Unlocking…", same 48px pill geometry); Back disabled while busy. Also restored the insufficient-state CTA to `SkifluxButtonType.negative` (red, per `1256:27566`). (4) **Badges progress header** matched to `1256:25551`: both labels `uiInputContent` (left tertiary / right brand), track+fill are independent rounded pills (fill has its own rounded ends via `Align`+`FractionallySizedBox`, not a clipped strip). (5) **Wallet "All" pill clipped**: the reverse `SingleChildScrollView` inside `Flexible` clipped the first pill — replaced with a plain Row (heading `Expanded`+ellipsis, three size-S pills hug). **(B) Three missing Profile-Flow screens built:** new shared `features/profile/library_episode_row.dart` (`LibraryEpisodeRow`: 128×98 thumb with EP/duration pills + optional brand progress strip, 2-line title, 16px creator avatar+name, per-screen status line + trailing widget). `watch_history_screen.dart` (PF15 `1256:24224`: red "Clear all", search, Today/Yesterday sections, "72% watched · Today, 9:20 AM"/"Completed · Yesterday, 4:12 PM" rows, more-glyph → PF14 `1256:24327` More Menu sheet: Remove from watch history / Downloads / Save Video / Share Video — remove works live, share opens the in-app share sheet). `downloads_screen.dart` (PF13 `1256:24465`: red "Clear all", search, "N videos · X GB used" line, "112 MB · SD 480p" rows, red trash). `saved_videos_screen.dart` (PF12 `1256:24572`: search, "Saved 2 days ago" rows, brand bookmark un-saves). All three: brand-circle empty states, rows open the episode player modal, session-local demo lists from `subscriptionsProvider.feed()`. **(C) Delete confirmations** (user follow-up): new shared `shared/sheets/confirm_sheet.dart` — `showConfirmSheet(title, message, confirmLabel, icon, destructive)` headerless centered card (98px tinted circle, H7 title, p8 body, full-width negative/primary confirm over tertiary Cancel, resolves true/false). Wired into Downloads: per-row trash → "Delete this download?" → success toast; "Clear all" → "Clear all downloads?" → success toast. **(D) Wiring:** My Profile menu rows Downloads/Saved now navigate; Watch History "View all" pushes WatchHistoryScreen. Settings icon remains the only stub (no Figma frame).
+- Notes for next session: `showConfirmSheet` is the app-wide destructive-confirm pattern going forward (the long-referenced "Clear All Downloads?" modal now actually exists — in Downloads). Watch-history/downloads/saved lists are session-local (no persistence models yet). A scratch widget test `test/scratch_repro_test.dart` may still exist from the render-bug repro — safe to delete or keep as a regression net.
+
+### 2026-07-21 — Claude — Unlock/Buy-Coins per Figma OV flow + full Profile-Flow money/badges/liked build-out
+- Status: Complete
+- What was done: **(A) Unlock flow rebuilt to Figma OV 06→01** (`1256:27523`/`1256:27868`): `episode_unlock_sheet.dart` now shows the "Unlock Episode" transaction summary (Available Balance / Episode Cost / hairline / **New balance** with amber coin figure, grey `Background/Hover` radius-L card) instead of the old ad-hoc cost card; insufficient balance → `backgroundNegativeSubtle` "Insufficient Coins" banner + red **Buy Coins** CTA (new `SkifluxButtonType.negative` added to BOTH `button.dart` and `button_icon.dart` token maps — red500 fill / white label, hover red600, pressed red700, disabled red200); success state = headerless 98px positive circle "Episode Unlocked!". Buy Coins from the insufficient state opens the sheet and re-enables the summary on return. **(B) Buy Coins modal sheet** (OV 04→02, `1256:27621`→`1256:27868`): 3-phase `buy_coins_sheet.dart` — pack grid (2×2, Best Value amber / Save N% green badges), Card/Bank payment radios + Amount/Rate/You're-Buying/Total summary, headerless "Purchase Successful" with summary card. `CoinPack`/`kCoinPacks`/`kCoinRateNaira` (+ public `CoinPack.thousands`) and `topUp`/`withdraw` added to `playlists_store.dart`. **(C) Profile Flow build-out** (`1256:23096`, user-approved plan): new `features/wallet/` — `data/wallet_store.dart` (Riverpod `walletProvider`: `CoinTxn` ledger seeded with the PF02 demo rows, `BankAccount`, `recordUnlock/recordTopUp/recordWithdrawal/addBank`; live entries appended from unlock + both buy-coins paths + withdraw), `widgets/coin_widgets.dart` (public `CoinBalanceCard`/`CoinPackCard`/`CoinPackBadgePill`/`PaymentMethodSelector`/`CoinSummaryCard(+Row)` extracted from the sheet — sheet + full screens share one source), `wallet_screen.dart` (PF11/02: Total Balance hero with Withdraw/Buy-coins, Earned/Spent/Withdrawn stat strip, All/Earned/Spent filter pills + bordered txn card using the notifications foregroundDecoration-stroke pattern), `buy_coins_screen.dart` (PF10/01 full-screen variant + `showPurchaseSuccessSheet`), `withdraw_screen.dart` (PF09→07: amount input w/ Min-100/Max, live conversion summary, saved-bank destination card, notice banner, "Withdrawal initiated" sheet), `add_bank_sheet.dart` (PF06: note banner, bank dropdown, account number, Verify & Save). New `features/profile/badges_screen.dart` (PF05: 3-of-8 progress bar, earned brand-gradient tiles vs locked desaturated `ColorFiltered` tiles from `assets/badges/*.svg`) and `liked_videos_screen.dart` (PF04: search + liked rows, un-like removes, empty state). **(D) PF17 wiring** (`my_profile_screen.dart`): coins stat pill now shows the LIVE `playlistsProvider` balance and pushes WalletScreen; Liked Videos → LikedVideosScreen; Badges → BadgesScreen. Downloads/Saved/Settings stay stubs (no Figma frames).
+- Verification run: flutter analyze → No issues found (both packages); flutter test → All tests passed; flutter build apk --debug → √ Built app-debug.apk.
+- Notes for next session: coin balance lives in `playlistsProvider.skillCoins`; the wallet store only records the ledger + bank (stores stay decoupled — UI calls both). Withdraw clamps at 0 via `PlaylistsNotifier.withdraw`. `SkifluxButtonType.negative` is available design-system-wide. Liked list is session-local (no app-wide like model yet). The OV buy-coins sheet and the wallet Buy Coins screen render from the same shared widgets — style changes go in `wallet/widgets/coin_widgets.dart` only.
+
+### 2026-07-20 — Claude — View Playlist link restored + sheets migrated to modal_bottom_sheet (drag-to-dismiss + grabber pill)
+- Status: Complete
+- What was done: **(A) View Playlist link** (Figma `1256:29748` / `1256:29885`): the episode player modal header now shows "View Playlist ›" under the title — brand `contentLink` (brand/400) text + 16px chevron (frame's "Outfit" font = known slip → DM Sans `bodyP10Regular`). Tapping pops the modal and pushes `PlaylistScreen`. New `showViewPlaylist` param (default true) on `showEpisodePlayerModal` / `EpisodePlayerSheet` / `openPlaylistEpisode`; the playlist page passes `false` for its own episode rows + Play all (no self-link), all other entry points (subscriptions feed, creator channel, EP-chip menu) keep the link. This partially reverses work-log #21's "View Playlist removed" note — removed from the *body* per `827:36229`, but the *header* link is per-design in `1256:29748`. **(B) Sheet system migrated to `modal_bottom_sheet` ^3.0.0** (user-confirmed per package policy): `showSkifluxSheet` now pushes a private `_SkifluxSheetRoute extends ModalSheetRoute` instead of `showGeneralDialog` — all 17 sheets gain swipe-down-to-dismiss (drag past 0.6 threshold or fling) for free. Visuals preserved: `buildModalBarrier` override re-creates the exact 5px blur + `Overlay/50` scrim driven by the route animation (so it also relaxes while dragging); 260ms easeOutCubic kept; `modalBarrierColor` transparent. New grabber pill via `containerBuilder`: 40×4 `borderTertiary` pill, top-center 8px, `IgnorePointer`-wrapped. Scroll coordination: inner scrollables in comments, more-menu, playlist-menu, episode-resources, playback-speed, filter ×3, playlist-description, and week-picker sheets now pass `controller: ModalScrollController.of(context)` — the sheet drags only when the list is at its top. `SkifluxSheetShell` itself unchanged (still owns card/header/`showHeader`).
+- Verification run: flutter analyze → No issues found; flutter test → All tests passed; flutter build apk --debug → √ Built. (One fix during work: grabber `BoxDecoration` couldn't be const because `SkifluxRadii.borderPill` isn't const-constructible in that position.)
+- Notes for next session: sheets that return values (filter/notify/week-picker) resolve null on swipe-dismiss — same as the old tap-outside path, callers already handle it. `maintainState` is true on `ModalSheetRoute` (package default). If a future sheet must NOT be swipe-dismissable, add an `enableDrag: false` pass-through to `showSkifluxSheet`.
+
+### 2026-07-20 — Claude — Error modal: headerless centered layout + copy pass
+- Status: Complete
+- What was done: **(A)** `SkifluxSheetShell` gained `showHeader` (default `true`) — when `false`, the entire header region (title row, X close circle, and the `borderTertiary` divider stroke + its padding) is skipped; all existing sheets are untouched since the default keeps prior behavior. Error modal (`ErrorDisplay._showModal`) now passes `showHeader: false`, so content starts directly with the icon. Dismissal preserved: `showSkifluxSheet`'s backdrop tap (blurred scrim `GestureDetector` → `Navigator.pop`) and the primary action button — no swipe-down existed before, so nothing lost. **(B)** Icon now sits in a colored circle: **98px** `backgroundNegativeSubtle` circle with **48px** `contentNegative` `error_warning_fill` glyph — same circle/glyph proportions as the quiz-result fail state (`quiz_result_screen.dart`; the referenced "Clear All Downloads?" modal does not exist in the codebase, quiz result is the closest existing icon-circle pattern). Below: centered H7 Bold title, centered p8 tertiary description, single full-width `SkifluxButton` (expanded, pill) — no secondary/Cancel. **(C)** Copy: both known em-dash messages were already fixed in the classifier — final copy: "Your submission didn't go through. Please try again. Your progress hasn't been lost." (task + quiz submission) and "We couldn't process your withdrawal. No coins were deducted. Please try again or contact support." Full-repo sweep found one more user-facing em dash: quiz-fail result body "You need 100% to pass — review the answers and try again." → "You need 100% to pass. Review the answers and try again." Remaining em dashes are code comments or demo-content strings (episode labels "EP 06 — Design Systems", notification demo copy) — intentionally left.
+- Verification run: flutter clean + pub get OK; flutter analyze → No issues found! (27.3s); flutter build apk --debug → √ Built app-debug.apk. Grepped all 16 other `SkifluxSheetShell(` call sites (comments, more-menu, share, playlist menu, playlist description, playback speed, episode resources, notify settings, episode unlock ×4, filter ×3, week picker) — none pass `showHeader`, so all render header/X/divider exactly as before.
+- Notes for next session: `showHeader: false` is the shell-level switch for any future headerless dialog; the error modal is currently its only consumer.
+
+### 2026-07-20 — Claude — Playlist / player / public-profile Figma accuracy pass
+- Status: Complete
+- What was done: Six-part UI-accuracy fix against dev-mode design contexts (full detail: work log **#21**). (1) Profile Playlists tab re-rendered like the search playlist row via new shared `PlaylistDeck` widget (also adopted by search + playlist cover — one deck geometry source). (2) `playlist_screen.dart` rewritten to Home Flow 05 `198:14183` (deck cover, hashtags, creator pill row, Play all + bookmark/download; removed non-frame hero/meta/action rail; now `ConsumerWidget`). (3) Description sheet → `827:35820` (header + p11 body only). (4) Public user profile → `3092:14632` (contact row + Contact button, grey radius-X section cards, brand count pills, white skill chips, gradient badge tiles, project thumb-strip cards + outlined action pills, brand score ring). (5) `EpisodePlayerSheet` → `827:36229` — stripped scrubber/CC/speed/minimize/View-Playlist; video card carries its own progress/chrome. (6) Playlist menu sheet → `1256:27214` — real episode rows via new shared `PlaylistEpisodeRow` (playing-row highlight, blur-locked thumbs), `SkifluxSheetShell` gained a `subtitle` slot, EP chip passes `playingEpisodeNumber`.
+- Verification run: flutter analyze → No issues found! (ran in 125.7s), flutter build apk --debug → √ Built build\app\outputs\flutter-apk\app-debug.apk
+- Notes for next session: `EpisodePlayerSheet` no longer links to the playlist page ("View Playlist" removed per Figma) — playlist entry points are now the EP chip menu, profile Playlists tab, and search rows. `playerPrefsProvider` (speed/captions) is now only consumed by the More Menu sheets. Old `_PlaylistEpisodeRow` (playlist_screen) and `_EpisodeRow` (menu sheet) are deleted in favor of the shared `PlaylistEpisodeRow`; profile `_EpisodeCard` (Recent tab) is intentionally still separate (different Figma component). Bookmark/download/contact/action pills are `SkifluxToast` stubs.
+
+### 2026-07-20 — Grok — Error modal layout + copy polish
+- Status: Complete
+- What was done: Error modal (`ErrorDisplay` / `SkifluxSheetShell`) now uses centered layout: standalone `RemixIcons.error_warning_fill` at **48px** in `contentNegative` (no colored circle), centered bold title "Something went wrong", centered description, single full-width primary button only. Copy fixes (removed em dashes): task/quiz submission → "Your submission didn't go through. Please try again. Your progress hasn't been lost."; withdrawal → "We couldn't process your withdrawal. No coins were deducted. Please try again or contact support." No other user-facing em dashes in the classification table.
+- Verification run: [filled after verify]
+- Notes: "Clear All Downloads?" confirmation not found in codebase — centered pattern referenced task-success dialog geometry (icon 48) without its circle or two-button layout.
 
 ### 2026-07-20 — Grok — CI/CD Setup
 - Status: Complete

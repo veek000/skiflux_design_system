@@ -4,9 +4,17 @@ import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../../shared/sheets/skiflux_sheet.dart';
 import '../../playlists/data/playlists_store.dart';
+import '../../wallet/data/wallet_store.dart';
+import 'buy_coins_sheet.dart';
 
-// Figma: Other Video Player Flow 05–01 — Episode Cost → unlock → success
-// (`1256:27469` … `1256:27907`).
+// Figma: Other Video Player Flow 05 → 01
+// (`1256:27523` transaction summary + insufficient → `1256:27868` unlocked).
+//
+// Headered "Unlock Episode" sheet showing a transaction summary
+// (Available Balance / Episode Cost / New balance). When the balance can't
+// cover the cost, a negative banner + "Buy Coins" CTA routes into the Buy
+// Coins flow; on return with enough coins the summary re-enables. Confirming
+// deducts coins and shows the "Episode Unlocked" success state.
 
 Future<void> showEpisodeUnlockSheet(
   BuildContext context, {
@@ -28,10 +36,10 @@ class _EpisodeUnlockSheet extends ConsumerStatefulWidget {
       _EpisodeUnlockSheetState();
 }
 
-enum _UnlockPhase { cost, processing, success }
+enum _UnlockPhase { summary, success }
 
 class _EpisodeUnlockSheetState extends ConsumerState<_EpisodeUnlockSheet> {
-  _UnlockPhase _phase = _UnlockPhase.cost;
+  _UnlockPhase _phase = _UnlockPhase.summary;
   bool _busy = false;
 
   @override
@@ -48,15 +56,214 @@ class _EpisodeUnlockSheetState extends ConsumerState<_EpisodeUnlockSheet> {
       );
     }
 
-    if (_phase == _UnlockPhase.success) {
-      return SkifluxSheetShell(
-        title: 'Episode Unlocked!',
-        child: Padding(
-          padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
-          child: Column(
+    return switch (_phase) {
+      _UnlockPhase.summary => _summaryView(store, ep),
+      _UnlockPhase.success => _successView(ep),
+    };
+  }
+
+  Widget _summaryView(PlaylistsState store, PlaylistEpisode ep) {
+    final balance = store.skillCoins;
+    final cost = ep.coinCost;
+    final canAfford = balance >= cost;
+    final newBalance = balance - cost;
+
+    return SkifluxSheetShell(
+      title: 'Unlock Episode',
+      subtitle: 'Please review the transaction summary before unlocking.',
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(
+          SkifluxSpacing.spaceL,
+          SkifluxSpacing.spaceL,
+          SkifluxSpacing.spaceL,
+          0,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Transaction summary card.
+            Container(
+              decoration: BoxDecoration(
+                color: SkifluxColors.backgroundHover,
+                borderRadius: SkifluxRadii.borderL,
+              ),
+              padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
+              child: Column(
+                children: [
+                  _summaryRow('Available Balance', '$balance'),
+                  const SizedBox(height: SkifluxSpacing.spaceS),
+                  _summaryRow('Episode Cost', '−$cost'),
+                  const SizedBox(height: SkifluxSpacing.spaceS),
+                  const Divider(
+                    height: SkifluxBorderWidth.xs,
+                    thickness: SkifluxBorderWidth.xs,
+                    color: SkifluxColors.borderTertiary,
+                  ),
+                  const SizedBox(height: SkifluxSpacing.spaceS),
+                  _summaryRow(
+                    'New balance',
+                    '$newBalance',
+                    emphasizeCoins: true,
+                    coinNegative: !canAfford,
+                    bold: true,
+                  ),
+                ],
+              ),
+            ),
+            if (!canAfford) ...[
+              const SizedBox(height: SkifluxSpacing.spaceL),
+              _insufficientBanner(),
+            ],
+            const SizedBox(height: SkifluxSpacing.spaceL),
+            if (canAfford) ...[
+              // Busy = same pill, label swaps to a small inverse spinner +
+              // "Unlocking…" — no modal resize, no title change.
+              _busy
+                  ? const _UnlockingButton()
+                  : SkifluxButton(
+                      label: 'Unlock for $cost coins',
+                      expanded: true,
+                      onPressed: () => _unlock(ep),
+                    ),
+              const SizedBox(height: SkifluxSpacing.spaceS),
+              SkifluxButton(
+                label: 'Back',
+                type: SkifluxButtonType.secondary,
+                expanded: true,
+                onPressed:
+                    _busy ? null : () => Navigator.of(context).pop(),
+              ),
+            ] else ...[
+              SkifluxButton(
+                label: 'Buy Coins',
+                type: SkifluxButtonType.negative,
+                expanded: true,
+                onPressed: _busy ? null : _openBuyCoins,
+              ),
+              const SizedBox(height: SkifluxSpacing.spaceS),
+              SkifluxButton(
+                label: 'Back',
+                type: SkifluxButtonType.secondary,
+                expanded: true,
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _summaryRow(
+    String label,
+    String value, {
+    bool emphasizeCoins = false,
+    bool coinNegative = false,
+    bool bold = false,
+  }) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: (bold
+                    ? SkifluxTypography.headingH10Bold
+                    : SkifluxTypography.bodyP10Regular)
+                .copyWith(color: SkifluxColors.contentSecondary),
+          ),
+        ),
+        if (emphasizeCoins)
+          Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
+              Icon(
+                RemixIcons.copper_coin_fill,
+                size: SkifluxUnit.u20,
+                color: coinNegative
+                    ? SkifluxColors.contentNegative
+                    : SkifluxColors.contentNotice,
+              ),
+              const SizedBox(width: SkifluxSpacing.spaceXs),
+              Text(
+                value,
+                style: SkifluxTypography.headingH10Bold.copyWith(
+                  color: coinNegative
+                      ? SkifluxColors.contentNegative
+                      : SkifluxColors.contentNotice,
+                ),
+              ),
+            ],
+          )
+        else
+          Text(
+            value,
+            style: SkifluxTypography.headingH10Bold.copyWith(
+              color: SkifluxColors.contentSecondary,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _insufficientBanner() {
+    return Container(
+      padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
+      decoration: BoxDecoration(
+        color: SkifluxColors.backgroundNegativeSubtle,
+        borderRadius: SkifluxRadii.borderL,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            RemixIcons.close_circle_fill,
+            size: SkifluxUnit.u20,
+            color: SkifluxColors.contentNegative,
+          ),
+          const SizedBox(width: SkifluxSpacing.spaceS),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Insufficient Coins',
+                  style: SkifluxTypography.headingH10Bold.copyWith(
+                    color: SkifluxColors.contentSecondary,
+                  ),
+                ),
+                const SizedBox(height: SkifluxSpacing.spaceXs),
+                Text(
+                  'You do not have enough SkillCoins to unlock this episode.',
+                  style: SkifluxTypography.bodyP10Regular.copyWith(
+                    color: SkifluxColors.contentSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _successView(PlaylistEpisode ep) {
+    return SkifluxSheetShell(
+      title: '',
+      showHeader: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          SkifluxSpacing.spaceL,
+          // Headerless card — clear the grabber pill (top 8px + 4px tall).
+          SkifluxSpacing.space2xl,
+          SkifluxSpacing.spaceL,
+          0,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
                 width: 98,
                 height: 98,
                 decoration: const BoxDecoration(
@@ -69,130 +276,27 @@ class _EpisodeUnlockSheetState extends ConsumerState<_EpisodeUnlockSheet> {
                   color: SkifluxColors.contentPositive,
                 ),
               ),
-              const SizedBox(height: SkifluxSpacing.spaceS),
-              Text(
-                'Episode Unlocked!',
-                textAlign: TextAlign.center,
-                style: SkifluxTypography.headingH7Bold.copyWith(
-                  color: SkifluxColors.contentPrimary,
-                ),
-              ),
-              const SizedBox(height: SkifluxSpacing.spaceXs),
-              Text(
-                '${ep.epTag} is now available. Enjoy the lesson and complete '
-                'the task to earn rewards.',
-                textAlign: TextAlign.center,
-                style: SkifluxTypography.bodyP8Regular.copyWith(
-                  color: SkifluxColors.contentTertiary,
-                ),
-              ),
-              const SizedBox(height: SkifluxSpacing.spaceXl),
-              SkifluxButton(
-                label: 'Close',
-                expanded: true,
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    if (_phase == _UnlockPhase.processing) {
-      return const SkifluxSheetShell(
-        title: 'Unlocking…',
-        child: Padding(
-          padding: EdgeInsets.all(SkifluxSpacing.space4xl),
-          child: Center(child: SkifluxSpinner()),
-        ),
-      );
-    }
-
-    final canAfford = store.skillCoins >= ep.coinCost;
-
-    return SkifluxSheetShell(
-      title: 'Episode Cost',
-      child: Padding(
-        padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+            ),
+            const SizedBox(height: SkifluxSpacing.spaceS),
             Text(
-              ep.epTag,
-              style: SkifluxTypography.uiBadgeTagMedium.copyWith(
-                color: SkifluxColors.contentBrand,
+              'Episode Unlocked!',
+              textAlign: TextAlign.center,
+              style: SkifluxTypography.headingH7Bold.copyWith(
+                color: SkifluxColors.contentPrimary,
               ),
             ),
             const SizedBox(height: SkifluxSpacing.spaceXs),
             Text(
-              ep.title,
-              style: SkifluxTypography.headingH8Bold.copyWith(
-                color: SkifluxColors.contentPrimary,
+              '${ep.epTag} is now available. Enjoy the lesson and complete '
+              'the task to earn rewards.',
+              textAlign: TextAlign.center,
+              style: SkifluxTypography.bodyP8Regular.copyWith(
+                color: SkifluxColors.contentTertiary,
               ),
             ),
-            const SizedBox(height: SkifluxSpacing.spaceL),
-            Container(
-              padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
-              decoration: BoxDecoration(
-                color: SkifluxColors.backgroundHover,
-                borderRadius: SkifluxRadii.borderL,
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    RemixIcons.copper_coin_fill,
-                    size: 28,
-                    color: SkifluxColors.contentNoticeBold,
-                  ),
-                  const SizedBox(width: SkifluxSpacing.spaceM),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${ep.coinCost} SkillCoins',
-                          style: SkifluxTypography.headingH9Bold.copyWith(
-                            color: SkifluxColors.contentPrimary,
-                          ),
-                        ),
-                        Text(
-                          'Your balance: ${store.skillCoins}',
-                          style: SkifluxTypography.bodyP10Regular.copyWith(
-                            color: canAfford
-                                ? SkifluxColors.contentTertiary
-                                : SkifluxColors.contentNegative,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (!canAfford) ...[
-              const SizedBox(height: SkifluxSpacing.spaceM),
-              Text(
-                'Not enough SkillCoins. Complete tasks or missions to earn more.',
-                style: SkifluxTypography.bodyP10Regular.copyWith(
-                  color: SkifluxColors.contentNegative,
-                ),
-              ),
-            ],
             const SizedBox(height: SkifluxSpacing.spaceXl),
             SkifluxButton(
-              label: canAfford
-                  ? 'Unlock with SkillCoins'
-                  : 'Not enough coins',
-              expanded: true,
-              onPressed: !canAfford || _busy
-                  ? null
-                  : () => _unlock(context, ep),
-            ),
-            const SizedBox(height: SkifluxSpacing.spaceS),
-            SkifluxButton(
-              label: 'Cancel',
-              type: SkifluxButtonType.secondary,
+              label: 'Done',
               expanded: true,
               onPressed: () => Navigator.of(context).pop(),
             ),
@@ -202,24 +306,62 @@ class _EpisodeUnlockSheetState extends ConsumerState<_EpisodeUnlockSheet> {
     );
   }
 
-  Future<void> _unlock(BuildContext context, PlaylistEpisode ep) async {
-    setState(() {
-      _busy = true;
-      _phase = _UnlockPhase.processing;
-    });
+  Future<void> _openBuyCoins() async {
+    final bought = await showBuyCoinsSheet(context);
+    // Returning here re-reads the wallet; summary re-enables if now affordable.
+    if (bought != null && mounted) setState(() {});
+  }
+
+  Future<void> _unlock(PlaylistEpisode ep) async {
+    // Busy state renders inline in the primary button — the sheet keeps its
+    // exact layout (no resize, no "Unlocking" title swap).
+    setState(() => _busy = true);
     await Future<void>.delayed(const Duration(milliseconds: 900));
     final ok = ref.read(playlistsProvider.notifier).tryUnlock(ep.id);
     if (!mounted) return;
     if (!ok) {
-      setState(() {
-        _busy = false;
-        _phase = _UnlockPhase.cost;
-      });
+      setState(() => _busy = false);
       return;
     }
+    // Record the spend in the wallet ledger (Profile Flow 02 list).
+    ref.read(walletProvider.notifier).recordUnlock(ep.epTag, ep.coinCost);
     setState(() {
       _busy = false;
       _phase = _UnlockPhase.success;
     });
+  }
+}
+
+/// Primary-pill busy state: brand fill, small inverse spinner + "Unlocking…"
+/// — same height/shape as the Unlock button it replaces.
+class _UnlockingButton extends StatelessWidget {
+  const _UnlockingButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: SkifluxUnit.u48),
+      padding: const EdgeInsets.all(SkifluxSpacing.spaceM),
+      decoration: BoxDecoration(
+        color: SkifluxColors.backgroundBrand,
+        borderRadius: SkifluxRadii.borderPill,
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SkifluxSpinner(
+            size: SkifluxSpinnerSize.s,
+            type: SkifluxSpinnerType.inverse,
+          ),
+          const SizedBox(width: SkifluxSpacing.spaceS),
+          Text(
+            'Unlocking…',
+            style: SkifluxTypography.uiButtonLarge.copyWith(
+              color: SkifluxColors.contentPrimaryInverse,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

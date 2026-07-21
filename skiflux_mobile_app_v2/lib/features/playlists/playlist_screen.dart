@@ -4,33 +4,31 @@ import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/sheets/share_sheet.dart';
 import '../../shared/toast/skiflux_toast.dart';
+import '../../shared/widgets/playlist_deck.dart';
 import '../home/sheets/episode_unlock_sheet.dart';
+import '../profile/profile_screen.dart';
 import '../subscriptions/data/subscriptions_store.dart';
 import '../subscriptions/subscriptions_screen.dart';
 import 'data/playlists_store.dart';
 import 'playlist_description_sheet.dart';
+import 'playlist_episode_row.dart';
 
-// Figma: **Home & In-app Flow 05** (`198:14183`) — playlist detail page.
-
-class PlaylistScreen extends ConsumerStatefulWidget {
+/// Figma: **Home & In-app Flow 05** (`198:14183`) — playlist detail page.
+///
+/// Top nav (back + share, no title), stacked-deck cover, title + hashtags,
+/// creator pill row, 2-line description + "View Full Description", Play all
+/// + bookmark/download circles, then the episode list.
+class PlaylistScreen extends ConsumerWidget {
   const PlaylistScreen({super.key});
 
   @override
-  ConsumerState<PlaylistScreen> createState() => _PlaylistScreenState();
-}
-
-class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
-  bool _liked = false;
-  bool _saved = false;
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final pl = ref.watch(playlistsProvider).defaultPlaylist;
     return Scaffold(
       backgroundColor: SkifluxColors.backgroundPrimary,
       appBar: SkifluxTopNavBar(
-        label: 'Playlist',
-        labelStyle: SkifluxTypography.headingH8Bold,
+        // Figma 198:14248 — nav carries only the back + share icons.
+        showLabel: false,
         leading: IconButton(
           padding: EdgeInsets.zero,
           icon: const Icon(RemixIcons.arrow_left_s_line),
@@ -42,233 +40,170 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
           onPressed: () => showShareSheet(context),
         ),
       ),
-      body: ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          // Hero cover with gradient
-          SizedBox(
-            height: 220,
-            width: double.infinity,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Image.asset(
-                  pl.coverAsset,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const ColoredBox(
-                    color: SkifluxColors.backgroundBrand,
-                  ),
-                ),
-                const DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Color(0x00000000),
-                        Color(0xCC000000),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
+      body: SafeArea(
+        top: false,
+        child: ListView(
+          padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
+          children: [
+            // Stacked-deck cover (198:14189) — full-width variant.
+            PlaylistDeck(
+              height: 150,
+              episodeCount: pl.episodeCount,
+              backWidthFactor: 0.9336,
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  pl.title,
-                  style: SkifluxTypography.headingH7Bold.copyWith(
-                    color: SkifluxColors.contentPrimary,
-                  ),
-                ),
-                const SizedBox(height: SkifluxSpacing.spaceXs),
-                Text(
-                  pl.description,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: SkifluxTypography.bodyP10Regular.copyWith(
-                    color: SkifluxColors.contentTertiary,
-                  ),
-                ),
-                const SizedBox(height: SkifluxSpacing.spaceXs),
-                GestureDetector(
-                  onTap: () => showPlaylistDescriptionSheet(
-                    context,
-                    playlist: pl,
-                  ),
-                  child: Text(
-                    'View Full Description',
-                    style: SkifluxTypography.bodyP10Semibold.copyWith(
-                      color: SkifluxColors.contentLink,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: SkifluxSpacing.spaceS),
-                Text(
-                  pl.detailMeta,
-                  style: SkifluxTypography.bodyP10Regular.copyWith(
-                    color: SkifluxColors.contentTertiary,
-                  ),
-                ),
-                const SizedBox(height: SkifluxSpacing.spaceL),
-                // Creator row
-                Row(
-                  children: [
-                    const SkifluxAvatar(
-                      style: SkifluxAvatarStyle.initial,
-                      size: 40,
-                      initials: 'A',
-                    ),
-                    const SizedBox(width: SkifluxSpacing.spaceS),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            pl.creatorName,
-                            style: SkifluxTypography.headingH10Bold.copyWith(
-                              color: SkifluxColors.contentPrimary,
-                            ),
-                          ),
-                          Text(
-                            '@${pl.creatorUsername}',
-                            style: SkifluxTypography.bodyP11Regular.copyWith(
-                              color: SkifluxColors.contentTertiary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Material(
-                      color: SkifluxColors.backgroundBrand,
-                      shape: const CircleBorder(),
-                      child: InkWell(
-                        customBorder: const CircleBorder(),
-                        onTap: () {
-                          SkifluxToast.success(context, 'Following creator');
-                        },
-                        child: const SizedBox(
-                          width: 40,
-                          height: 40,
-                          child: Icon(
-                            RemixIcons.add_fill,
-                            color: SkifluxColors.contentPrimaryInverse,
-                            size: 20,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: SkifluxSpacing.spaceL),
-                // Action rail
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _Action(
-                      icon: RemixIcons.heart_3_fill,
-                      label: '120',
-                      active: _liked,
-                      activeColor: SkifluxColors.contentNegative,
-                      onTap: () => setState(() => _liked = !_liked),
-                    ),
-                    _Action(
-                      icon: RemixIcons.chat_3_fill,
-                      label: '120',
-                      onTap: () {},
-                    ),
-                    _Action(
-                      icon: RemixIcons.bookmark_fill,
-                      label: 'Save',
-                      active: _saved,
-                      activeColor: SkifluxColors.contentBrand,
-                      onTap: () => setState(() => _saved = !_saved),
-                    ),
-                    _Action(
-                      icon: RemixIcons.share_forward_fill,
-                      label: 'Share',
-                      onTap: () => showShareSheet(context),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: SkifluxSpacing.spaceXl),
-                for (final ep in pl.episodes) ...[
-                  _PlaylistEpisodeRow(
-                    episode: ep,
-                    onTap: () => _openEpisode(context, ep, pl),
-                  ),
-                  const SizedBox(height: SkifluxSpacing.spaceL),
-                ],
-              ],
+            const SizedBox(height: SkifluxSpacing.spaceS),
+            // Title + hashtags (198:14200).
+            Text(
+              pl.title,
+              style: SkifluxTypography.headingH9Bold.copyWith(
+                color: SkifluxColors.contentPrimary,
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: SkifluxSpacing.spaceXs),
+            Text(
+              '#UIDesign #Figma',
+              style: SkifluxTypography.bodyP11Regular.copyWith(
+                color: SkifluxColors.contentTertiary,
+              ),
+            ),
+            const SizedBox(height: SkifluxSpacing.spaceS),
+            _CreatorPillRow(playlist: pl),
+            const SizedBox(height: SkifluxSpacing.spaceS),
+            // Description clamped to 2 lines + brand link (198:14212).
+            Text(
+              pl.description,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: SkifluxTypography.bodyP11Regular.copyWith(
+                color: SkifluxColors.contentTertiary,
+              ),
+            ),
+            const SizedBox(height: SkifluxSpacing.spaceS),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: GestureDetector(
+                onTap: () => showPlaylistDescriptionSheet(
+                  context,
+                  playlist: pl,
+                ),
+                child: Text(
+                  'View Full Description',
+                  style: SkifluxTypography.uiButtonSmall.copyWith(
+                    color: SkifluxColors.contentBrand,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: SkifluxSpacing.spaceL),
+            _ActionsRow(playlist: pl),
+            const SizedBox(height: SkifluxSpacing.spaceL),
+            for (final (i, ep) in pl.episodes.indexed) ...[
+              if (i > 0) const SizedBox(height: SkifluxSpacing.spaceL),
+              PlaylistEpisodeRow(
+                episode: ep,
+                onTap: () => openPlaylistEpisode(
+                  context,
+                  ep,
+                  pl,
+                  showViewPlaylist: false,
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
-
-  Future<void> _openEpisode(
-    BuildContext context,
-    PlaylistEpisode ep,
-    Playlist pl,
-  ) async {
-    if (ep.isLocked) {
-      await showEpisodeUnlockSheet(context, episodeId: ep.id);
-      return;
-    }
-    final sub = SubscriptionEpisode(
-      epNumber: ep.number,
-      title: ep.title,
-      creatorUsername: pl.creatorUsername,
-      duration: ep.duration,
-      views: '22k',
-      postedAgo: '5 hrs ago',
-      watchProgress: ep.state == PlaylistEpisodeState.completed ? 1 : 0.15,
-    );
-    if (!context.mounted) return;
-    await showEpisodePlayerModal(context, sub);
-  }
 }
 
-class _Action extends StatelessWidget {
-  const _Action({
-    required this.icon,
-    required this.label,
-    this.onTap,
-    this.active = false,
-    this.activeColor,
-  });
+/// Opens the episode player modal for [ep], or the unlock sheet when locked.
+///
+/// [showViewPlaylist] — false when launched from the playlist page itself
+/// (no self-link); the EP-chip menu sheet keeps the default true.
+Future<void> openPlaylistEpisode(
+  BuildContext context,
+  PlaylistEpisode ep,
+  Playlist pl, {
+  bool showViewPlaylist = true,
+}) async {
+  if (ep.isLocked) {
+    await showEpisodeUnlockSheet(context, episodeId: ep.id);
+    return;
+  }
+  final sub = SubscriptionEpisode(
+    epNumber: ep.number,
+    title: ep.title,
+    creatorUsername: pl.creatorUsername,
+    duration: ep.duration,
+    views: '22k',
+    postedAgo: '5 hrs ago',
+    watchProgress: ep.state == PlaylistEpisodeState.completed ? 1 : 0.15,
+  );
+  if (!context.mounted) return;
+  await showEpisodePlayerModal(
+    context,
+    sub,
+    showViewPlaylist: showViewPlaylist,
+  );
+}
 
-  final IconData icon;
-  final String label;
-  final VoidCallback? onTap;
-  final bool active;
-  final Color? activeColor;
+/// Figma `198:14203` — full-width `Background/Hover` pill: 48px avatar,
+/// name (H9 semibold) over handle (Creato Bold 10 tertiary), trailing
+/// chevron circle. Tapping visits the creator profile.
+class _CreatorPillRow extends StatelessWidget {
+  const _CreatorPillRow({required this.playlist});
+
+  final Playlist playlist;
 
   @override
   Widget build(BuildContext context) {
-    final color = active
-        ? (activeColor ?? SkifluxColors.contentBrand)
-        : SkifluxColors.contentPrimary;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: SkifluxRadii.borderM,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: SkifluxSpacing.spaceM,
-          vertical: SkifluxSpacing.spaceS,
+    return Material(
+      color: SkifluxColors.backgroundHover,
+      borderRadius: SkifluxRadii.borderX,
+      child: InkWell(
+        borderRadius: SkifluxRadii.borderX,
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const ProfileScreen()),
         ),
-        child: Column(
+        child: Row(
           children: [
-            Icon(icon, size: 24, color: color),
-            const SizedBox(height: SkifluxSpacing.space2xs),
-            Text(
-              label,
-              style: SkifluxTypography.uiBadgeTagSmall.copyWith(color: color),
+            SkifluxAvatar(
+              style: SkifluxAvatarStyle.initial,
+              size: SkifluxUnit.u48,
+              initials: playlist.creatorName[0],
+            ),
+            const SizedBox(width: SkifluxSpacing.spaceS),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    playlist.creatorName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: SkifluxTypography.headingH9Semibold.copyWith(
+                      color: SkifluxColors.contentPrimary,
+                    ),
+                  ),
+                  Text(
+                    '@${playlist.creatorUsername}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: SkifluxTypography.uiBadgeTagSmall.copyWith(
+                      color: SkifluxColors.contentTertiary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(
+              width: SkifluxUnit.u48,
+              height: SkifluxUnit.u48,
+              child: Icon(
+                RemixIcons.arrow_right_s_line,
+                size: SkifluxIcons.sizeM,
+                color: SkifluxColors.contentPrimary,
+              ),
             ),
           ],
         ),
@@ -277,178 +212,78 @@ class _Action extends StatelessWidget {
   }
 }
 
-/// Figma episode row on playlist detail — thumb 128×98, status, play / coins.
-class _PlaylistEpisodeRow extends StatelessWidget {
-  const _PlaylistEpisodeRow({required this.episode, required this.onTap});
+/// Figma `198:14215` — expanded "Play all" primary pill + 32px grey circles
+/// for bookmark and download.
+class _ActionsRow extends StatelessWidget {
+  const _ActionsRow({required this.playlist});
 
-  final PlaylistEpisode episode;
-  final VoidCallback onTap;
+  final Playlist playlist;
 
   @override
   Widget build(BuildContext context) {
-    final locked = episode.isLocked;
-    final statusLabel = switch (episode.state) {
-      PlaylistEpisodeState.completed => 'Completed',
-      PlaylistEpisodeState.unlocked => 'Unlocked',
-      PlaylistEpisodeState.locked => 'Locked',
-    };
-    final statusColor = switch (episode.state) {
-      PlaylistEpisodeState.completed => SkifluxColors.contentPositive,
-      PlaylistEpisodeState.unlocked => SkifluxColors.contentNotice,
-      PlaylistEpisodeState.locked => SkifluxColors.contentTertiary,
-    };
+    return Row(
+      children: [
+        Expanded(
+          child: SkifluxButton(
+            label: 'Play all',
+            size: SkifluxButtonSize.s,
+            expanded: true,
+            onPressed: () {
+              // First playable episode (completed/unlocked) starts the run.
+              final first =
+                  playlist.episodes.where((e) => e.isUnlocked).firstOrNull;
+              if (first != null) {
+                openPlaylistEpisode(
+                  context,
+                  first,
+                  playlist,
+                  showViewPlaylist: false,
+                );
+              }
+            },
+          ),
+        ),
+        const SizedBox(width: SkifluxSpacing.spaceS),
+        _CircleAction(
+          icon: RemixIcons.bookmark_fill,
+          onTap: () => SkifluxToast.success(context, 'Playlist saved'),
+        ),
+        const SizedBox(width: SkifluxSpacing.spaceS),
+        _CircleAction(
+          icon: RemixIcons.download_fill,
+          onTap: () => SkifluxToast.info(context, 'Downloads are coming soon'),
+        ),
+      ],
+    );
+  }
+}
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: SkifluxRadii.borderL,
-      child: Row(
-        children: [
-          ClipRRect(
-            borderRadius: SkifluxRadii.borderL,
-            child: SizedBox(
-              width: 128,
-              height: 98,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Image.asset(
-                    'assets/home_video_cover.png',
-                    fit: BoxFit.cover,
-                  ),
-                  if (locked) ...[
-                    const ColoredBox(color: SkifluxColors.overlay50),
-                    const Center(
-                      child: Icon(
-                        RemixIcons.lock_2_fill,
-                        color: SkifluxColors.contentPrimaryInverse,
-                      ),
-                    ),
-                  ],
-                  Positioned(
-                    top: SkifluxSpacing.spaceS,
-                    left: SkifluxSpacing.spaceS,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: SkifluxSpacing.spaceS,
-                        vertical: SkifluxSpacing.space2xs,
-                      ),
-                      decoration: BoxDecoration(
-                        color: SkifluxColors.contentBrand,
-                        borderRadius: SkifluxRadii.borderX,
-                      ),
-                      child: Text(
-                        episode.epTag,
-                        style: SkifluxTypography.bodyP11Semibold.copyWith(
-                          color: SkifluxColors.contentPrimaryInverse,
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (!locked)
-                    Positioned(
-                      bottom: SkifluxSpacing.spaceS,
-                      right: SkifluxSpacing.spaceS,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: SkifluxSpacing.spaceS,
-                          vertical: SkifluxSpacing.space2xs,
-                        ),
-                        decoration: BoxDecoration(
-                          color: SkifluxColors.overlay50,
-                          borderRadius: SkifluxRadii.borderX,
-                        ),
-                        child: Text(
-                          episode.duration,
-                          style: SkifluxTypography.bodyP11Semibold.copyWith(
-                            color: SkifluxColors.contentPrimaryInverse,
-                          ),
-                        ),
-                      ),
-                    ),
-                  if (episode.state == PlaylistEpisodeState.completed)
-                    const Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      child: SizedBox(
-                        height: SkifluxSpacing.spaceXs,
-                        child: ColoredBox(
-                          color: SkifluxColors.contentBrand,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
+/// 32px `Background/Hover` circle with a 16px icon (198:14217 / 198:14219).
+class _CircleAction extends StatelessWidget {
+  const _CircleAction({required this.icon, this.onTap});
+
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: SkifluxColors.backgroundHover,
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: SizedBox(
+          width: SkifluxUnit.u32,
+          height: SkifluxUnit.u32,
+          child: Center(
+            child: Icon(
+              icon,
+              size: SkifluxIcons.sizeS,
+              color: SkifluxColors.contentPrimary,
             ),
           ),
-          const SizedBox(width: SkifluxSpacing.spaceS),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  statusLabel,
-                  style: SkifluxTypography.uiBadgeTagSmall.copyWith(
-                    color: statusColor,
-                  ),
-                ),
-                const SizedBox(height: SkifluxSpacing.spaceXs),
-                Text(
-                  episode.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: SkifluxTypography.headingH10Bold.copyWith(
-                    color: SkifluxColors.contentPrimary,
-                  ),
-                ),
-                const SizedBox(height: SkifluxSpacing.spaceXs),
-                Text(
-                  '22k views · 5 hrs ago',
-                  style: SkifluxTypography.bodyP11Regular.copyWith(
-                    color: SkifluxColors.contentTertiary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: SkifluxSpacing.spaceS),
-          if (locked)
-            Container(
-              padding: const EdgeInsets.only(
-                left: SkifluxSpacing.spaceXs,
-                right: SkifluxSpacing.spaceS,
-                top: SkifluxSpacing.spaceXs,
-                bottom: SkifluxSpacing.spaceXs,
-              ),
-              decoration: BoxDecoration(
-                color: SkifluxColors.backgroundNoticeSubtle,
-                borderRadius: SkifluxRadii.borderPill,
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    RemixIcons.copper_coin_fill,
-                    size: SkifluxIcons.sizeS,
-                    color: SkifluxColors.contentNotice,
-                  ),
-                  const SizedBox(width: SkifluxSpacing.space2xs),
-                  Text(
-                    '${episode.coinCost}',
-                    style: SkifluxTypography.uiBadgeTagMedium.copyWith(
-                      color: SkifluxColors.contentNoticeBold,
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else
-            const Icon(
-              RemixIcons.play_circle_fill,
-              size: SkifluxIcons.sizeM,
-              color: SkifluxColors.contentDisabled,
-            ),
-        ],
+        ),
       ),
     );
   }

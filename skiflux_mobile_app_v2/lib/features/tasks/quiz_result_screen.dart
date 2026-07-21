@@ -43,7 +43,7 @@ class QuizResultScreen extends ConsumerWidget {
             ? 'You scored $correct/$total ($percent%) on the '
                 'Design Systems Quiz. Your proof has been logged.'
             : 'You scored $correct/$total ($percent%). You need '
-                '100% to pass — review the answers and try again.')
+                '100% to pass. Review the answers and try again.')
         : 'Your submission was approved. Rewards have been added '
             'to your wallet.';
 
