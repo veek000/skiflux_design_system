@@ -231,24 +231,23 @@ class _WorldButton extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(SkifluxSpacing.spaceS),
       decoration: BoxDecoration(
-        // Figma: radial blue → violet → magenta sweep; approximated with a
-        // linear gradient over the same stops.
         gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
           colors: [
             Color(0xFF3B82F6),
-            Color(0xFF5C5EF2),
+            Color(0xFF3B82F6),
             Color(0xFF7C3AED),
-            Color(0xFFAB40EE),
             Color(0xFFD946EF),
           ],
+          stops: [0.0, 0.3, 0.6, 1.0],
         ),
         borderRadius: SkifluxRadii.borderPill,
         boxShadow: const [
-          // Figma: drop shadow 0/4/5 @ brand 60%.
           BoxShadow(
             color: Color(0x995610AB),
             offset: Offset(0, 4),
-            blurRadius: 5,
+            blurRadius: 10,
           ),
         ],
       ),
