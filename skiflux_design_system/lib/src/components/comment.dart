@@ -232,7 +232,7 @@ class _SkifluxCommentState extends State<SkifluxComment> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: SkifluxColors.backgroundHover,
         // Figma: rounded-tl-4 / tr-999 / br-999 / bl-64.
         // The raw Figma values render as visually uniform corners because
@@ -240,14 +240,14 @@ class _SkifluxCommentState extends State<SkifluxComment> {
         // scales ALL radii down together, which made the 64/999 mix look
         // lopsided (huge bottom-left swoop). Radius/XL on the three rounded
         // corners reproduces the clamped Figma appearance.
-        borderRadius: const BorderRadius.only(
+        borderRadius: BorderRadius.only(
           topLeft: Radius.circular(SkifluxRadii.xs),
           topRight: Radius.circular(SkifluxRadii.xl),
           bottomRight: Radius.circular(SkifluxRadii.xl),
           bottomLeft: Radius.circular(SkifluxRadii.xl),
         ),
         // Effect style: `Soft lift`
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
             color: Color(0x0A000000),
             offset: Offset(0, 1),

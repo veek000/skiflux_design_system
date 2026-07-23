@@ -49,6 +49,7 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
 
   /// Session-local demo history (no app-wide history model yet): first four
   /// feed episodes — two Today (in progress), two Yesterday (completed).
+  // TODO(backend, blocking): replace session-local watch history with real per-user watch history fetched from backend — expects: List<{episode: {epNumber: int, title: String, creatorUsername: String, duration: String, views: String, postedAgo: String}, today: bool, progress: double}>
   List<_HistoryEntry>? _entries;
 
   @override

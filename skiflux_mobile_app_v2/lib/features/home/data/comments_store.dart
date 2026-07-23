@@ -148,6 +148,7 @@ class CommentsNotifier extends Notifier<CommentsState> {
 }
 
 /// Sheet-scoped: disposed when the comments sheet unmounts.
+// TODO(backend, blocking): replace seeded demo comments with real per-video comments fetched from backend, and persist sent comments/voicenotes server-side — expects: List<{author: SkifluxCommentAuthor, body: SkifluxCommentBody, authorName: String, handle: String, message: String?, audioPath: String?, timeLabel: String}>
 final commentsProvider =
     NotifierProvider.autoDispose<CommentsNotifier, CommentsState>(
   CommentsNotifier.new,

@@ -24,6 +24,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
 
   /// Session-local demo downloads (no real download pipeline): first five
   /// feed episodes at 112 MB each.
+  // TODO(backend, blocking): replace session-local downloads list with real offline download storage and download state from backend — expects: List<{epNumber: int, title: String, creatorUsername: String, duration: String, views: String, postedAgo: String, fileSizeMb: int, qualityLabel: String}>
   List<SubscriptionEpisode>? _downloads;
 
   static const int _mbPerVideo = 112;

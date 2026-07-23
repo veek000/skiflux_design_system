@@ -22,6 +22,7 @@ class _LikedVideosScreenState extends ConsumerState<LikedVideosScreen> {
 
   /// Session-local demo "liked" set: first five feed episodes; un-liking
   /// removes locally (no store — likes aren't modeled app-wide yet).
+  // TODO(backend, blocking): replace session-local liked list with real per-user liked videos fetched from backend — expects: List<{epNumber: int, title: String, creatorUsername: String, duration: String, views: String, postedAgo: String, isNew: bool, postedToday: bool, watchProgress: double}>
   List<SubscriptionEpisode>? _liked;
 
   @override
@@ -217,6 +218,7 @@ class _LikedRow extends ConsumerWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
+            // TODO(backend, blocking): replace local placeholder asset with real CDN/backend episode thumbnail URL — expects: String (network URL)
             Image.asset(
               'assets/home_video_cover.png',
               fit: BoxFit.cover,

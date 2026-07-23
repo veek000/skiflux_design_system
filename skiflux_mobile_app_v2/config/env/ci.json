@@ -1,0 +1,6 @@
+{
+  "ENVIRONMENT": "ci",
+  "SENTRY_DSN": "https://ciPublicKey@o0.ingest.sentry.io/0",
+  "API_BASE_URL": "https://api-ci.skiflux.com",
+  "ENABLE_ANALYTICS": false
+}

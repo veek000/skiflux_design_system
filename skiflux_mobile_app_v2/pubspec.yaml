@@ -32,6 +32,8 @@ dependencies:
   # CLAUDE.md package policy. showCustomModalBottomSheet keeps our exact
   # blur/scrim/card visuals via containerWidget.
   modal_bottom_sheet: ^3.0.0
+  # Real-time crash reporting and exception monitoring
+  sentry_flutter: ^8.9.0
 
 dev_dependencies:
   flutter_test:

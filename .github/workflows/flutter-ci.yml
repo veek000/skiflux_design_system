@@ -57,4 +57,4 @@ jobs:
       # Design system has no test/ directory yet — only the app is tested.
       - name: Test mobile app
         working-directory: skiflux_mobile_app_v2
-        run: flutter test
+        run: flutter test --dart-define-from-file=config/env/ci.json

@@ -171,6 +171,7 @@ class SubscriptionsState {
 
 /// Riverpod choice: [NotifierProvider] — creators list mutates (bell mode /
 /// unsubscribe). Episodes are fixed demo seed. Was a static abstract store.
+// TODO(backend, blocking): replace static seeded creators and episodes with real per-user subscription data from backend — expects: {creators: List<{name: String, username: String, initials: String, notificationMode: CreatorNotificationMode, hasUnseen: bool}>, episodes: List<{epNumber: int, title: String, creatorUsername: String, duration: String, views: String, postedAgo: String, isNew: bool, postedToday: bool, watchProgress: double}>}
 class SubscriptionsNotifier extends Notifier<SubscriptionsState> {
   @override
   SubscriptionsState build() {

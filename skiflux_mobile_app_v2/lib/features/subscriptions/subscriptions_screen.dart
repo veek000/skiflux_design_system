@@ -43,15 +43,27 @@ class _SubscriptionsBodyState extends ConsumerState<SubscriptionsBody> {
           ),
         ),
         Expanded(
-          child: creators.isEmpty ? _emptyState(context) : _feed(creators),
+          child: creators.isEmpty
+              ? const _SubscriptionsEmptyState()
+              : _SubscriptionsFeed(
+                  creators: creators,
+                  filter: _filter,
+                  onFilterChanged: (picked) =>
+                      setState(() => _filter = picked),
+                ),
         ),
       ],
     );
   }
+}
 
-  // ── Flow 04 — empty state ──────────────────────────────────────────
+// ── Flow 04 — empty state ──────────────────────────────────────────
 
-  Widget _emptyState(BuildContext context) {
+class _SubscriptionsEmptyState extends StatelessWidget {
+  const _SubscriptionsEmptyState();
+
+  @override
+  Widget build(BuildContext context) {
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -78,12 +90,25 @@ class _SubscriptionsBodyState extends ConsumerState<SubscriptionsBody> {
       ),
     );
   }
+}
 
-  // ── Flow 05 — populated feed ───────────────────────────────────────
+// ── Flow 05 — populated feed ───────────────────────────────────────
 
-  Widget _feed(List<SubscribedCreator> creators) {
+class _SubscriptionsFeed extends ConsumerWidget {
+  const _SubscriptionsFeed({
+    required this.creators,
+    required this.filter,
+    required this.onFilterChanged,
+  });
+
+  final List<SubscribedCreator> creators;
+  final SubscriptionFeedFilter filter;
+  final ValueChanged<SubscriptionFeedFilter> onFilterChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
     final episodes =
-        ref.watch(subscriptionsProvider).feed(filter: _filter);
+        ref.watch(subscriptionsProvider).feed(filter: filter);
     return ListView(
       padding: const EdgeInsets.only(top: SkifluxSpacing.spaceL),
       children: [
@@ -102,13 +127,13 @@ class _SubscriptionsBodyState extends ConsumerState<SubscriptionsBody> {
               ),
             ),
             _FilterControl(
-              filter: _filter,
+              filter: filter,
               onTap: () async {
                 final picked = await showSubscriptionFilterSheet(
                   context,
-                  current: _filter,
+                  current: filter,
                 );
-                if (picked != null) setState(() => _filter = picked);
+                if (picked != null) onFilterChanged(picked);
               },
             ),
           ],
@@ -125,7 +150,7 @@ class _SubscriptionsBodyState extends ConsumerState<SubscriptionsBody> {
               ),
               title: 'Nothing here yet',
               message:
-                  'No episodes match "${_filter.label}". Try another filter.',
+                  'No episodes match "${filter.label}". Try another filter.',
             ),
           )
         else
@@ -400,7 +425,7 @@ class _CreatorChannelScreenState extends ConsumerState<CreatorChannelScreen> {
                       activeUsername: widget.creator.username,
                     ),
                     const SizedBox(height: SkifluxSpacing.spaceXl),
-                    _creatorHeader(context),
+                    _CreatorChannelHeader(creator: widget.creator),
                     const SizedBox(height: SkifluxSpacing.spaceL),
                     for (final (i, episode) in episodes.indexed) ...[
                       if (i > 0)
@@ -420,9 +445,16 @@ class _CreatorChannelScreenState extends ConsumerState<CreatorChannelScreen> {
       ),
     );
   }
+}
 
-  /// "Amara Design / @amara" + trailing "Visit Profile →" outlined pill.
-  Widget _creatorHeader(BuildContext context) {
+/// "Amara Design / @amara" + trailing "Visit Profile →" outlined pill.
+class _CreatorChannelHeader extends StatelessWidget {
+  const _CreatorChannelHeader({required this.creator});
+
+  final SubscribedCreator creator;
+
+  @override
+  Widget build(BuildContext context) {
     return Row(
       children: [
         Expanded(
@@ -430,7 +462,7 @@ class _CreatorChannelScreenState extends ConsumerState<CreatorChannelScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                widget.creator.name,
+                creator.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 // Figma: Heading H9 semibold (Creato Medium 18).
@@ -440,7 +472,7 @@ class _CreatorChannelScreenState extends ConsumerState<CreatorChannelScreen> {
               ),
               const SizedBox(height: SkifluxSpacing.space2xs),
               Text(
-                widget.creator.handle,
+                creator.handle,
                 // Figma: Creato Bold 12 on content/tertiary.
                 style: SkifluxTypography.uiInputContent.copyWith(
                   color: SkifluxColors.contentTertiary,
@@ -551,7 +583,10 @@ class EpisodePlayerSheet extends ConsumerWidget {
         height: media.size.height - media.padding.top - SkifluxUnit.u48,
         child: Column(
           children: [
-            _header(context),
+            _EpisodePlayerHeader(
+              episode: episode,
+              showViewPlaylist: showViewPlaylist,
+            ),
             Expanded(
               child: Padding(
                 padding: EdgeInsets.fromLTRB(
@@ -572,10 +607,21 @@ class EpisodePlayerSheet extends ConsumerWidget {
       ),
     );
   }
+}
 
-  /// Figma `1256:29882` — title (H9 Bold, up to 2 lines) over the
-  /// "View Playlist ›" link, grey close circle trailing.
-  Widget _header(BuildContext context) {
+/// Figma `1256:29882` — title (H9 Bold, up to 2 lines) over the
+/// "View Playlist ›" link, grey close circle trailing.
+class _EpisodePlayerHeader extends StatelessWidget {
+  const _EpisodePlayerHeader({
+    required this.episode,
+    required this.showViewPlaylist,
+  });
+
+  final SubscriptionEpisode episode;
+  final bool showViewPlaylist;
+
+  @override
+  Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         SkifluxSpacing.spaceL,

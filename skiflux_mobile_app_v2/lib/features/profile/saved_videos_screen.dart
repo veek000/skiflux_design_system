@@ -23,6 +23,7 @@ class _SavedVideosScreenState extends ConsumerState<SavedVideosScreen> {
   String _query = '';
 
   /// Session-local demo saved set (no app-wide save model yet).
+  // TODO(backend, blocking): replace session-local saved list with real per-user saved/bookmarked videos from backend — expects: List<{epNumber: int, title: String, creatorUsername: String, duration: String, views: String, postedAgo: String, isNew: bool, postedToday: bool, watchProgress: double}>
   List<SubscriptionEpisode>? _saved;
 
   @override

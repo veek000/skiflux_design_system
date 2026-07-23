@@ -61,6 +61,7 @@ class LeaderboardData {
   List<LeaderboardEntry> get ranked => entries.sublist(3);
 }
 
+// TODO(backend, blocking): replace static leaderboard rankings with live weekly ranking data fetched from backend — expects: List<{rank: int, name: String, username: String, initials: String, xp: int}> plus currentUserRank: int and betterThanPercent: int
 /// Seeded once — signed-in user (Amara) at rank #12, matching My Profile.
 const LeaderboardData _kLeaderboardData = LeaderboardData(
   leagues: [

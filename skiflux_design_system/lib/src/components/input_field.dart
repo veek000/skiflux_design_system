@@ -36,6 +36,7 @@ class SkifluxInputField extends StatelessWidget {
     this.onChanged,
     this.obscureText = false,
     this.keyboardType,
+    this.fieldKey,
   });
 
   final TextEditingController? controller;
@@ -52,6 +53,10 @@ class SkifluxInputField extends StatelessWidget {
   final ValueChanged<String>? onChanged;
   final bool obscureText;
   final TextInputType? keyboardType;
+
+  /// Optional [Key] forwarded to the inner [TextField] widget.
+  /// Used by tests to reliably find the input via [find.byKey].
+  final Key? fieldKey;
 
   @override
   Widget build(BuildContext context) {
@@ -72,6 +77,7 @@ class SkifluxInputField extends StatelessWidget {
           const SizedBox(height: SkifluxSpacing.spaceXs),
         ],
         TextField(
+          key: fieldKey,
           controller: controller,
           enabled: enabled,
           obscureText: obscureText,

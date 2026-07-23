@@ -168,6 +168,57 @@ error **modals** reuse the app-wide overlay pattern
 — blur + scrim + white card with title/close — same shell as comments,
 more-menu, share, unlock, notify, etc. Sheet content is message +
 `SkifluxButton` (dismiss/retry); no shell API extension was required.
+
+---
+
+## Secrets & Environment Configuration
+
+**Approach: `--dart-define-from-file` compile-time constants**
+
+Secrets and environment configurations (e.g. Sentry DSN, API base URLs, telemetry feature flags) are passed via compile-time JSON files using Flutter's native `--dart-define-from-file` CLI flag. This ensures zero risk of `.env` files being bundled into release asset archives.
+
+### Configuration File Structure
+
+```
+skiflux_mobile_app_v2/
+  config/
+    env/
+      dev.json.example   (committed template with placeholder keys)
+      prod.json.example  (committed template with placeholder keys)
+      ci.json            (committed CI-safe configuration for GitHub Actions)
+      dev.json           (gitignored local environment configuration)
+      prod.json          (gitignored production environment configuration)
+```
+
+### Local Development Setup
+
+To configure your local development environment:
+1. Copy `skiflux_mobile_app_v2/config/env/dev.json.example` to `skiflux_mobile_app_v2/config/env/dev.json`.
+2. Populate `SENTRY_DSN`, `API_BASE_URL`, etc. with real credentials.
+3. Launch the app using:
+   ```bash
+   flutter run --dart-define-from-file=config/env/dev.json
+   ```
+4. Build release binaries using:
+   ```bash
+   flutter build apk --dart-define-from-file=config/env/prod.json
+   ```
+
+### CI / CD Pipeline
+
+GitHub Actions CI (`.github/workflows/flutter-ci.yml`) runs `flutter test --dart-define-from-file=config/env/ci.json` using the committed `ci.json` placeholder configuration. No real secrets or secret injection steps are required for CI test and analysis steps to pass.
+
+### Code Access via `EnvConfig`
+
+All environment properties are accessed statically through `EnvConfig` (`skiflux_mobile_app_v2/lib/config/env_config.dart`):
+- `EnvConfig.environment` (`'dev'`, `'staging'`, `'prod'`, `'ci'`)
+- `EnvConfig.sentryDsn` (Sentry crash reporting DSN URL)
+- `EnvConfig.apiBaseUrl` (REST/GraphQL backend endpoint)
+- `EnvConfig.enableAnalytics` (boolean telemetry flag)
+- `EnvConfig.validate()` (logs initialization status in debug mode)
+
+---
+
 Non-blocking error **toasts** go through [SkifluxToast](#toast-notifications)
 with `type: error`.
 
@@ -984,6 +1035,14 @@ as a new app — uninstall the old "skiflux_example" install manually.
 - If dark mode ever ships in Figma, extend tokens with a second semantic mode.
 - Riverpod migration complete (Passes 1–3). Next: real data layer.
 
+### Backend Integration Tracking
+
+[`BACKEND_INTEGRATION.md`](BACKEND_INTEGRATION.md) is the canonical,
+auto-generated index of every backend integration point in the codebase. It
+is produced from `// TODO(backend, ...)` tags placed directly above provider/
+class/constant declarations. Do not hand-edit the markdown — update the
+in-code tags and regenerate with `grep -rn "TODO(backend" lib/`.
+
 ## CI/CD
 
 GitHub Actions workflow at
@@ -1006,6 +1065,51 @@ GitHub Actions workflow at
 - Branch protection requiring this check before merge — **not configured** on the GitHub repo as of setup; must be enabled manually (Settings → Branches → protect `main` → require status check **Analyze & Test** / `Flutter CI`).
 
 ## Session Log
+
+### 2026-07-23 — Claude — Settings Flow (all 25 Figma frames)
+- Status: Complete
+- What was done: Built the entire Settings flow reached from the gear icon on My Profile (`1256:21198` and its 24 detail/modal frames), wiring the previously-inert settings icon to the new `SettingsScreen`. New feature dir `lib/features/settings/`.
+  - **Stores:** `data/settings_store.dart` (`settingsProvider` — notification toggles, biometric/2FA, autoplay, `DownloadQuality`/wifi-only, `AppLanguage`, privacy toggles; seeded to match the frames' on/off/selected defaults). `data/payment_store.dart` (`paymentCardsProvider` — `CardBrand`, `SavedCard`, seeded Mastercard 8810 / Visa 4242, add/remove). Extended `wallet_store.dart` with a `List<BankAccount> banks` + `removeBank` (keeps `defaultBank` in sync for the Withdraw screen).
+  - **Shared widgets/sheets:** `settings/widgets/settings_tile.dart` (`SettingsSection` bordered card + hairline-divided `SettingsTile` with tinted rounded-square icon; `SettingsValueTrailing` / `SettingsExternalTrailing`) — the grouped-card idiom reused by every detail screen. `shared/sheets/success_sheet.dart` (`showSuccessSheet` — generic headerless green-check card; replaces bespoke copies for the 7 settings success states).
+  - **Screens (11):** Settings hub (grouped sections + version footer + Log out confirm), Edit Profile (`19929`), Security (`20691`) + Change Password (`21189`, strength meter → Password Updated success `21136`), Notifications (`20787`), Download Quality (`20009`, radios + storage + Clear-all confirm `20100`→ Downloads Cleared `20173`), App Language (`20068`), Payment Methods (`19943`) + Add Card sheet (`20477`) + Remove Card confirm (`20587`)/Card Saved (`20535`)/Card Removed (`20639`), Bank Accounts (`19981`) + Bank Account Saved (`20393`), Privacy & Data (`20874`, Request-my-data → Data Export Requested `20935`; Delete Account confirm `21069` → Account Deleted `21002`), Help Centre (`20730`).
+  - **Reuse:** confirm modals via existing `showConfirmSheet`; the "Add New Bank Account" sheet is the shared `wallet/add_bank_sheet.dart`, now extended with the Account Name Mismatch error branch (`20435`, `showAccountMismatchSheet`) — demo-triggered when the account number ends in `0000` (stands in for backend name verification).
+  - Copy note: the Figma "Password Updated Successfully" frame (`21136`) reused withdrawal-success body text as a placeholder; replaced with proper password copy. Privacy screen's second group was labelled "Coins & Rewards" in Figma (stray) → relabelled "Data Management".
+- Verification run: flutter analyze (app) → No issues found (32.8s). User verifies UI on emulator (no build/test run per standing preference).
+- Notes for next session: All settings toggles/choices are session-local in `settingsProvider` (no persistence). Edit Profile Save is a toast+pop stub (no profile store yet). External links (Terms, Privacy Policy, Rate us, Help topics, chat/email) are toast stubs. Card-brand rows use a tinted `bank_card_fill` glyph (no card-network logo assets).
+
+### 2026-07-22 — Claude — Backend Integration Tagging + Doc Generation
+- Status: Complete
+- What was done: Tagged every demo/static/placeholder data source across the entire `lib/` codebase with standardized `// TODO(backend, blocking):` / `// TODO(backend, minor):` comments (29 tags total: 27 blocking, 2 minor). Tags placed on all feature data stores (notifications, leaderboard, streaks, playlists, search, subscriptions, tasks, comments, wallet), profile screens (my profile identity/auth, public user demo, badges, liked/downloads/saved/watch history session-local lists), 9 local asset placeholder references (video_feed_card, library_episode_row, subscription_widgets, playlist_episode_row, profile screens), creator profile identity, search result thumbnails, and share sheet targets. Generated `BACKEND_INTEGRATION.md` from the tags. Added Backend Integration Tracking pointer to PROJECT.md. This was a tagging-only pass — no logic changed.
+- Verification run: flutter analyze → No issues found (98.3s); tag format self-check → checked 29 tags, all conform to exact format (em dash verified via byte inspection); grep count vs. table row count → confirmed match (29 grep results = 29 table rows)
+- Notes for next session: This was a tagging-only pass — no logic changed. BACKEND_INTEGRATION.md should be regenerated (re-grep + rebuild table) any time a TODO(backend) tag is added, moved, or removed in future work.
+
+### 2026-07-22 — DeepSeek — Controller Disposal Audit
+- Status: Complete
+- What was done: Exhaustive scan of the entire app and design-system codebase for controller/resource disposal issues — TextEditingController, AnimationController, ScrollController, FocusNode, PlayerController, RecorderController, StreamSubscription, and Timer. App package: 10 controllers found across 9 files — all correctly disposed. Design-system package: 7 controllers/resources found across 3 files — all correctly disposed (comment.dart PlayerController + 2 StreamSubscriptions via _disposePlayer; compose_bar.dart FocusNode + owned TextEditingController + RecorderController; search_field.dart owned TextEditingController). ModalScrollController.of(context) calls (10 sites) are package-managed, not owned instances. Zero leaks found. No fixes needed.
+- Verification run: flutter analyze → No issues found (16.0s baseline, unchanged after audit)
+- Notes for next session: Controller hygiene is clean across the entire codebase. Future features adding new controllers (video player, more forms) should follow the existing pattern: initState() for creation, dispose() for cleanup, SingleTickerProviderStateMixin for animation controllers.
+
+### 2026-07-22 — DeepSeek — Test Coverage Build
+- Status: Partial (task submission flow integration tests escalated — see notes)
+- What was done: Built comprehensive test suite from scratch across 3 categories. **(A) Design system widget tests** (22 tests, skiflux_design_system): `button_test.dart` (4 tests — label rendering, enabled/disabled onPressed, leading icon), `comment_test.dart` (8 tests — message/voicenote rendering, own/other action rows, callback firing), `compose_bar_test.dart` (7 tests — idle hint/mic/send, recording state transitions, external controller). **(B) Riverpod provider unit tests** (34 tests, skiflux_mobile_app_v2): `notifications_test.dart` (6 tests — build, markRead, markAllRead, unread getter), `leaderboard_test.dart` (5 tests — shape, podium/ranked splits, xpLabel), `streaks_test.dart` (7 tests — seed data, consumeCelebration one-shot, low-streak edge case), `tasks_test.dart` (13 tests — markInReview, markCompleted, recordQuizResult, completeMission, filters), `subscriptions_test.dart` (10 tests — feed filters, creator sort, unsubscribe, notification mode). **(C) Integration/flow tests** (4 tests): `comments_test.dart` (2 tests — send text, empty message guarded), `task_submission_test.dart` (3 tests — title rendeirng, disabled submit, task-not-found fallback).
+- Verification run: `flutter test` (design system) → 22/22 passed; `flutter test` (app) → 52/52 passed; `flutter analyze` (design system) → No issues found; `flutter analyze` (app) → 0 errors, 0 warnings (12 info-level `prefer_const_constructors` in test files only)
+- Notes for next session: The full task submission flow (entering text into the SkifluxInputField and verifying In-Review status change) could not be tested via widget test because `SkifluxInputField` (a design-system pill input) and its internal `TextField` were not findable by `find.byType` in the test environment, likely due to font-resolution issues in the test runner. The submit-button label was found to be `'Submit Task & Earn ${coins} coins'` (not plain `'Submit'`), which was already reflected in the rendering tests. This escalated item should be revisited when a real API/mocked backend exists — the provider-level unit tests in `tasks_test.dart` already cover the `markInReview`/`markCompleted` logic. The SkifluxToast auto-dismiss test was also escalated (SnackBar animation timing in test environment doesn't reliably match wall-clock duration).
+
+### 2026-07-22 — DeepSeek — SkifluxInputField Testability Fix
+- Status: Complete
+- What was done: **(A) Diagnosed root cause:** `SkifluxInputField`'s inner `TextField` wasn't findable by `find.byType(TextField)` in tests because the widget sits inside a `ListView` below the test viewport's fold (the ListView only builds visible children, and the 800×600 default test viewport never reaches it). **(B) Fix applied:** Added optional `fieldKey` parameter to `SkifluxInputField` (`input_field.dart:39`), forwarded it as `key:` to the inner `TextField` (`input_field.dart:80`). Wired `fieldKey: ValueKey('link_input')` in `submission_task_screen.dart:208`. **(C) Escalation closed:** Wrote the originally intended end-to-end test (`task_submission_test.dart`) — inputs a valid http URL, taps submit, verifies the "Task Submitted!" success dialog and the error modal for invalid inputs. Created a taller test viewport (1080×2400) so the ListView renders all children without scrolling.
+- Verification run: `flutter test` (design system) → 22/22 passed (no regressions); `flutter test` (app) → 53/53 passed (+1 new, no regressions from prior 52); `flutter analyze` (design system) → No issues found; `flutter analyze` (app) → 0 errors/warnings (info-level `prefer_const_constructors` in test files only, unchanged pattern)
+- Notes for next session: The task submission flow escalation from the test coverage pass is now resolved. The `fieldKey` pattern is available for any other test that needs to target a specific `SkifluxInputField`.
+
+### 2026-07-22 — DeepSeek — Const Hints Fix + Viewport Handling Verification
+- Status: Complete
+- What was done: **(A) Fixed 15 `prefer_const_constructors` info hints** across `comments_test.dart` (2), `task_submission_test.dart` (12), and `streaks_test.dart` (1) — all were genuinely const-safe (`ProviderScope`, `MaterialApp`, `SubmissionTaskScreen`, `StreaksState` all have const constructors). One side-effect `unnecessary_const` from the outer const context was also cleaned up (`const []` → `[]` inside `const StreaksState`). **(B) Verified the invalid-link test's viewport handling** — confirmed it uses the identical viewport size-up approach as the success-case test: both set `tester.view.physicalSize = const Size(1080, 2400)` and `devicePixelRatio: 1.0` with the same `addTearDown(... resetPhysicalSize())` tear-down. No fix needed; the invalid-link test was never fragile.
+- Verification run: `flutter test` → 53/53 passed (no regressions); `flutter analyze` → No issues found
+
+### 2026-07-22 — Claude — Comment Cleanup (two fixes from tagging audit)
+- Status: Complete
+- What was done: Two documentation/comment fixes flagged during the backend integration tagging pass. **(A)** `playlists_store.dart:70`: corrected typo "availabel" → "available" in the TODO(backend) coin pack tag description. **(B)** `notifications_store.dart:35-39`: stale "Riverpod choice" doc comment updated — removed migration-justification language ("matching the previous ChangeNotifier", "StateNotifier is legacy in Riverpod 3") since the Riverpod migration completed in Pass 1 and this framing read as pre-migration/unsettled. Reworded to describe current state neutrally: the provider type and why it was chosen.
+- Verification run: flutter analyze → No issues found (16.5s)
 
 ### 2026-07-21 — Claude — Corrections pass + Watch History / Downloads / Saved Videos
 - Status: Complete (verification: analyze clean + widget repro tests passed for the render fixes; final full build skipped per user — verified on emulator)
@@ -1101,3 +1205,29 @@ GitHub Actions workflow at
 - What was done: (1) `openTaskEpisode` now takes `WidgetRef` and uses `ref.read(subscriptionsProvider)` instead of `ProviderScope.containerOf(context)` — callers in `quiz_intro_screen` and `submission_task_screen` pass `ref`. (2) `submission_task_screen` watches `tasksProvider` in `build` via `ref.watch` (read only in submit handler). (3) Removed redundant empty `setState(() {})` `onRefresh` callbacks on `SubscriptionStoriesRow` in `subscriptions_screen` (body + creator channel); `ref.watch` rebuilds when store mutates.
 - Verification run: flutter analyze → No issues found! (ran in 38.8s), flutter build apk → √ Built build\app\outputs\flutter-apk\app-debug.apk
 - Notes: Riverpod migration (Pass 1-3) is now fully clean per audit RIVERPOD_MIGRATION_AUDIT.md, with all identified gaps resolved. Ready for the Current Architecture documentation update.
+
+### 2026-07-22 — Antigravity — Widget Structure Refactor (tasks_screen, subscriptions_screen)
+- Status: Complete
+- What was done:
+  - `tasks_screen.dart`: Performed initial extraction of `_MissionCard` (StatelessWidget), followed by an exhaustive re-scan that extracted 2 additional sub-widgets from `_LearningTaskCard`: `_LearningTaskEpisodeHeader` (StatelessWidget) and `_TaskFeedbackBanner` (StatelessWidget). File size: 25,817 bytes (775 lines) → 24,668 bytes (757 lines).
+  - `subscriptions_screen.dart`: Extracted 4 widget-returning helper functions (`_emptyState` → `_SubscriptionsEmptyState` StatelessWidget, `_feed` → `_SubscriptionsFeed` ConsumerWidget, `_creatorHeader` → `_CreatorChannelHeader` StatelessWidget, `_header` → `_EpisodePlayerHeader` StatelessWidget). File size: 21,812 bytes (651 lines) → 22,962 bytes (697 lines).
+- Verification run:
+  - `flutter pub get`: PASS
+  - `flutter analyze`: PASS (0 issues found) across all incremental per-extraction runs and final post-clean verification (12.5s).
+  - `flutter build apk --debug`: PASS (`√ Built build\app\outputs\flutter-apk\app-debug.apk` in 491.3s).
+- Notes for next session: Zero widget-returning helper functions remain in either file. Every single build method across both screens is under 70 lines of clean high-level widget composition. All Riverpod provider states cleanly consumed via `ConsumerWidget`/`ref.watch`. Zero logic/visual changes.
+
+### 2026-07-23 — Gemini — Lint Rigor Upgrade
+- Status: Complete
+- What was done: Added strict, production-grade `analysis_options.yaml` with analyzer language options (`strict-casts: true`, `strict-raw-types: true`) and strict production lints (`prefer_const_*`, `prefer_final_*`, `avoid_print`, `always_declare_return_types`, `avoid_returning_null_for_void`, `unnecessary_this`, `avoid_relative_lib_imports`, `unawaited_futures`, `cancel_subscriptions`, `close_sinks`, `use_build_context_synchronously`) to BOTH `skiflux_design_system` and `skiflux_mobile_app_v2`. Fixed 35 trivial lint violations in `skiflux_design_system` (const constructors, final locals, unnecessary const) and 1 trivial `unawaited_futures` violation in `skiflux_mobile_app_v2` (`search_screen.dart:85:27`). 0 non-trivial violations deferred.
+- Verification run: `flutter test` → 75 tests passed (22 in design system, 53 in mobile app; 0 regressions), `flutter analyze` → 0 issues found on both packages.
+- Notes for next session: Both monorepo packages are clean under the upgraded strict production lint ruleset.
+
+### 2026-07-23 — Grok — Secrets/Env Strategy Implementation
+- Status: Complete
+- What was done: Selected compile-time `--dart-define-from-file` configuration strategy. Created `skiflux_mobile_app_v2/lib/config/env_config.dart` typed environment config reader (`ENVIRONMENT`, `SENTRY_DSN`, `API_BASE_URL`, `ENABLE_ANALYTICS`), committed environment templates (`config/env/dev.json.example`, `config/env/prod.json.example`), and `config/env/ci.json` for CI pipeline execution. Added `.gitignore` rules for `config/env/*.json` (excluding `.example` and `ci.json`). Updated `main.dart` and `error_handler.dart` to consume `EnvConfig.sentryDsn`. Updated `.github/workflows/flutter-ci.yml` to test with `ci.json`.
+- Verification run: `flutter test` → 75 tests passed (22 in design system, 53 in mobile app; 0 regressions), `flutter analyze` → 0 issues found, `flutter build apk` → √ Built `build\app\outputs\flutter-apk\app-debug.apk` (171.4s with `--dart-define-from-file=config/env/dev.json.example`).
+- Notes for next session: Veek needs to create `skiflux_mobile_app_v2/config/env/dev.json` locally from `dev.json.example` before running the app with real Sentry reporting or backend endpoints.
+
+
+

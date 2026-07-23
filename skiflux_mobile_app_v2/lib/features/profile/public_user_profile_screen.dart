@@ -88,6 +88,7 @@ class PublicUserProfile {
   }
 
   /// Demo users used by search / comments.
+  // TODO(backend, blocking): replace PublicUserProfile.demo() and hardcoded defaults with real user profile data fetched from backend — expects: {name: String, username: String, initials: String?, league: String, xp: int, leaderboardRank: int, tasksDone: int, email: String, skills: List<String>, badges: List<{label: String, assetUrl: String}>, completedTasks: List<{kind: String, title: String, meta: String, actionLabel: String, score: int?, band: String?, bandDetail: String?, passed: bool?}>}
   static PublicUserProfile demo({
     String name = 'Amara Design',
     String username = 'amara',

@@ -193,6 +193,7 @@ class TasksState {
 /// via markInReview / markCompleted / recordQuizResult / completeMission
 /// (was ChangeNotifier singleton). Single provider keeps learning +
 /// missions in one session snapshot (list filters stay local UI state).
+// TODO(backend, blocking): replace static seeded learning tasks and missions with real per-user task catalog from backend, including submission persistence and quiz answer recording — expects: {learning: List<{id: String, title: String, description: String, episodeLabel: String, episodeTitle: String, episodeSubtitle: String, status: LearningTaskStatus, kind: LearningTaskKind, coins: int, xp: int, feedback: String?, briefIntro: String?, briefBullets: List<String>, quiz: QuizData?, quizAnswers: List<int?>?, quizCorrect: int?}>, missions: List<{id: String, title: String, description: String, coins: int, actionLabel: String, iconKey: String, completed: bool}>}
 class TasksNotifier extends Notifier<TasksState> {
   @override
   TasksState build() {

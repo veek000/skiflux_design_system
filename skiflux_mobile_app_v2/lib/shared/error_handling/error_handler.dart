@@ -7,8 +7,10 @@ library;
 
 import 'dart:async';
 
+import '../../config/env_config.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 // ── Public types ─────────────────────────────────────────────────────
 
@@ -222,23 +224,29 @@ class ErrorHandler {
     }
   }
 
-  /// Crash-reporting hook (structure only — Sentry not wired yet).
-  ///
-  /// TODO(Phase 1 item 4): Replace the body of this method with a single
-  /// Sentry call (e.g. `Sentry.captureException(error, stackTrace: stackTrace)`).
-  /// Keep the signature stable so call sites do not change.
+  /// Crash-reporting hook wired directly to Sentry SDK.
   void reportTechnicalError(
     Object error, {
     StackTrace? stackTrace,
     SkifluxErrorKind? kind,
   }) {
-    // Isolated one-line-swap target for Sentry. Do not scatter debugPrint
-    // of raw errors elsewhere for crash reporting.
+    const dsn = EnvConfig.sentryDsn;
     debugPrint(
-      '[SkifluxErrorReport] kind=${kind ?? 'unclassified'} '
+      '[SkifluxErrorReport] dsn=${dsn.isNotEmpty ? 'configured' : 'none'} '
+      'kind=${kind ?? 'unclassified'} '
       'error=$error'
       '${stackTrace != null ? '\n$stackTrace' : ''}',
     );
+
+    if (dsn.isNotEmpty) {
+      unawaited(
+        Sentry.captureException(
+          error,
+          stackTrace: stackTrace,
+          hint: kind != null ? Hint.withMap({'kind': kind.name}) : null,
+        ),
+      );
+    }
   }
 }
 

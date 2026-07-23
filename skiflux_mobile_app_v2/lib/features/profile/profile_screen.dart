@@ -30,6 +30,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   NotifyPreference _notify = NotifyPreference.personalized;
 
   static const _pills = ['All', 'UI', 'Code', 'Motion', 'Brand'];
+  // TODO(backend, blocking): replace hardcoded creator profile identity (name, handle, avatar initials) with real creator data from backend — expects: {name: String, handle: String, initials: String, subscribed: bool, notifyPreference: NotifyPreference}
 
   @override
   Widget build(BuildContext context) {
@@ -429,6 +430,7 @@ class _EpisodeCard extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
+            // TODO(backend, blocking): replace local placeholder asset with real CDN/backend episode thumbnail URL — expects: String (network URL)
             Image.asset('assets/home_video_cover.png', fit: BoxFit.cover),
             if (locked) ...[
               const ColoredBox(color: SkifluxColors.overlay50),

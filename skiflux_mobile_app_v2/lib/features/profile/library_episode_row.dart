@@ -107,6 +107,7 @@ class _Thumbnail extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
+            // TODO(backend, blocking): replace local placeholder asset with real CDN/backend episode thumbnail URL — expects: String (network URL)
             Image.asset(
               'assets/home_video_cover.png',
               fit: BoxFit.cover,

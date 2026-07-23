@@ -23,6 +23,7 @@ class _ShareTarget {
 class _ShareSheet extends StatelessWidget {
   const _ShareSheet();
 
+  // TODO(backend, minor): replace static demo share targets with real OS share sheet backed by actual deep links and content URLs from backend — expects: TBD, no current placeholder structure to infer from
   static const _targets = <_ShareTarget>[
     _ShareTarget('Copy Link', RemixIcons.checkbox_multiple_blank_fill),
     _ShareTarget('WhatsApp', RemixIcons.whatsapp_fill),

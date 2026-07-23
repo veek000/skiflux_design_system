@@ -88,15 +88,20 @@ class BankAccount {
       : accountNumber.substring(accountNumber.length - 4);
 }
 
-/// Snapshot of the wallet ledger + default bank.
+/// Snapshot of the wallet ledger + saved withdrawal banks.
 @immutable
 class WalletState {
   const WalletState({
     required this.transactions,
+    required this.banks,
     this.defaultBank,
   });
 
   final List<CoinTxn> transactions;
+
+  /// All saved withdrawal destinations (Settings → Withdrawal accounts,
+  /// `1256:19981`). [defaultBank] is the one the Withdraw screen pays into.
+  final List<BankAccount> banks;
   final BankAccount? defaultBank;
 
   int _sum(CoinTxnType type) => transactions
@@ -109,10 +114,12 @@ class WalletState {
 
   WalletState copyWith({
     List<CoinTxn>? transactions,
+    List<BankAccount>? banks,
     BankAccount? defaultBank,
   }) {
     return WalletState(
       transactions: transactions ?? this.transactions,
+      banks: banks ?? this.banks,
       defaultBank: defaultBank ?? this.defaultBank,
     );
   }
@@ -121,19 +128,22 @@ class WalletState {
 /// Riverpod [NotifierProvider] — matches the app's other stores (playlists,
 /// notifications). Seeded with the demo ledger + the demo Access Bank account
 /// shown as the default withdrawal destination.
+// TODO(backend, blocking): replace static seeded transaction ledger and bank account with real backend wallet history and withdrawal destination — expects: {transactions: List<{title: String, subtitle: String, delta: int, type: CoinTxnType, kind: CoinTxnKind}>, defaultBank: {bankName: String, accountNumber: String, holderName: String}?}
 final walletProvider =
     NotifierProvider<WalletNotifier, WalletState>(WalletNotifier.new);
 
 class WalletNotifier extends Notifier<WalletState> {
   @override
   WalletState build() {
+    const seedBank = BankAccount(
+      bankName: 'Access Bank',
+      accountNumber: '0123454521',
+      holderName: 'Amara Design',
+    );
     return WalletState(
       transactions: _seedTransactions(),
-      defaultBank: const BankAccount(
-        bankName: 'Access Bank',
-        accountNumber: '0123454521',
-        holderName: 'Amara Design',
-      ),
+      banks: const [seedBank],
+      defaultBank: seedBank,
     );
   }
 
@@ -170,9 +180,26 @@ class WalletNotifier extends Notifier<WalletState> {
     ));
   }
 
-  /// Saves/replaces the default withdrawal destination.
+  /// Appends a saved withdrawal destination and makes it the new default.
   void addBank(BankAccount account) {
-    state = state.copyWith(defaultBank: account);
+    state = state.copyWith(
+      banks: [...state.banks, account],
+      defaultBank: account,
+    );
+  }
+
+  /// Removes a saved bank. If it was the default, the first remaining bank
+  /// (if any) becomes the new default.
+  void removeBank(BankAccount account) {
+    final banks = state.banks.where((b) => b != account).toList();
+    final wasDefault = state.defaultBank == account;
+    state = WalletState(
+      transactions: state.transactions,
+      banks: banks,
+      defaultBank: wasDefault
+          ? (banks.isEmpty ? null : banks.first)
+          : state.defaultBank,
+    );
   }
 
   void _prepend(CoinTxn txn) {

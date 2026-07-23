@@ -5,6 +5,7 @@ import 'package:skiflux_design_system/skiflux_design_system.dart';
 import '../leaderboard/leaderboard_screen.dart';
 import '../playlists/data/playlists_store.dart';
 import '../search/search_screen.dart';
+import '../settings/settings_screen.dart';
 import '../streaks/data/streaks_store.dart';
 import '../streaks/streak_screen.dart';
 import '../subscriptions/data/subscriptions_store.dart';
@@ -24,6 +25,7 @@ import 'watch_history_screen.dart';
 
 /// Demo identity/stats shown on the tab (no auth yet). Coins now come live
 /// from [playlistsProvider] (see _ProfileHeader).
+// TODO(backend, blocking): replace hardcoded user identity (name, handle, initials, XP, world, rank) with real authenticated user profile data from backend — expects: {name: String, handle: String, initials: String, xp: int, world: String, leaderboardRank: int}
 abstract final class _MyProfileDemo {
   static const name = 'Amara Design';
   static const handle = '@amara';
@@ -65,6 +67,7 @@ class MyProfileBody extends ConsumerWidget {
   }
 
   /// Search circle · "My Profile" (H8 Bold 20) · settings circle.
+  // TODO(backend, blocking): gate entire My Profile tab behind real authentication — currently no auth layer exists; user identity is hardcoded demo data — expects: TBD, no current placeholder structure to infer from
   Widget _topBar(BuildContext context) {
     return Row(
       children: [
@@ -84,10 +87,11 @@ class MyProfileBody extends ConsumerWidget {
             ),
           ),
         ),
-        // Settings screen is a deferred stub.
         CircleTapTarget(
           icon: RemixIcons.settings_4_fill,
-          onTap: () {},
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const SettingsScreen()),
+          ),
         ),
       ],
     );
@@ -395,6 +399,7 @@ class _WatchHistoryCard extends ConsumerWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
+            // TODO(backend, blocking): replace local placeholder asset with real CDN/backend video thumbnail URL — expects: String (network URL)
             Image.asset(
               'assets/home_video_raw1.png',
               fit: BoxFit.cover,

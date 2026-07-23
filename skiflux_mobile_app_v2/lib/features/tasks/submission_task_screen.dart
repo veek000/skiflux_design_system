@@ -205,6 +205,7 @@ class _SubmissionTaskScreenState extends ConsumerState<SubmissionTaskScreen> {
                     hintText: 'Paste your link here',
                     leadingIcon: const Icon(RemixIcons.link),
                     onChanged: (_) => setState(() {}),
+                    fieldKey: const ValueKey('link_input'),
                   )
                 else ...[
                   _DashedUploadZone(onTap: _pickFile),

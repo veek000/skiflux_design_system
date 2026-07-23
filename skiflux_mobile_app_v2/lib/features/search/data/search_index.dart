@@ -121,6 +121,7 @@ class SearchResults {
 /// Riverpod choice: plain [Provider] — pure read-only index, no session
 /// mutations (like leaderboard Pass 1). Live query results stay in the
 /// screen; this provider only exposes [search].
+// TODO(backend, blocking): replace local demo search dataset with backend search API — expects: search(query: String) → {episodes: List<{epNumber: int, title: String, duration: String, views: String, creator: String}>, creators: List<{name: String, username: String, subscribers: String}>, users: List<{name: String, username: String, subscribers: String}>, playlists: List<{title: String, creator: String, episodeCount: int, duration: String}>}
 class SearchIndex {
   const SearchIndex();
 

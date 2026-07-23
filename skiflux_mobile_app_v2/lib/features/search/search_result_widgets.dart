@@ -57,6 +57,7 @@ class EpisodeResultCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Thumbnail placeholder (demo data has no artwork).
+            // TODO(backend, minor): replace brand-colored placeholder thumbnails with real episode/playlist cover artwork URLs from backend — expects: String (network URL)
             Container(
               width: 128,
               decoration: BoxDecoration(

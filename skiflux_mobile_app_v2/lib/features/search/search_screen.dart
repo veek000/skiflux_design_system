@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
@@ -82,9 +84,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       return;
     }
     if (!mounted) return;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => SearchResultsScreen(results: results, initialTab: tab),
+    unawaited(
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => SearchResultsScreen(results: results, initialTab: tab),
+        ),
       ),
     );
   }

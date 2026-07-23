@@ -323,41 +323,7 @@ class _LearningTaskCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Episode row
-          Row(
-            children: [
-              Container(
-                width: 30,
-                height: 30,
-                decoration: const BoxDecoration(
-                  color: SkifluxColors.backgroundBrand,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  RemixIcons.play_circle_fill,
-                  size: 20,
-                  color: SkifluxColors.contentPrimaryInverse,
-                ),
-              ),
-              const SizedBox(width: SkifluxSpacing.spaceS),
-              Expanded(
-                child: Text(
-                  task.episodeLabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: SkifluxTypography.headingH10Bold.copyWith(
-                    color: SkifluxColors.contentPrimary,
-                  ),
-                ),
-              ),
-              Text(
-                'View Episode',
-                style: SkifluxTypography.uiBadgeTagSmall.copyWith(
-                  color: SkifluxColors.contentBrand,
-                ),
-              ),
-            ],
-          ),
+          _LearningTaskEpisodeHeader(episodeLabel: task.episodeLabel),
           const SizedBox(height: SkifluxSpacing.spaceS),
           // Title + status
           Row(
@@ -404,33 +370,7 @@ class _LearningTaskCard extends StatelessWidget {
           ),
           if (task.feedback != null) ...[
             const SizedBox(height: SkifluxSpacing.spaceS),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
-              decoration: BoxDecoration(
-                color: SkifluxColors.backgroundNegativeSubtle,
-                borderRadius: SkifluxRadii.borderM,
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(
-                    RemixIcons.information_fill,
-                    size: 20,
-                    color: SkifluxColors.contentNegative,
-                  ),
-                  const SizedBox(width: SkifluxSpacing.spaceS),
-                  Expanded(
-                    child: Text(
-                      task.feedback!,
-                      style: SkifluxTypography.bodyP10Regular.copyWith(
-                        color: SkifluxColors.contentNegative,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            _TaskFeedbackBanner(feedback: task.feedback!),
           ],
           const SizedBox(height: SkifluxSpacing.spaceS),
           // Rewards + CTA
@@ -486,6 +426,87 @@ class _LearningTaskCard extends StatelessWidget {
           fg: SkifluxColors.contentNegative,
         ),
     };
+  }
+}
+
+class _LearningTaskEpisodeHeader extends StatelessWidget {
+  const _LearningTaskEpisodeHeader({required this.episodeLabel});
+
+  final String episodeLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 30,
+          height: 30,
+          decoration: const BoxDecoration(
+            color: SkifluxColors.backgroundBrand,
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            RemixIcons.play_circle_fill,
+            size: 20,
+            color: SkifluxColors.contentPrimaryInverse,
+          ),
+        ),
+        const SizedBox(width: SkifluxSpacing.spaceS),
+        Expanded(
+          child: Text(
+            episodeLabel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: SkifluxTypography.headingH10Bold.copyWith(
+              color: SkifluxColors.contentPrimary,
+            ),
+          ),
+        ),
+        Text(
+          'View Episode',
+          style: SkifluxTypography.uiBadgeTagSmall.copyWith(
+            color: SkifluxColors.contentBrand,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TaskFeedbackBanner extends StatelessWidget {
+  const _TaskFeedbackBanner({required this.feedback});
+
+  final String feedback;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
+      decoration: BoxDecoration(
+        color: SkifluxColors.backgroundNegativeSubtle,
+        borderRadius: SkifluxRadii.borderM,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            RemixIcons.information_fill,
+            size: 20,
+            color: SkifluxColors.contentNegative,
+          ),
+          const SizedBox(width: SkifluxSpacing.spaceS),
+          Expanded(
+            child: Text(
+              feedback,
+              style: SkifluxTypography.bodyP10Regular.copyWith(
+                color: SkifluxColors.contentNegative,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -629,86 +650,101 @@ class _MissionList extends StatelessWidget {
       separatorBuilder: (_, __) =>
           const SizedBox(height: SkifluxSpacing.spaceM),
       itemBuilder: (context, i) {
-        final m = state.missions[i];
-        // Figma `2902:13732`: 16px pad, border, radius L; top-aligned
-        // 30px brand icon + text column (title · body · coin/CTA row).
-        return Container(
-          padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
-          decoration: BoxDecoration(
-            color: SkifluxColors.backgroundPrimary,
-            borderRadius: SkifluxRadii.borderL,
-            border: Border.all(
-              color: SkifluxColors.contentSecondaryInverse,
-              width: SkifluxBorderWidth.xs,
+        return _MissionCard(
+          mission: state.missions[i],
+          onComplete: onComplete,
+        );
+      },
+    );
+  }
+}
+
+class _MissionCard extends StatelessWidget {
+  const _MissionCard({
+    required this.mission,
+    required this.onComplete,
+  });
+
+  final MissionTask mission;
+  final ValueChanged<String> onComplete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
+      decoration: BoxDecoration(
+        color: SkifluxColors.backgroundPrimary,
+        borderRadius: SkifluxRadii.borderL,
+        border: Border.all(
+          color: SkifluxColors.contentSecondaryInverse,
+          width: SkifluxBorderWidth.xs,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(
+              color: SkifluxColors.contentBrand,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              _MissionList._icons[mission.iconKey] ?? RemixIcons.flag_fill,
+              size: 20,
+              color: SkifluxColors.contentPrimaryInverse,
             ),
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 30,
-                height: 30,
-                alignment: Alignment.center,
-                decoration: const BoxDecoration(
-                  color: SkifluxColors.contentBrand,
-                  shape: BoxShape.circle,
+          const SizedBox(width: SkifluxSpacing.spaceL),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  mission.title,
+                  style: SkifluxTypography.headingH10Bold.copyWith(
+                    color: SkifluxColors.contentSecondary,
+                  ),
                 ),
-                child: Icon(
-                  _icons[m.iconKey] ?? RemixIcons.flag_fill,
-                  size: 20,
-                  color: SkifluxColors.contentPrimaryInverse,
+                const SizedBox(height: SkifluxSpacing.spaceXs),
+                Text(
+                  mission.description,
+                  style: SkifluxTypography.bodyP10Regular.copyWith(
+                    color: SkifluxColors.contentTertiary,
+                  ),
                 ),
-              ),
-              const SizedBox(width: SkifluxSpacing.spaceL),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                const SizedBox(height: SkifluxSpacing.spaceXs),
+                Row(
                   children: [
+                    const Icon(
+                      RemixIcons.copper_coin_fill,
+                      size: SkifluxIcons.sizeS,
+                      color: SkifluxColors.contentNoticeBold,
+                    ),
+                    const SizedBox(width: SkifluxSpacing.space2xs),
                     Text(
-                      m.title,
-                      style: SkifluxTypography.headingH10Bold.copyWith(
-                        color: SkifluxColors.contentSecondary,
+                      '+${mission.coins}',
+                      style: SkifluxTypography.uiButtonSmall.copyWith(
+                        color: SkifluxColors.contentNoticeBold,
                       ),
                     ),
-                    const SizedBox(height: SkifluxSpacing.spaceXs),
-                    Text(
-                      m.description,
-                      style: SkifluxTypography.bodyP10Regular.copyWith(
-                        color: SkifluxColors.contentTertiary,
-                      ),
-                    ),
-                    const SizedBox(height: SkifluxSpacing.spaceXs),
-                    Row(
-                      children: [
-                        const Icon(
-                          RemixIcons.copper_coin_fill,
-                          size: SkifluxIcons.sizeS,
-                          color: SkifluxColors.contentNoticeBold,
-                        ),
-                        const SizedBox(width: SkifluxSpacing.space2xs),
-                        Text(
-                          '+${m.coins}',
-                          style: SkifluxTypography.uiButtonSmall.copyWith(
-                            color: SkifluxColors.contentNoticeBold,
-                          ),
-                        ),
-                        const Spacer(),
-                        SkifluxButton(
-                          label: m.completed ? 'Done' : m.actionLabel,
-                          size: SkifluxButtonSize.s,
-                          onPressed: m.completed
-                              ? null
-                              : () => onComplete(m.id),
-                        ),
-                      ],
+                    const Spacer(),
+                    SkifluxButton(
+                      label: mission.completed ? 'Done' : mission.actionLabel,
+                      size: SkifluxButtonSize.s,
+                      onPressed: mission.completed
+                          ? null
+                          : () => onComplete(mission.id),
                     ),
                   ],
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 }

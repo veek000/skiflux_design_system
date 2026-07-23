@@ -44,6 +44,7 @@ class Playlist {
         'consistent across products.',
     this.viewsLabel = '550.7k views',
     this.coverAsset = 'assets/home_video_cover.png',
+    // TODO(backend, blocking): replace local coverAsset file path with real CDN/backend playlist cover image URL — expects: String (network URL)
   });
 
   final String id;
@@ -66,6 +67,7 @@ enum CoinPackBadge { none, bestValue, save }
 
 /// A SkillCoin bundle offered in the Buy Coins flow (Other Video Player
 /// Flow 04, `1256:27630`). Price is in Naira; rate is 1 coin = ₦6.
+// TODO(backend, blocking): replace static kCoinPacks + kCoinRateNaira with backend-driven pricing and available coin pack offerings — expects: List<{coins: int, priceNaira: int, badge: CoinPackBadge, savePercent: int?}> plus rateNairaPerCoin: int
 class CoinPack {
   const CoinPack({
     required this.coins,
@@ -127,6 +129,7 @@ class PlaylistsState {
 
 /// Riverpod choice: [NotifierProvider] — skillCoins and episode lock state
 /// mutate via unlock (was ChangeNotifier). Matches notifications Pass 1.
+// TODO(backend, blocking): replace in-memory SkillCoin wallet (balance, playlists, episode lock states) with real backend — expects: {skillCoins: int, playlists: List<{id: String, title: String, creatorName: String, creatorUsername: String, episodes: List<{id: String, number: int, title: String, duration: String, coinCost: int, state: PlaylistEpisodeState}>, description: String, viewsLabel: String, coverUrl: String}>}
 class PlaylistsNotifier extends Notifier<PlaylistsState> {
   @override
   PlaylistsState build() {

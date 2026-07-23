@@ -51,3 +51,11 @@ app.*.map.json
 # iOS
 **/ios/Pods/
 **/ios/.symlinks/
+
+# Environment configuration & secrets
+config/env/*.json
+!config/env/*.example
+!config/env/ci.json
+**/config/env/*.json
+!**/config/env/*.example
+!**/config/env/ci.json

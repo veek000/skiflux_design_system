@@ -162,6 +162,7 @@ class _Thumb extends StatelessWidget {
   Widget build(BuildContext context) {
     final locked = episode.isLocked;
     Widget image = Image.asset(
+      // TODO(backend, blocking): replace local placeholder asset with real CDN/backend episode thumbnail URL — expects: String (network URL)
       'assets/home_video_cover.png',
       fit: BoxFit.cover,
     );

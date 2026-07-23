@@ -122,6 +122,7 @@ class StreaksState {
 /// Riverpod choice: [NotifierProvider] — stats/history are static demo
 /// data, but [consumeCelebration] mutates a once-per-session flag (was
 /// static `_celebrated`). Plain Provider cannot own that mutation.
+// TODO(backend, blocking): replace static streak stats and history with real per-user streak data fetched from backend — expects: {streak: int, bestStreak: int, xpEarned: int, milestone: int, milestoneXp: int, history: List<{start: DateTime, days: List<{label: String, state: StreakDayState, number: int?}>}>}
 class StreaksNotifier extends Notifier<StreaksState> {
   static const _completed = StreakDayState.completed;
   static const _missed = StreakDayState.missed;

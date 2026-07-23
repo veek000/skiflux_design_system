@@ -180,14 +180,108 @@ class _AddBankSheetState extends ConsumerState<_AddBankSheet> {
     );
   }
 
-  void _save() {
+  Future<void> _save() async {
+    final number = _numberController.text.trim();
+    // Demo stand-in for backend name verification (`1256:20435` — Account
+    // Name Mismatch): account numbers ending in 0000 simulate a name that
+    // doesn't match the Skiflux profile, so that error state is reachable.
+    if (number.endsWith('0000')) {
+      await showAccountMismatchSheet(context);
+      return;
+    }
     final account = BankAccount(
       bankName: _bank,
-      accountNumber: _numberController.text.trim(),
+      accountNumber: number,
       // Demo identity — matches the profile header.
       holderName: 'Amara Design',
     );
     ref.read(walletProvider.notifier).addBank(account);
-    Navigator.of(context).pop(account);
+    if (mounted) Navigator.of(context).pop(account);
+  }
+}
+
+// Figma: **Account Name Mismatch** (`1256:20435`) — the verification-failed
+// branch of Verify & Save. Red X circle, explanation, "Link Another Account"
+// (dismiss and retry) over a "Contact Support" text action.
+Future<void> showAccountMismatchSheet(BuildContext context) {
+  return showSkifluxSheet<void>(
+    context: context,
+    builder: (_) => const _AccountMismatchSheet(),
+  );
+}
+
+class _AccountMismatchSheet extends StatelessWidget {
+  const _AccountMismatchSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    return SkifluxSheetShell(
+      title: '',
+      showHeader: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          SkifluxSpacing.spaceL,
+          SkifluxSpacing.space2xl,
+          SkifluxSpacing.spaceL,
+          0,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 98,
+                height: 98,
+                decoration: const BoxDecoration(
+                  color: SkifluxColors.backgroundNegativeSubtle,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  RemixIcons.close_fill,
+                  size: 48,
+                  color: SkifluxColors.contentNegative,
+                ),
+              ),
+            ),
+            const SizedBox(height: SkifluxSpacing.spaceL),
+            Text(
+              'Account Name Mismatch',
+              textAlign: TextAlign.center,
+              style: SkifluxTypography.headingH7Bold.copyWith(
+                color: SkifluxColors.contentPrimary,
+              ),
+            ),
+            const SizedBox(height: SkifluxSpacing.spaceS),
+            Text(
+              'For your security, withdrawals can only be processed to a bank '
+              'account that exactly matches your verified Skiflux profile. The '
+              'account provided does not match. Please use an account with '
+              'your legal name, or reach out to support for a profile update.',
+              textAlign: TextAlign.center,
+              style: SkifluxTypography.bodyP8Regular.copyWith(
+                color: SkifluxColors.contentTertiary,
+              ),
+            ),
+            const SizedBox(height: SkifluxSpacing.spaceXl),
+            SkifluxButton(
+              label: 'Link Another Account',
+              expanded: true,
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            const SizedBox(height: SkifluxSpacing.spaceS),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(
+                'Contact Support',
+                style: SkifluxTypography.uiButtonLarge.copyWith(
+                  color: SkifluxColors.contentNegative,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

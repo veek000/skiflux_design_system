@@ -268,6 +268,7 @@ class SubscriptionEpisodeCard extends ConsumerWidget {
           fit: StackFit.expand,
           children: [
             // Reuses the home cover art as demo thumbnail imagery.
+            // TODO(backend, blocking): replace local placeholder asset with real CDN/backend episode thumbnail URL — expects: String (network URL)
             Image.asset(
               'assets/home_video_raw1.png',
               fit: BoxFit.cover,

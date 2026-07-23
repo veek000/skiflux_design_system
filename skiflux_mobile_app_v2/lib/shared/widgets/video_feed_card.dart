@@ -39,6 +39,7 @@ class VideoFeedCard extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             // Cover image from Figma node 325:14150
+            // TODO(backend, blocking): replace local placeholder asset paths with real CDN/backend video thumbnail URLs — expects: String (network URL)
             Image.asset(
               'assets/home_video_raw1.png',
               fit: BoxFit.cover,

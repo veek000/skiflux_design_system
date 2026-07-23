@@ -34,9 +34,9 @@ class AppNotification {
 
 /// Session store: seeded demo cards + unread bookkeeping.
 ///
-/// Riverpod choice: [NotifierProvider] — the list is mutable (mark read /
-/// mark all read), matching the previous ChangeNotifier. A plain [Provider]
-/// cannot own mutations; StateNotifier is legacy in Riverpod 3.
+/// Uses [NotifierProvider] because the notifications list is mutable
+/// (mark read / mark all read). A plain [Provider] cannot own mutations.
+// TODO(backend, blocking): replace static _seed() notifications list with real per-user notification feed fetched from backend — expects: List<{title: String, body: String, icon: String, time: DateTime, action: String?, unread: bool}>
 class NotificationsNotifier extends Notifier<List<AppNotification>> {
   @override
   List<AppNotification> build() => _seed(DateTime.now());
