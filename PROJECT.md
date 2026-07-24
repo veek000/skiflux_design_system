@@ -1229,5 +1229,23 @@ GitHub Actions workflow at
 - Verification run: `flutter test` → 75 tests passed (22 in design system, 53 in mobile app; 0 regressions), `flutter analyze` → 0 issues found, `flutter build apk` → √ Built `build\app\outputs\flutter-apk\app-debug.apk` (171.4s with `--dart-define-from-file=config/env/dev.json.example`).
 - Notes for next session: Veek needs to create `skiflux_mobile_app_v2/config/env/dev.json` locally from `dev.json.example` before running the app with real Sentry reporting or backend endpoints.
 
+### 2026-07-24 — Gemini — Documentation Reconciliation & README Restructure
+- Status: Complete
+- What was done: Performed Step 0 ground-truth audit of `skiflux_mobile_app_v2`. Verified all 12 feature folders (`auth`, `home`, `leaderboard`, `notifications`, `playlists`, `profile`, `search`, `settings`, `streaks`, `subscriptions`, `tasks`, `wallet`), profile screens (`badges`, `downloads`, `liked_videos`, `saved_videos`, `watch_history`, `library_episode_row`), and shared sheets (`confirm_sheet.dart`, `success_sheet.dart`). Restructured `README.md` to eliminate architecture duplication with `PROJECT.md`, resolved duplicate `home/sheets/` entries, expanded collapsed `search/` and `subscriptions/` listings into accurate file trees, updated `main.dart` entry point description to include `EnvConfig`/Sentry initialization, added syntax highlighting, and established explicit link pointers to `PROJECT.md`.
+- Verification run: `flutter analyze` → No issues found! (ran in 18.8s), `flutter test` → 53 / 53 mobile app tests passed (0 regressions). All internal section links cross-checked.
+- Notes for next session: `README.md` is now a developer-onboarding guide pointing to `PROJECT.md` for architecture details.
+
+### 2026-07-24 — Codex — Figma onboarding and authentication flow
+- Status: Implemented; verification pending.
+- What was done: Read the supplied Figma design contexts and added `features/auth/auth_flow.dart`, a Riverpod-backed, session-local implementation of the requested 23 onboarding and authentication frame states: splash, three onboarding pages, Terms of Use, Privacy Policy, account creation, email verification and success, sign-in plus wrong-email/wrong-password feedback, forgotten-password reset and confirmation, fingerprint/Face ID prompts, identity claim, goal selection, and Skillworld selection. The flow reuses the existing Skiflux design-system tokens, typography, `SkifluxButton`, `SkifluxInputField`, and Remix icons; no package was added. `app/app.dart` now opens `AuthFlow`, and finishing onboarding or biometric verification routes to the existing `HomeScreen`.
+- Verification run: Figma context retrieval completed. `flutter analyze` / `dart analyze` could not complete in the workspace sandbox because the Dart CLI attempted to create its analytics/config file under a restricted AppData path; a subsequent analyzer run timed out. No build or test was run after this change.
+
+### 2026-07-24 — Gemini — Auth Flow Lint & Syntax Error Fixes
+- Status: Complete
+- What was done: Fixed 3 errors and 6 `prefer_const_constructors` hints in `lib/features/auth/auth_flow.dart`: (1) Line 132: Escaped raw `$` in single-quoted string literal (`r'$'`). (2) Line 258: Removed stray `]` token in `_OnboardingScreen` `Row(children: List.generate(...))` widget tree. (3) Line 288 / 505: Replaced invalid `RemixIcons.face_id_fill` icon getter with `RemixIcons.user_fill`. (4) Added `const` to 6 `Text` constructors (`_VerificationScreen` & `_BiometricScreen`). Verified `auth_flow.dart` adheres to design system tokens (`SkifluxColors`, `SkifluxTypography`, `SkifluxButton`, `SkifluxInputField`) and Riverpod state management (`AuthFlowNotifier` / `authFlowProvider`).
+- Verification run: `flutter analyze lib/features/auth/auth_flow.dart` → No issues found! (ran in 196.9s, 0 errors, 0 hints). `flutter test` → All 54 / 54 tests passed (0 regressions).
+
+- Notes for next session: Run `flutter analyze`, `flutter test`, and an emulator visual pass once Dart tooling has a writable config/analytics location. Authentication is deliberately session-local until the backend/auth layer is introduced; replace the demo validation and transitions with backend services at that point.
+
 
 

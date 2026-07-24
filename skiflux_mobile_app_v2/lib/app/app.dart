@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
-import '../features/home/home_screen.dart';
+import '../features/auth/auth_flow.dart';
 
 /// Root widget: wires the Skiflux theme to the screen flow.
 class SkifluxMobileAppV2 extends StatelessWidget {
@@ -13,7 +13,7 @@ class SkifluxMobileAppV2 extends StatelessWidget {
       title: 'Skiflux Mobile App V2',
       debugShowCheckedModeBanner: false,
       theme: SkifluxAppTheme.light,
-      home: const HomeScreen(),
+      home: const AuthFlow(),
     );
   }
 }
