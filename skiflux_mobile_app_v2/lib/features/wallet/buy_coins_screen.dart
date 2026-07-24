@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/error_handling/error_display.dart';
+import '../../shared/error_handling/error_handler.dart';
 import '../../shared/sheets/skiflux_sheet.dart';
 import '../playlists/data/playlists_store.dart';
 import 'data/wallet_store.dart';
@@ -18,10 +20,10 @@ class BuyCoinsScreen extends ConsumerStatefulWidget {
   const BuyCoinsScreen({super.key});
 
   @override
-  ConsumerState<BuyCoinsScreen> createState() => _BuyCoinsScreenState();
+  ConsumerState<BuyCoinsScreen> createState() => BuyCoinsScreenState();
 }
 
-class _BuyCoinsScreenState extends ConsumerState<BuyCoinsScreen> {
+class BuyCoinsScreenState extends ConsumerState<BuyCoinsScreen> {
   CoinPack? _selected;
   bool _cardPayment = true;
 
@@ -126,7 +128,7 @@ class _BuyCoinsScreenState extends ConsumerState<BuyCoinsScreen> {
                     ? 'Choose a coin pack'
                     : 'Pay ${pack.priceLabel} · Get ${pack.coins} coins',
                 expanded: true,
-                onPressed: pack == null ? null : () => _pay(pack),
+                onPressed: pack == null ? null : () => pay(pack),
               ),
             ),
           ],
@@ -143,15 +145,23 @@ class _BuyCoinsScreenState extends ConsumerState<BuyCoinsScreen> {
     );
   }
 
-  Future<void> _pay(CoinPack pack) async {
-    ref.read(playlistsProvider.notifier).topUp(pack.coins);
-    ref
-        .read(walletProvider.notifier)
-        .recordTopUp(pack.coins, pack.priceNaira);
-    if (!mounted) return;
-    await showPurchaseSuccessSheet(context, pack: pack);
-    if (!mounted) return;
-    Navigator.of(context).pop();
+  Future<void> pay(CoinPack? pack) async {
+    try {
+      if (pack == null) {
+        throw const SkifluxFailure(SkifluxErrorKind.coinPurchaseFailed);
+      }
+      ref.read(playlistsProvider.notifier).topUp(pack.coins);
+      ref
+          .read(walletProvider.notifier)
+          .recordTopUp(pack.coins, pack.priceNaira);
+      if (!mounted) return;
+      await showPurchaseSuccessSheet(context, pack: pack);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } catch (e, st) {
+      if (!mounted) return;
+      await ErrorDisplay.show(context, ref, e, stackTrace: st);
+    }
   }
 }
 

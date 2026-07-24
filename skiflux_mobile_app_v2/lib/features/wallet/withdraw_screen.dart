@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/error_handling/error_display.dart';
+import '../../shared/error_handling/error_handler.dart';
 import '../../shared/sheets/skiflux_sheet.dart';
 import '../playlists/data/playlists_store.dart';
 import 'add_bank_sheet.dart';
@@ -21,10 +23,10 @@ class WithdrawScreen extends ConsumerStatefulWidget {
   const WithdrawScreen({super.key});
 
   @override
-  ConsumerState<WithdrawScreen> createState() => _WithdrawScreenState();
+  ConsumerState<WithdrawScreen> createState() => WithdrawScreenState();
 }
 
-class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
+class WithdrawScreenState extends ConsumerState<WithdrawScreen> {
   final _amountController = TextEditingController();
   int _coins = 0;
 
@@ -108,7 +110,7 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
                     ? 'Withdraw ₦${CoinPack.thousands(naira)}'
                     : 'Enter amount to withdraw',
                 expanded: true,
-                onPressed: valid ? () => _withdraw(naira) : null,
+                onPressed: valid ? () => withdraw(naira) : null,
               ),
             ),
           ],
@@ -207,25 +209,34 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
     if (account != null && mounted) setState(() {});
   }
 
-  Future<void> _withdraw(int naira) async {
-    final bank = ref.read(walletProvider).defaultBank!;
-    final coins = _coins;
-    // Deduct from the shared wallet + record the ledger entry.
-    ref.read(playlistsProvider.notifier).withdraw(coins);
-    ref.read(walletProvider.notifier).recordWithdrawal(
-          coins,
-          naira,
-          bank.last4,
-        );
-    if (!mounted) return;
-    await showWithdrawalSuccessSheet(
-      context,
-      coins: coins,
-      naira: naira,
-      bank: bank,
-    );
-    if (!mounted) return;
-    Navigator.of(context).pop();
+  Future<void> withdraw(int naira) async {
+    try {
+      final balance = ref.read(playlistsProvider).skillCoins;
+      final bank = ref.read(walletProvider).defaultBank;
+      final coins = _coins;
+      if (bank == null || coins < _kMinWithdrawCoins || coins > balance) {
+        throw const SkifluxFailure(SkifluxErrorKind.skillCoinWithdrawal);
+      }
+      // Deduct from the shared wallet + record the ledger entry.
+      ref.read(playlistsProvider.notifier).withdraw(coins);
+      ref.read(walletProvider.notifier).recordWithdrawal(
+            coins,
+            naira,
+            bank.last4,
+          );
+      if (!mounted) return;
+      await showWithdrawalSuccessSheet(
+        context,
+        coins: coins,
+        naira: naira,
+        bank: bank,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } catch (e, st) {
+      if (!mounted) return;
+      await ErrorDisplay.show(context, ref, e, stackTrace: st);
+    }
   }
 }
 

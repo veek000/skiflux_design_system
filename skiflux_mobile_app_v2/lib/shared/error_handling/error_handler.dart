@@ -35,6 +35,10 @@ enum SkifluxErrorKind {
   taskSubmission,
   quizSubmission,
   skillCoinWithdrawal,
+  bankVerificationFailed,
+  paymentMethodActionFailed,
+  coinPurchaseFailed,
+  authFailed,
   sessionExpired,
   voicenoteFailed,
   contentLoadFailed,
@@ -187,14 +191,53 @@ class ErrorHandler {
           shouldReportToCrashReporting: true,
           actionLabel: 'OK',
         );
+      case SkifluxErrorKind.bankVerificationFailed:
+        return const ClassifiedError(
+          uiType: ErrorUiType.modal,
+          message:
+              "We couldn't save your bank account. Please check your "
+              'details and try again.',
+          kind: SkifluxErrorKind.bankVerificationFailed,
+          shouldReportToCrashReporting: true,
+          actionLabel: 'Try Again',
+        );
+      case SkifluxErrorKind.paymentMethodActionFailed:
+        return const ClassifiedError(
+          uiType: ErrorUiType.modal,
+          message:
+              "We couldn't update your payment methods. Please try again.",
+          kind: SkifluxErrorKind.paymentMethodActionFailed,
+          shouldReportToCrashReporting: true,
+          actionLabel: 'Try Again',
+        );
+      case SkifluxErrorKind.coinPurchaseFailed:
+        return const ClassifiedError(
+          uiType: ErrorUiType.modal,
+          message:
+              "We couldn't process your coin purchase. No charges were "
+              'made. Please try again.',
+          kind: SkifluxErrorKind.coinPurchaseFailed,
+          shouldReportToCrashReporting: true,
+          actionLabel: 'Try Again',
+        );
+      case SkifluxErrorKind.authFailed:
+        return const ClassifiedError(
+          uiType: ErrorUiType.modal,
+          message:
+              "We couldn't sign you in. Please check your details and "
+              'try again.',
+          kind: SkifluxErrorKind.authFailed,
+          shouldReportToCrashReporting: true,
+          actionLabel: 'Try Again',
+        );
       case SkifluxErrorKind.sessionExpired:
         return const ClassifiedError(
           uiType: ErrorUiType.modal,
           message:
               'Your session timed out. Please log in again to continue.',
           kind: SkifluxErrorKind.sessionExpired,
-          shouldReportToCrashReporting: false,
-          actionLabel: 'OK',
+          shouldReportToCrashReporting: true,
+          actionLabel: 'Log In',
         );
       case SkifluxErrorKind.voicenoteFailed:
         return const ClassifiedError(

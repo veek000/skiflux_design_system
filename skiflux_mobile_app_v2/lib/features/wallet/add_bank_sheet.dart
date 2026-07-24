@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/error_handling/error_display.dart';
+import '../../shared/error_handling/error_handler.dart';
 import '../../shared/sheets/skiflux_sheet.dart';
 import 'data/wallet_store.dart';
 
@@ -181,22 +183,30 @@ class _AddBankSheetState extends ConsumerState<_AddBankSheet> {
   }
 
   Future<void> _save() async {
-    final number = _numberController.text.trim();
-    // Demo stand-in for backend name verification (`1256:20435` — Account
-    // Name Mismatch): account numbers ending in 0000 simulate a name that
-    // doesn't match the Skiflux profile, so that error state is reachable.
-    if (number.endsWith('0000')) {
-      await showAccountMismatchSheet(context);
-      return;
+    try {
+      final number = _numberController.text.trim();
+      if (number.length < 10 || !RegExp(r'^\d+$').hasMatch(number)) {
+        throw const SkifluxFailure(SkifluxErrorKind.bankVerificationFailed);
+      }
+      // Demo stand-in for backend name verification (`1256:20435` — Account
+      // Name Mismatch): account numbers ending in 0000 simulate a name that
+      // doesn't match the Skiflux profile, so that error state is reachable.
+      if (number.endsWith('0000')) {
+        await showAccountMismatchSheet(context);
+        return;
+      }
+      final account = BankAccount(
+        bankName: _bank,
+        accountNumber: number,
+        // Demo identity — matches the profile header.
+        holderName: 'Amara Design',
+      );
+      ref.read(walletProvider.notifier).addBank(account);
+      if (mounted) Navigator.of(context).pop(account);
+    } catch (e, st) {
+      if (!mounted) return;
+      await ErrorDisplay.show(context, ref, e, stackTrace: st);
     }
-    final account = BankAccount(
-      bankName: _bank,
-      accountNumber: number,
-      // Demo identity — matches the profile header.
-      holderName: 'Amara Design',
-    );
-    ref.read(walletProvider.notifier).addBank(account);
-    if (mounted) Navigator.of(context).pop(account);
   }
 }
 

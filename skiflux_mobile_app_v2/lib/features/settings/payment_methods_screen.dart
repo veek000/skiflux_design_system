@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/error_handling/error_display.dart';
+import '../../shared/error_handling/error_handler.dart';
 import '../../shared/sheets/confirm_sheet.dart';
 import '../../shared/sheets/success_sheet.dart';
 import 'add_card_sheet.dart';
@@ -94,32 +96,45 @@ class PaymentMethodsScreen extends ConsumerWidget {
     WidgetRef ref,
     SavedCard card,
   ) async {
-    final confirmed = await showConfirmSheet(
-      context,
-      title: 'Remove Card?',
-      message: 'Are you sure you want to remove this ${card.brand.label} '
-          'ending in ${card.last4}?',
-      confirmLabel: 'Remove',
-      icon: RemixIcons.delete_bin_fill,
-    );
-    if (confirmed != true || !context.mounted) return;
-    ref.read(paymentCardsProvider.notifier).removeCard(card);
-    await showSuccessSheet(
-      context,
-      title: 'Card Removed',
-      message: '${card.brand.label} ending in ${card.last4} has been removed '
-          'from your payment methods.',
-    );
+    try {
+      if (ref.read(paymentCardsProvider).length <= 1) {
+        throw const SkifluxFailure(SkifluxErrorKind.paymentMethodActionFailed);
+      }
+      final confirmed = await showConfirmSheet(
+        context,
+        title: 'Remove Card?',
+        message: 'Are you sure you want to remove this ${card.brand.label} '
+            'ending in ${card.last4}?',
+        confirmLabel: 'Remove',
+        icon: RemixIcons.delete_bin_fill,
+      );
+      if (confirmed != true || !context.mounted) return;
+      ref.read(paymentCardsProvider.notifier).removeCard(card);
+      await showSuccessSheet(
+        context,
+        title: 'Card Removed',
+        message: '${card.brand.label} ending in ${card.last4} has been removed '
+            'from your payment methods.',
+      );
+    } catch (e, st) {
+      if (!context.mounted) return;
+      await ErrorDisplay.show(context, ref, e, stackTrace: st);
+    }
   }
 
   Future<void> _addCard(BuildContext context, WidgetRef ref) async {
-    final card = await showAddCardSheet(context);
-    if (card == null || !context.mounted) return;
-    await showSuccessSheet(
-      context,
-      title: 'Card Saved!',
-      message: 'Your new card has been securely added to your payment '
-          'methods.',
-    );
+    try {
+      final card = await showAddCardSheet(context);
+      if (card == null || !context.mounted) return;
+      await showSuccessSheet(
+        context,
+        title: 'Card Saved!',
+        message: 'Your new card has been securely added to your payment '
+            'methods.',
+      );
+    } catch (e, st) {
+      if (!context.mounted) return;
+      await ErrorDisplay.show(context, ref, e, stackTrace: st);
+    }
   }
 }
