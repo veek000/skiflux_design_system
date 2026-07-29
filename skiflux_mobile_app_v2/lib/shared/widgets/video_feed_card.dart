@@ -215,13 +215,22 @@ class _VideoFeedCardState extends State<VideoFeedCard> {
                     Image.asset('assets/home_video_cover.png', fit: BoxFit.cover),
               ),
             if (showVideo)
-              FittedBox(
-                fit: BoxFit.cover,
-                clipBehavior: Clip.hardEdge,
-                child: SizedBox(
-                  width: _controller!.value.size.width,
-                  height: _controller!.value.size.height,
-                  child: VideoPlayer(_controller!),
+              GestureDetector(
+                onTap: () {
+                  if (_controller!.value.isPlaying) {
+                    _controller!.pause();
+                  } else {
+                    _controller!.play();
+                  }
+                },
+                child: FittedBox(
+                  fit: BoxFit.cover,
+                  clipBehavior: Clip.hardEdge,
+                  child: SizedBox(
+                    width: _controller!.value.size.width,
+                    height: _controller!.value.size.height,
+                    child: VideoPlayer(_controller!),
+                  ),
                 ),
               ),
             // Bottom gradient for legibility (Figma linear overlay → black).
