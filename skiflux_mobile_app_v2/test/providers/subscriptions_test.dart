@@ -37,8 +37,7 @@ void main() {
 
     test('feed with continueWatching filter returns partial progress', () {
       final state = container.read(subscriptionsProvider);
-      final feed =
-          state.feed(filter: SubscriptionFeedFilter.continueWatching);
+      final feed = state.feed(filter: SubscriptionFeedFilter.continueWatching);
       expect(feed.length, greaterThan(0));
       for (final ep in feed) {
         expect(ep.watchProgress, greaterThan(0));
@@ -73,6 +72,38 @@ void main() {
       for (final ep in feed) {
         expect(ep.creatorUsername, 'amara');
       }
+    });
+
+    test('subscribe adds a new creator; isSubscribed reflects state', () {
+      final notifier = container.read(subscriptionsProvider.notifier);
+      expect(notifier.isSubscribed('niastudio'), isFalse);
+
+      notifier.subscribe(
+        SubscribedCreator(
+          name: 'Nia Studio',
+          username: 'niastudio',
+          initials: 'N',
+        ),
+      );
+
+      expect(notifier.isSubscribed('niastudio'), isTrue);
+      expect(
+        container.read(subscriptionsProvider).creators.any(
+          (c) => c.username == 'niastudio',
+        ),
+        isTrue,
+      );
+
+      // Second subscribe is a no-op (no duplicates).
+      final before = container.read(subscriptionsProvider).creators.length;
+      notifier.subscribe(
+        SubscribedCreator(
+          name: 'Nia Studio',
+          username: 'niastudio',
+          initials: 'N',
+        ),
+      );
+      expect(container.read(subscriptionsProvider).creators.length, before);
     });
 
     test('unsubscribe removes creator from feed', () {

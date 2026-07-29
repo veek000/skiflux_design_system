@@ -31,21 +31,19 @@ class QuizResultScreen extends ConsumerWidget {
     final quiz = task?.quiz;
     final isQuiz = task?.kind == LearningTaskKind.quiz && quiz != null;
     final percent = total == 0 ? 0 : ((correct / total) * 100).round();
-    final coins = isQuiz
-        ? (quiz.rewardCoins)
-        : (task?.coins ?? 25);
+    final coins = isQuiz ? (quiz.rewardCoins) : (task?.coins ?? 25);
     final xp = isQuiz ? (quiz.rewardXp) : (task?.xp ?? 25);
     final title = isQuiz
         ? (passed ? 'Assessment Passed!' : 'Assessment Failed')
         : 'Task Completed!';
     final body = isQuiz
         ? (passed
-            ? 'You scored $correct/$total ($percent%) on the '
-                'Design Systems Quiz. Your proof has been logged.'
-            : 'You scored $correct/$total ($percent%). You need '
-                '100% to pass. Review the answers and try again.')
+              ? 'You scored $correct/$total ($percent%) on the '
+                    'Design Systems Quiz. Your proof has been logged.'
+              : 'You scored $correct/$total ($percent%). You need '
+                    '100% to pass. Review the answers and try again.')
         : 'Your submission was approved. Rewards have been added '
-            'to your wallet.';
+              'to your wallet.';
 
     return Scaffold(
       backgroundColor: SkifluxColors.backgroundPrimary,
@@ -72,9 +70,7 @@ class QuizResultScreen extends ConsumerWidget {
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
-                        passed
-                            ? RemixIcons.check_fill
-                            : RemixIcons.close_fill,
+                        passed ? RemixIcons.check_fill : RemixIcons.close_fill,
                         size: 48,
                         color: passed
                             ? SkifluxColors.contentPositive
@@ -124,9 +120,9 @@ class QuizResultScreen extends ConsumerWidget {
                                         style: SkifluxTypography
                                             .uiBadgeTagMedium
                                             .copyWith(
-                                          color:
-                                              SkifluxColors.contentTertiary,
-                                        ),
+                                              color:
+                                                  SkifluxColors.contentTertiary,
+                                            ),
                                       ),
                                       const SizedBox(
                                         height: SkifluxSpacing.spaceXs,
@@ -138,8 +134,7 @@ class QuizResultScreen extends ConsumerWidget {
                                           const Icon(
                                             RemixIcons.copper_coin_fill,
                                             size: 20,
-                                            color:
-                                                SkifluxColors.contentNotice,
+                                            color: SkifluxColors.contentNotice,
                                           ),
                                           const SizedBox(
                                             width: SkifluxSpacing.spaceXs,
@@ -149,9 +144,9 @@ class QuizResultScreen extends ConsumerWidget {
                                             style: SkifluxTypography
                                                 .headingH10Bold
                                                 .copyWith(
-                                              color: SkifluxColors
-                                                  .contentNotice,
-                                            ),
+                                                  color: SkifluxColors
+                                                      .contentNotice,
+                                                ),
                                           ),
                                         ],
                                       ),
@@ -166,9 +161,9 @@ class QuizResultScreen extends ConsumerWidget {
                                         style: SkifluxTypography
                                             .uiBadgeTagMedium
                                             .copyWith(
-                                          color:
-                                              SkifluxColors.contentTertiary,
-                                        ),
+                                              color:
+                                                  SkifluxColors.contentTertiary,
+                                            ),
                                       ),
                                       const SizedBox(
                                         height: SkifluxSpacing.spaceXs,
@@ -180,8 +175,7 @@ class QuizResultScreen extends ConsumerWidget {
                                           const Icon(
                                             RemixIcons.flashlight_fill,
                                             size: 20,
-                                            color:
-                                                SkifluxColors.contentBrand,
+                                            color: SkifluxColors.contentBrand,
                                           ),
                                           const SizedBox(
                                             width: SkifluxSpacing.spaceXs,
@@ -191,9 +185,9 @@ class QuizResultScreen extends ConsumerWidget {
                                             style: SkifluxTypography
                                                 .headingH10Bold
                                                 .copyWith(
-                                              color: SkifluxColors
-                                                  .contentBrand,
-                                            ),
+                                                  color: SkifluxColors
+                                                      .contentBrand,
+                                                ),
                                           ),
                                         ],
                                       ),
@@ -257,8 +251,8 @@ class QuizResultScreen extends ConsumerWidget {
                                   'Review Answers',
                                   style: SkifluxTypography.uiButtonLarge
                                       .copyWith(
-                                    color: SkifluxColors.contentBrand,
-                                  ),
+                                        color: SkifluxColors.contentBrand,
+                                      ),
                                 ),
                               ),
                             ),
@@ -272,8 +266,7 @@ class QuizResultScreen extends ConsumerWidget {
                         label: 'Share Result',
                         type: SkifluxButtonType.secondary,
                         expanded: true,
-                        leadingIcon:
-                            const Icon(RemixIcons.share_forward_fill),
+                        leadingIcon: const Icon(RemixIcons.share_forward_fill),
                         // Same share modal as home / streaks (not OS sheet).
                         onPressed: () => showShareSheet(context),
                       ),
@@ -283,8 +276,9 @@ class QuizResultScreen extends ConsumerWidget {
                       label: 'Back to Tasks',
                       expanded: true,
                       onPressed: () {
-                        Navigator.of(context)
-                            .popUntil((route) => route.isFirst);
+                        Navigator.of(
+                          context,
+                        ).popUntil((route) => route.isFirst);
                       },
                     ),
                   ],

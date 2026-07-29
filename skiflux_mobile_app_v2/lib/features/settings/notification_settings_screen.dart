@@ -70,7 +70,7 @@ class NotificationSettingsScreen extends ConsumerWidget {
                   pref: NotificationPref.taskUpdates,
                   icon: RemixIcons.checkbox_circle_fill,
                   background: SkifluxColors.backgroundNoticeSubtle,
-                  color: SkifluxColors.contentNoticeBold,
+                  color: SkifluxColors.contentNotice,
                   title: 'Task updates',
                   subtitle: 'Reviews, approvals, revisions',
                 ),
@@ -108,7 +108,7 @@ class NotificationSettingsScreen extends ConsumerWidget {
                   pref: NotificationPref.badges,
                   icon: RemixIcons.award_fill,
                   background: SkifluxColors.backgroundNoticeSubtle,
-                  color: SkifluxColors.contentNoticeBold,
+                  color: SkifluxColors.contentNotice,
                   title: 'Badges',
                   subtitle: 'When you unlock a new badge',
                 ),
@@ -120,7 +120,7 @@ class NotificationSettingsScreen extends ConsumerWidget {
               children: [
                 tile(
                   pref: NotificationPref.platformAnnouncements,
-                  icon: RemixIcons.notification_3_fill,
+                  icon: RemixIcons.notification_badge_fill,
                   background: SkifluxColors.brand100,
                   color: SkifluxColors.contentBrand,
                   title: 'Platform announcements',

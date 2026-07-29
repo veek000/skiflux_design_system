@@ -42,76 +42,96 @@ class PlaylistScreen extends ConsumerWidget {
       ),
       body: SafeArea(
         top: false,
-        child: ListView(
+        // The header is one item, not fourteen. It used to be spread across
+        // an index ladder in this builder, which is how the episodes below it
+        // ended up with no gap between them: every spacer was written by hand
+        // and the ones between the rows were simply never written.
+        child: ListView.builder(
           padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
-          children: [
-            // Stacked-deck cover (198:14189) — full-width variant.
-            PlaylistDeck(
-              height: 150,
-              episodeCount: pl.episodeCount,
-              backWidthFactor: 0.9336,
-            ),
-            const SizedBox(height: SkifluxSpacing.spaceS),
-            // Title + hashtags (198:14200).
-            Text(
-              pl.title,
-              style: SkifluxTypography.headingH9Bold.copyWith(
-                color: SkifluxColors.contentPrimary,
-              ),
-            ),
-            const SizedBox(height: SkifluxSpacing.spaceXs),
-            Text(
-              '#UIDesign #Figma',
-              style: SkifluxTypography.bodyP11Regular.copyWith(
-                color: SkifluxColors.contentTertiary,
-              ),
-            ),
-            const SizedBox(height: SkifluxSpacing.spaceS),
-            _CreatorPillRow(playlist: pl),
-            const SizedBox(height: SkifluxSpacing.spaceS),
-            // Description clamped to 2 lines + brand link (198:14212).
-            Text(
-              pl.description,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: SkifluxTypography.bodyP11Regular.copyWith(
-                color: SkifluxColors.contentTertiary,
-              ),
-            ),
-            const SizedBox(height: SkifluxSpacing.spaceS),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: GestureDetector(
-                onTap: () => showPlaylistDescriptionSheet(
-                  context,
-                  playlist: pl,
-                ),
-                child: Text(
-                  'View Full Description',
-                  style: SkifluxTypography.uiButtonSmall.copyWith(
-                    color: SkifluxColors.contentBrand,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: SkifluxSpacing.spaceL),
-            _ActionsRow(playlist: pl),
-            const SizedBox(height: SkifluxSpacing.spaceL),
-            for (final (i, ep) in pl.episodes.indexed) ...[
-              if (i > 0) const SizedBox(height: SkifluxSpacing.spaceL),
-              PlaylistEpisodeRow(
+          itemCount: 1 + pl.episodes.length,
+          itemBuilder: (context, index) {
+            if (index == 0) return _PlaylistHeader(playlist: pl);
+            final ep = pl.episodes[index - 1];
+            return Padding(
+              // Between the rows only — the header already sets its own gap.
+              padding: const EdgeInsets.only(top: SkifluxSpacing.spaceL),
+              child: PlaylistEpisodeRow(
                 episode: ep,
-                onTap: () => openPlaylistEpisode(
-                  context,
-                  ep,
-                  pl,
-                  showViewPlaylist: false,
-                ),
+                onTap: () =>
+                    openPlaylistEpisode(context, ep, pl, showViewPlaylist: false),
               ),
-            ],
-          ],
+            );
+          },
         ),
       ),
+    );
+  }
+}
+
+/// Everything above the episode list: cover deck, title + hashtags, creator
+/// pill, the clamped description and its expander, then the actions row.
+///
+/// No trailing gap — the first episode row supplies it, the same as every row
+/// after it, so the list's rhythm is set in one place.
+class _PlaylistHeader extends StatelessWidget {
+  const _PlaylistHeader({required this.playlist});
+
+  final Playlist playlist;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        PlaylistDeck(
+          height: 150,
+          episodeCount: playlist.episodeCount,
+          backWidthFactor: 0.9336,
+        ),
+        const SizedBox(height: SkifluxSpacing.spaceS),
+        Text(
+          playlist.title,
+          style: SkifluxTypography.headingH9Bold.copyWith(
+            color: SkifluxColors.contentPrimary,
+          ),
+        ),
+        const SizedBox(height: SkifluxSpacing.spaceXs),
+        // TODO(backend, minor): playlist hashtags are not in the payload —
+        // expects: a `tags` array on the playlist so these stop being fixed
+        Text(
+          '#UIDesign #Figma',
+          style: SkifluxTypography.bodyP11Regular.copyWith(
+            color: SkifluxColors.contentTertiary,
+          ),
+        ),
+        const SizedBox(height: SkifluxSpacing.spaceS),
+        _CreatorPillRow(playlist: playlist),
+        const SizedBox(height: SkifluxSpacing.spaceS),
+        Text(
+          playlist.description,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: SkifluxTypography.bodyP10Regular.copyWith(
+            color: SkifluxColors.contentTertiary,
+          ),
+        ),
+        const SizedBox(height: SkifluxSpacing.spaceS),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: GestureDetector(
+            onTap: () =>
+                showPlaylistDescriptionSheet(context, playlist: playlist),
+            child: Text(
+              'View Full Description',
+              style: SkifluxTypography.uiButtonSmall.copyWith(
+                color: SkifluxColors.contentBrand,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: SkifluxSpacing.spaceL),
+        _ActionsRow(playlist: playlist),
+      ],
     );
   }
 }
@@ -162,9 +182,9 @@ class _CreatorPillRow extends StatelessWidget {
       borderRadius: SkifluxRadii.borderX,
       child: InkWell(
         borderRadius: SkifluxRadii.borderX,
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const ProfileScreen()),
-        ),
+        onTap: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const ProfileScreen())),
         child: Row(
           children: [
             SkifluxAvatar(
@@ -230,8 +250,9 @@ class _ActionsRow extends StatelessWidget {
             expanded: true,
             onPressed: () {
               // First playable episode (completed/unlocked) starts the run.
-              final first =
-                  playlist.episodes.where((e) => e.isUnlocked).firstOrNull;
+              final first = playlist.episodes
+                  .where((e) => e.isUnlocked)
+                  .firstOrNull;
               if (first != null) {
                 openPlaylistEpisode(
                   context,

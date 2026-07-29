@@ -68,11 +68,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final results = _results;
     if (results.query.isEmpty) return;
     try {
-      await ref.read(recentSearchesProvider.notifier).add(RecentSearch(
-            query: results.query,
-            topCategory: results.topCategory,
-            resultCount: results.total,
-          ));
+      await ref
+          .read(recentSearchesProvider.notifier)
+          .add(
+            RecentSearch(
+              query: results.query,
+              topCategory: results.topCategory,
+              resultCount: results.total,
+            ),
+          );
     } catch (e, st) {
       if (!mounted) return;
       await ErrorDisplay.show(
@@ -87,7 +91,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     unawaited(
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => SearchResultsScreen(results: results, initialTab: tab),
+          builder: (_) =>
+              SearchResultsScreen(results: results, initialTab: tab),
         ),
       ),
     );
@@ -127,9 +132,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   void _openCreatorProfile() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const ProfileScreen()),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
   }
 
   void _openUserProfile(PersonResult person) {
@@ -153,14 +158,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       next,
     ) {
       if (!next.hasError) return;
-      if (previous?.hasError == true) return; // avoid re-firing while still error
+      if (previous?.hasError == true) {
+        return; // avoid re-firing while still error
+      }
       ErrorDisplay.show(
         context,
         ref,
-        SkifluxFailure(
-          SkifluxErrorKind.contentLoadFailed,
-          cause: next.error,
-        ),
+        SkifluxFailure(SkifluxErrorKind.contentLoadFailed, cause: next.error),
         stackTrace: next.stackTrace,
       );
     });
@@ -237,7 +241,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           color: SkifluxColors.contentBrand,
         ),
         title: 'What are you looking for?',
-        message: 'Search across episodes, creators, users and playlists '
+        message:
+            'Search across episodes, creators, users and playlists '
             'all in one place.',
       ),
     );
@@ -255,7 +260,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           height: SkifluxSpacing.space4xl,
         ),
         title: 'Nothing found',
-        message: 'No episodes, creators, or playlists match '
+        message:
+            'No episodes, creators, or playlists match '
             '"${_results.query}". Try a different term.',
       ),
     );
@@ -344,9 +350,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 PlaylistResultCard(
                   playlist: p,
                   onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const PlaylistScreen(),
-                    ),
+                    MaterialPageRoute(builder: (_) => const PlaylistScreen()),
                   ),
                 ),
             ],

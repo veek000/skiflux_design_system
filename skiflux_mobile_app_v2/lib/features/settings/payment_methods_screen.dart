@@ -42,8 +42,8 @@ class PaymentMethodsScreen extends ConsumerWidget {
           children: [
             Text(
               'Manage the debit and credit cards you use to buy SkillCoins.',
-              style: SkifluxTypography.bodyP10Regular.copyWith(
-                color: SkifluxColors.contentTertiary,
+              style: SkifluxTypography.bodyP8Regular.copyWith(
+                color: SkifluxColors.contentDisabled,
               ),
             ),
             const SizedBox(height: SkifluxSpacing.spaceL),
@@ -53,9 +53,9 @@ class PaymentMethodsScreen extends ConsumerWidget {
                 children: [
                   for (final card in cards)
                     SettingsTile(
-                      icon: RemixIcons.bank_card_fill,
-                      iconBackground: card.tint,
-                      iconColor: card.glyph,
+                      icon: card.logo,
+                      iconBackground: SkifluxColors.brand100,
+                      iconColor: SkifluxColors.contentBrand,
                       title: card.title,
                       subtitle: card.subtitle,
                       trailing: IconButton(
@@ -75,7 +75,7 @@ class PaymentMethodsScreen extends ConsumerWidget {
             SettingsSection(
               children: [
                 SettingsTile(
-                  icon: RemixIcons.add_line,
+                  icon: RemixIcons.add_fill,
                   iconBackground: SkifluxColors.brand100,
                   iconColor: SkifluxColors.contentBrand,
                   title: 'Add New Card',
@@ -103,7 +103,8 @@ class PaymentMethodsScreen extends ConsumerWidget {
       final confirmed = await showConfirmSheet(
         context,
         title: 'Remove Card?',
-        message: 'Are you sure you want to remove this ${card.brand.label} '
+        message:
+            'Are you sure you want to remove this ${card.brand.label} '
             'ending in ${card.last4}?',
         confirmLabel: 'Remove',
         icon: RemixIcons.delete_bin_fill,
@@ -113,7 +114,8 @@ class PaymentMethodsScreen extends ConsumerWidget {
       await showSuccessSheet(
         context,
         title: 'Card Removed',
-        message: '${card.brand.label} ending in ${card.last4} has been removed '
+        message:
+            '${card.brand.label} ending in ${card.last4} has been removed '
             'from your payment methods.',
       );
     } catch (e, st) {
@@ -129,7 +131,8 @@ class PaymentMethodsScreen extends ConsumerWidget {
       await showSuccessSheet(
         context,
         title: 'Card Saved!',
-        message: 'Your new card has been securely added to your payment '
+        message:
+            'Your new card has been securely added to your payment '
             'methods.',
       );
     } catch (e, st) {

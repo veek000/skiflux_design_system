@@ -41,8 +41,8 @@ class BankAccountsScreen extends ConsumerWidget {
             Text(
               'Add and manage the bank accounts where you withdraw your '
               'SkillCoin earnings.',
-              style: SkifluxTypography.bodyP10Regular.copyWith(
-                color: SkifluxColors.contentTertiary,
+              style: SkifluxTypography.bodyP8Regular.copyWith(
+                color: SkifluxColors.contentDisabled,
               ),
             ),
             const SizedBox(height: SkifluxSpacing.spaceL),
@@ -56,7 +56,7 @@ class BankAccountsScreen extends ConsumerWidget {
                       iconBackground: SkifluxColors.brand100,
                       iconColor: SkifluxColors.contentBrand,
                       title: bank.bankName,
-                      subtitle: '${bank.holderName} ·· ${bank.last4}',
+                      subtitle: '${bank.holderName} ··· ${bank.last4}',
                       trailing: IconButton(
                         padding: EdgeInsets.zero,
                         icon: const Icon(
@@ -77,7 +77,7 @@ class BankAccountsScreen extends ConsumerWidget {
             SettingsSection(
               children: [
                 SettingsTile(
-                  icon: RemixIcons.add_line,
+                  icon: RemixIcons.add_fill,
                   iconBackground: SkifluxColors.brand100,
                   iconColor: SkifluxColors.contentBrand,
                   title: 'Add new bank account',
@@ -99,7 +99,8 @@ class BankAccountsScreen extends ConsumerWidget {
     await showSuccessSheet(
       context,
       title: 'Bank Account Saved',
-      message: 'Your withdrawal account has been verified and added '
+      message:
+          'Your withdrawal account has been verified and added '
           'successfully.',
     );
   }

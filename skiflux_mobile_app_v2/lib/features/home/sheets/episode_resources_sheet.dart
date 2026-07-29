@@ -34,7 +34,7 @@ class _EpisodeResourcesSheet extends StatelessWidget {
         controller: ModalScrollController.of(context),
         padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
         itemCount: _files.length,
-        separatorBuilder: (_, __) =>
+        separatorBuilder: (_, _) =>
             const SizedBox(height: SkifluxSpacing.spaceS),
         itemBuilder: (context, i) {
           final (name, meta, icon) = _files[i];

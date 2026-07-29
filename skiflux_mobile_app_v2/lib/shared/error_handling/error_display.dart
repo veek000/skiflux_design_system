@@ -75,8 +75,8 @@ abstract final class ErrorDisplay {
 
     if (classified.shouldReportToCrashReporting) {
       final cause = error is SkifluxFailure ? (error.cause ?? error) : error;
-      final st = stackTrace ??
-          (error is SkifluxFailure ? error.stackTrace : null);
+      final st =
+          stackTrace ?? (error is SkifluxFailure ? error.stackTrace : null);
       handler.reportTechnicalError(
         cause,
         stackTrace: st,

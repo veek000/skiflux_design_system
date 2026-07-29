@@ -8,6 +8,11 @@ import 'skiflux_sheet.dart';
 // full-width confirm button over a tertiary "Cancel". Returns true when the
 // user confirms, null/false otherwise (backdrop tap or Cancel).
 
+/// Figma's confirm/success dialog avatar: a 98px circle around a 48px glyph
+/// (29.4px padding). Neither size exists on the token scale.
+const double _avatarSize = 98;
+const double _glyphSize = 48;
+
 Future<bool?> showConfirmSheet(
   BuildContext context, {
   required String title,
@@ -59,64 +64,74 @@ class _ConfirmSheet extends StatelessWidget {
     return SkifluxSheetShell(
       title: '',
       showHeader: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          SkifluxSpacing.spaceL,
-          // Extra top clearance — headerless card, so the icon must sit
-          // clear of the grabber pill (top 8px + 4px tall).
-          SkifluxSpacing.space2xl,
-          SkifluxSpacing.spaceL,
-          0,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Container(
-                width: 98,
-                height: 98,
-                decoration: BoxDecoration(
-                  color: circleColor,
-                  shape: BoxShape.circle,
+      child: Stack(
+        children: [
+          Padding(
+            // Figma `1256:20160`: card pads 16 at the top, the label block is
+            // inset a further 16 either side (32 total), and the sticky button
+            // area below carries its own 16/8.
+            padding: const EdgeInsets.fromLTRB(
+              SkifluxSpacing.space2xl,
+              SkifluxSpacing.spaceL,
+              SkifluxSpacing.space2xl,
+              0,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: _avatarSize,
+                    height: _avatarSize,
+                    decoration: BoxDecoration(
+                      color: circleColor,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon, size: _glyphSize, color: glyphColor),
+                  ),
                 ),
-                child: Icon(icon, size: 48, color: glyphColor),
-              ),
+                const SizedBox(height: SkifluxSpacing.spaceS),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: SkifluxTypography.headingH7Bold.copyWith(
+                    color: SkifluxColors.contentPrimary,
+                  ),
+                ),
+                const SizedBox(height: SkifluxSpacing.spaceXs),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: SkifluxTypography.bodyP8Regular.copyWith(
+                    color: SkifluxColors.contentTertiary,
+                  ),
+                ),
+                const SizedBox(height: SkifluxSpacing.spaceL),
+                SkifluxButton(
+                  label: confirmLabel,
+                  type: destructive
+                      ? SkifluxButtonType.negative
+                      : SkifluxButtonType.primary,
+                  expanded: true,
+                  onPressed: () => Navigator.of(context).pop(true),
+                ),
+                const SizedBox(height: SkifluxSpacing.spaceS),
+                SkifluxButton(
+                  label: cancelLabel,
+                  type: SkifluxButtonType.secondary,
+                  expanded: true,
+                  onPressed: () => Navigator.of(context).pop(false),
+                ),
+              ],
             ),
-            const SizedBox(height: SkifluxSpacing.spaceL),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: SkifluxTypography.headingH7Bold.copyWith(
-                color: SkifluxColors.contentPrimary,
-              ),
-            ),
-            const SizedBox(height: SkifluxSpacing.spaceS),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: SkifluxTypography.bodyP8Regular.copyWith(
-                color: SkifluxColors.contentTertiary,
-              ),
-            ),
-            const SizedBox(height: SkifluxSpacing.spaceXl),
-            SkifluxButton(
-              label: confirmLabel,
-              type: destructive
-                  ? SkifluxButtonType.negative
-                  : SkifluxButtonType.primary,
-              expanded: true,
-              onPressed: () => Navigator.of(context).pop(true),
-            ),
-            const SizedBox(height: SkifluxSpacing.spaceS),
-            SkifluxButton(
-              label: cancelLabel,
-              type: SkifluxButtonType.secondary,
-              expanded: true,
-              onPressed: () => Navigator.of(context).pop(false),
-            ),
-          ],
-        ),
+          ),
+          const Positioned(
+            top: SkifluxSpacing.spaceL,
+            right: SkifluxSpacing.spaceL,
+            child: SkifluxSheetCloseButton(),
+          ),
+        ],
       ),
     );
   }

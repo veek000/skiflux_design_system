@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Android 12+ splash icon, intentionally blank.
+
+  From API 31 the platform *always* composites a splash screen over
+  `windowSplashScreenBackground`, defaulting to the launcher icon — that is the
+  "black screen with the app icon" the animation is supposed to replace. The
+  system splash cannot be turned off, so the icon is made invisible and only
+  the flat background remains, which the Lottie then continues from.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@android:color/transparent" />
+</shape>

@@ -1,10 +1,13 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/error_handling/error_display.dart';
 import '../../shared/error_handling/error_handler.dart';
+import '../../shared/sheets/success_sheet.dart';
+import '../../shared/toast/skiflux_toast.dart';
 import 'data/tasks_store.dart';
 import 'task_shared_widgets.dart';
 
@@ -68,23 +71,44 @@ class _SubmissionTaskScreenState extends ConsumerState<SubmissionTaskScreen> {
   }
 
   Future<void> _pickFile() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: _allowed,
-    );
-    if (result == null || result.files.isEmpty) return;
-    final f = result.files.first;
-    final ext = (f.extension ?? 'file').toLowerCase();
-    final sizeMb = f.size / (1024 * 1024);
+    // file_picker 12 flipped `pickFiles` to multi-select by default and added
+    // `pickFile` for the single-file case. A submission takes exactly one
+    // file, so use `pickFile` — otherwise the picker would let the user choose
+    // several and we would silently keep only the first.
+    PlatformFile? picked;
+    try {
+      picked = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: _allowed,
+      );
+    } on PlatformException {
+      // SAF picker refused to open (no document provider / OS denial).
+      if (!mounted) return;
+      SkifluxToast.error(context, "Couldn't open the file picker. Try again.");
+      return;
+    }
+    if (picked == null) return; // User cancelled the OS picker — not an error.
+    // Re-bind after the null check: promotion of a nullable local does not
+    // carry into a closure body, and the `_file` assignment below happens
+    // inside `setState`.
+    final file = picked;
+    // The dropzone copy promises "Max 10MB" — hold the line client-side.
+    if (file.size > 10 * 1024 * 1024) {
+      if (!mounted) return;
+      SkifluxToast.error(context, 'That file is over the 10MB limit.');
+      return;
+    }
+    final ext = (file.extension ?? 'file').toLowerCase();
+    final sizeMb = file.size / (1024 * 1024);
     final sizeLabel = sizeMb >= 0.1
         ? '${sizeMb.toStringAsFixed(sizeMb >= 10 ? 0 : 1)} MB'
-        : '${(f.size / 1024).toStringAsFixed(0)} KB';
+        : '${(file.size / 1024).toStringAsFixed(0)} KB';
     setState(() {
       _file = UploadedFileInfo(
-        name: f.name,
+        name: file.name,
         extensionLabel: ext.toUpperCase(),
         sizeLabel: sizeLabel,
-        path: f.path,
+        path: file.path,
       );
     });
   }
@@ -98,7 +122,8 @@ class _SubmissionTaskScreenState extends ConsumerState<SubmissionTaskScreen> {
       if (_method == 0) {
         final link = _linkController.text.trim();
         final uri = Uri.tryParse(link);
-        final valid = uri != null &&
+        final valid =
+            uri != null &&
             (uri.scheme == 'http' || uri.scheme == 'https') &&
             uri.host.isNotEmpty;
         if (!valid) {
@@ -111,16 +136,22 @@ class _SubmissionTaskScreenState extends ConsumerState<SubmissionTaskScreen> {
       }
       ref.read(tasksProvider.notifier).markInReview(widget.taskId);
       if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => _TaskSubmittedDialog(
-          onClose: () {
-            Navigator.of(ctx).pop();
-            Navigator.of(context).pop();
-          },
-        ),
+      // Confirmation rides the app-wide overlay pattern (blur + scrim +
+      // headerless card) rather than a centred Material Dialog — same shell
+      // every other success state in the app uses.
+      await showSuccessSheet(
+        context,
+        title: 'Task Submitted!',
+        message:
+            'Your work is in review. You\'ll be notified when it\'s '
+            'approved — usually within 24 hours.',
+        buttonLabel: 'Back to Tasks',
       );
+      // Any dismissal — button, close circle, scrim tap, swipe-down — returns
+      // to the task list, which is what the old barrier-locked dialog did on
+      // its single action.
+      if (!mounted) return;
+      Navigator.of(context).pop();
     } catch (e, st) {
       if (!mounted) return;
       // Centralized classify → toast/modal + crash-report hook.
@@ -582,62 +613,3 @@ class _NoteField extends StatelessWidget {
     );
   }
 }
-
-class _TaskSubmittedDialog extends StatelessWidget {
-  const _TaskSubmittedDialog({required this.onClose});
-
-  final VoidCallback onClose;
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: SkifluxColors.backgroundPrimary,
-      shape: RoundedRectangleBorder(borderRadius: SkifluxRadii.borderXl),
-      child: Padding(
-        padding: const EdgeInsets.all(SkifluxSpacing.spaceXl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 98,
-              height: 98,
-              decoration: const BoxDecoration(
-                color: SkifluxColors.backgroundPositiveSubtle,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                RemixIcons.check_fill,
-                size: 48,
-                color: SkifluxColors.contentPositive,
-              ),
-            ),
-            const SizedBox(height: SkifluxSpacing.spaceS),
-            Text(
-              'Task Submitted!',
-              textAlign: TextAlign.center,
-              style: SkifluxTypography.headingH7Bold.copyWith(
-                color: SkifluxColors.contentPrimary,
-              ),
-            ),
-            const SizedBox(height: SkifluxSpacing.spaceXs),
-            Text(
-              'Your work is in review. You\'ll be notified when it\'s '
-              'approved — usually within 24 hours.',
-              textAlign: TextAlign.center,
-              style: SkifluxTypography.bodyP8Regular.copyWith(
-                color: SkifluxColors.contentTertiary,
-              ),
-            ),
-            const SizedBox(height: SkifluxSpacing.spaceXl),
-            SkifluxButton(
-              label: 'Back to Tasks',
-              expanded: true,
-              onPressed: onClose,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-

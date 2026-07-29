@@ -22,8 +22,9 @@ void main() {
 
     test('seed includes completed submission and quiz', () {
       final state = container.read(tasksProvider);
-      final completed =
-          state.learning.where((t) => t.status == LearningTaskStatus.completed);
+      final completed = state.learning.where(
+        (t) => t.status == LearningTaskStatus.completed,
+      );
       expect(completed, hasLength(2));
     });
 
@@ -50,10 +51,7 @@ void main() {
         isNotNull,
       );
       notifier.markInReview('learn-5');
-      expect(
-        container.read(tasksProvider).byId('learn-5')?.feedback,
-        isNull,
-      );
+      expect(container.read(tasksProvider).byId('learn-5')?.feedback, isNull);
     });
 
     test('markCompleted updates task status', () {
@@ -103,28 +101,32 @@ void main() {
       expect(task?.quizCorrect, 1);
     });
 
-    test('completeMission marks mission as done', () {
+    test('completeMission marks mission as done', () async {
       final notifier = container.read(tasksProvider.notifier);
-      notifier.completeMission('m-ig');
-      final mission =
-          container.read(tasksProvider).missions.firstWhere((m) => m.id == 'm-ig');
+      await notifier.completeMission('m-ig');
+      final mission = container
+          .read(tasksProvider)
+          .missions
+          .firstWhere((m) => m.id == 'm-ig');
       expect(mission.completed, isTrue);
     });
 
-    test('completeMission on already-completed mission is idempotent', () {
+    test('completeMission on already-completed mission is idempotent', () async {
       final notifier = container.read(tasksProvider.notifier);
-      notifier.completeMission('m-ig');
+      await notifier.completeMission('m-ig');
       // Complete again — should stay completed (not throw or reset).
-      notifier.completeMission('m-ig');
-      final mission =
-          container.read(tasksProvider).missions.firstWhere((m) => m.id == 'm-ig');
+      await notifier.completeMission('m-ig');
+      final mission = container
+          .read(tasksProvider)
+          .missions
+          .firstWhere((m) => m.id == 'm-ig');
       expect(mission.completed, isTrue);
     });
 
-    test('completeMission on unknown id is no-op', () {
+    test('completeMission on unknown id is no-op', () async {
       final notifier = container.read(tasksProvider.notifier);
       const originalCount = 10;
-      notifier.completeMission('nonexistent');
+      await notifier.completeMission('nonexistent');
       expect(container.read(tasksProvider).missions, hasLength(originalCount));
     });
 

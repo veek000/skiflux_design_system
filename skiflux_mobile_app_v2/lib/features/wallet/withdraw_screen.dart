@@ -80,13 +80,11 @@ class WithdrawScreenState extends ConsumerState<WithdrawScreen> {
                   CoinSummaryCard(
                     rows: [
                       CoinSummaryRow('Coins to withdraw', '$_coins'),
-                      const CoinSummaryRow(
-                        'Rate',
-                        '1 coin = ₦$kCoinRateNaira',
-                      ),
+                      const CoinSummaryRow('Rate', '1 coin = ₦$kCoinRateNaira'),
                     ],
                     totalLabel: 'You Receive',
-                    total: '₦${CoinPack.thousands(naira)}'
+                    total:
+                        '₦${CoinPack.thousands(naira)}'
                         '${naira == 0 ? '.0' : ''}',
                   ),
                   const SizedBox(height: SkifluxSpacing.spaceL),
@@ -219,11 +217,9 @@ class WithdrawScreenState extends ConsumerState<WithdrawScreen> {
       }
       // Deduct from the shared wallet + record the ledger entry.
       ref.read(playlistsProvider.notifier).withdraw(coins);
-      ref.read(walletProvider.notifier).recordWithdrawal(
-            coins,
-            naira,
-            bank.last4,
-          );
+      ref
+          .read(walletProvider.notifier)
+          .recordWithdrawal(coins, naira, bank.last4);
       if (!mounted) return;
       await showWithdrawalSuccessSheet(
         context,
@@ -360,11 +356,8 @@ Future<void> showWithdrawalSuccessSheet(
 }) {
   return showSkifluxSheet<void>(
     context: context,
-    builder: (_) => _WithdrawalSuccessSheet(
-      coins: coins,
-      naira: naira,
-      bank: bank,
-    ),
+    builder: (_) =>
+        _WithdrawalSuccessSheet(coins: coins, naira: naira, bank: bank),
   );
 }
 

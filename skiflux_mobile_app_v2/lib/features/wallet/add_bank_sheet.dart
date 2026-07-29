@@ -12,6 +12,11 @@ import 'data/wallet_store.dart';
 // Verify & Save. Saves the account as the wallet's default withdrawal
 // destination and resolves with it.
 
+/// Figma's dialog avatar: a 98px circle around a 48px glyph. Neither size
+/// exists on the token scale.
+const double _avatarSize = 98;
+const double _glyphSize = 48;
+
 /// Demo bank list for the dropdown (no bank API yet).
 const List<String> _kBanks = [
   'GT Bank',
@@ -65,7 +70,7 @@ class _AddBankSheetState extends ConsumerState<_AddBankSheet> {
             const SizedBox(height: SkifluxSpacing.spaceL),
             Text(
               'Select Bank',
-              style: SkifluxTypography.headingH9Bold.copyWith(
+              style: SkifluxTypography.uiInputLabel.copyWith(
                 color: SkifluxColors.contentPrimary,
               ),
             ),
@@ -74,7 +79,7 @@ class _AddBankSheetState extends ConsumerState<_AddBankSheet> {
             const SizedBox(height: SkifluxSpacing.spaceL),
             Text(
               'Account Number',
-              style: SkifluxTypography.headingH9Bold.copyWith(
+              style: SkifluxTypography.uiInputLabel.copyWith(
                 color: SkifluxColors.contentPrimary,
               ),
             ),
@@ -83,9 +88,8 @@ class _AddBankSheetState extends ConsumerState<_AddBankSheet> {
               controller: _numberController,
               hintText: '01234567890',
               keyboardType: TextInputType.number,
-              onChanged: (value) => setState(
-                () => _numberValid = value.trim().length >= 10,
-              ),
+              onChanged: (value) =>
+                  setState(() => _numberValid = value.trim().length >= 10),
             ),
             const SizedBox(height: SkifluxSpacing.spaceL),
             SkifluxButton(
@@ -127,7 +131,8 @@ class _AddBankSheetState extends ConsumerState<_AddBankSheet> {
                     ),
                   ),
                   TextSpan(
-                    text: 'The bank account name must exactly match your '
+                    text:
+                        'The bank account name must exactly match your '
                         'Skiflux profile name to be saved and used for '
                         'withdrawals.',
                     style: SkifluxTypography.bodyP10Regular.copyWith(
@@ -228,68 +233,111 @@ class _AccountMismatchSheet extends StatelessWidget {
     return SkifluxSheetShell(
       title: '',
       showHeader: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          SkifluxSpacing.spaceL,
-          SkifluxSpacing.space2xl,
-          SkifluxSpacing.spaceL,
-          0,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Container(
-                width: 98,
-                height: 98,
-                decoration: const BoxDecoration(
-                  color: SkifluxColors.backgroundNegativeSubtle,
-                  shape: BoxShape.circle,
+      child: Stack(
+        children: [
+          Padding(
+            // Same dialog metrics as the confirm/success cards (`1256:20468`):
+            // 16 at the top of the card, the label block inset a further 16
+            // either side, the sticky button area carrying its own 16/8.
+            padding: const EdgeInsets.fromLTRB(
+              SkifluxSpacing.space2xl,
+              SkifluxSpacing.spaceL,
+              SkifluxSpacing.space2xl,
+              0,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: _avatarSize,
+                    height: _avatarSize,
+                    decoration: const BoxDecoration(
+                      color: SkifluxColors.backgroundNegativeSubtle,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      RemixIcons.close_fill,
+                      size: _glyphSize,
+                      color: SkifluxColors.contentNegativeBold,
+                    ),
+                  ),
                 ),
-                child: const Icon(
-                  RemixIcons.close_fill,
-                  size: 48,
-                  color: SkifluxColors.contentNegative,
+                const SizedBox(height: SkifluxSpacing.spaceS),
+                Text(
+                  'Account Name Mismatch',
+                  textAlign: TextAlign.center,
+                  style: SkifluxTypography.headingH7Bold.copyWith(
+                    color: SkifluxColors.contentPrimary,
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(height: SkifluxSpacing.spaceL),
-            Text(
-              'Account Name Mismatch',
-              textAlign: TextAlign.center,
-              style: SkifluxTypography.headingH7Bold.copyWith(
-                color: SkifluxColors.contentPrimary,
-              ),
-            ),
-            const SizedBox(height: SkifluxSpacing.spaceS),
-            Text(
-              'For your security, withdrawals can only be processed to a bank '
-              'account that exactly matches your verified Skiflux profile. The '
-              'account provided does not match. Please use an account with '
-              'your legal name, or reach out to support for a profile update.',
-              textAlign: TextAlign.center,
-              style: SkifluxTypography.bodyP8Regular.copyWith(
-                color: SkifluxColors.contentTertiary,
-              ),
-            ),
-            const SizedBox(height: SkifluxSpacing.spaceXl),
-            SkifluxButton(
-              label: 'Link Another Account',
-              expanded: true,
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-            const SizedBox(height: SkifluxSpacing.spaceS),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(
-                'Contact Support',
-                style: SkifluxTypography.uiButtonLarge.copyWith(
-                  color: SkifluxColors.contentNegative,
+                const SizedBox(height: SkifluxSpacing.spaceXs),
+                Text(
+                  'For your security, withdrawals can only be processed to a '
+                  'bank account that exactly matches your verified Skiflux '
+                  'profile. The account provided does not match. Please use an '
+                  'account with your legal name, or reach out to support for a '
+                  'profile update.',
+                  textAlign: TextAlign.center,
+                  style: SkifluxTypography.bodyP8Regular.copyWith(
+                    color: SkifluxColors.contentTertiary,
+                  ),
                 ),
-              ),
+                const SizedBox(height: SkifluxSpacing.spaceL),
+                SkifluxButton(
+                  label: 'Link Another Account',
+                  expanded: true,
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+                const SizedBox(height: SkifluxSpacing.spaceS),
+                // Figma `I1256:20476;190:6566` is a secondary (border/tertiary)
+                // button carrying a Content/Negative label — a pairing the
+                // design system's button variants don't cover, so it's built
+                // here from the same pill metrics.
+                const _ContactSupportButton(),
+              ],
             ),
-          ],
+          ),
+          const Positioned(
+            top: SkifluxSpacing.spaceL,
+            right: SkifluxSpacing.spaceL,
+            child: SkifluxSheetCloseButton(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ContactSupportButton extends StatelessWidget {
+  const _ContactSupportButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: SkifluxRadii.borderPill,
+      child: InkWell(
+        borderRadius: SkifluxRadii.borderPill,
+        onTap: () => Navigator.of(context).pop(),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: SkifluxUnit.u48),
+          padding: const EdgeInsets.all(SkifluxSpacing.spaceM),
+          decoration: BoxDecoration(
+            borderRadius: SkifluxRadii.borderPill,
+            border: Border.all(
+              color: SkifluxColors.borderTertiary,
+              width: SkifluxBorderWidth.xs,
+            ),
+          ),
+          child: Text(
+            'Contact Support',
+            textAlign: TextAlign.center,
+            style: SkifluxTypography.uiButtonLarge.copyWith(
+              color: SkifluxColors.contentNegative,
+            ),
+          ),
         ),
       ),
     );

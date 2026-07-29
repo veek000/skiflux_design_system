@@ -4,7 +4,7 @@ publish_to: none
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.5.0
+  sdk: ^3.8.0
 
 dependencies:
   flutter:
@@ -13,7 +13,20 @@ dependencies:
     path: ../skiflux_design_system
   cupertino_icons: ^1.0.8
   # Persistent recent-search history (confirmed per CLAUDE.md package policy).
+  # Non-sensitive local state only — auth tokens live in flutter_secure_storage.
   shared_preferences: ^2.3.2
+  # HTTP client for backend integration — confirmed 2026-07-27. Chosen over
+  # package:http for its interceptor pipeline: every mobile endpoint is
+  # bearerAuth, so token attach + refresh-on-401 + retry belong in one
+  # interceptor rather than at each call site.
+  dio: ^5.7.0
+  # Auth token storage — iOS Keychain / Android EncryptedSharedPreferences.
+  # Confirmed 2026-07-27: shared_preferences is plaintext, so a refresh token
+  # there is readable on a rooted device. Native dependency, so any change
+  # here needs a full `flutter build apk --debug`.
+  # 10.x, not 9.x: 9.x pins win32 ^5 via flutter_secure_storage_windows, which
+  # collides with file_picker 12's win32 ^6.
+  flutter_secure_storage: ^10.3.1
   # Streak-flow vector decor (light ray, laurels) — confirmed per CLAUDE.md
   # package policy; same version the design system uses.
   flutter_svg: ^2.0.10
@@ -21,10 +34,16 @@ dependencies:
   # per CLAUDE.md package policy (pure Dart, no native code).
   timeago: ^3.7.0
   # Real file picking on submission tasks (Task Flow) — confirmed "real"
-  # per package policy. Pinned with share_plus 10.x for win32 compatibility.
-  file_picker: 10.1.9
-  # Native share sheet for quiz "Share Result" — confirmed "real".
-  share_plus: 10.1.4
+  # per package policy. v12 is a pre-release: it flipped `pickFiles` to
+  # multi-select by default and added `pickFile` for the single-file case,
+  # which is what the submission screen uses.
+  file_picker: ^12.0.0-beta.7
+  # Native share sheet for quiz "Share Result" — confirmed "real". Currently
+  # DECLARED BUT UNUSED: every share entry point routes through the in-app
+  # `showShareSheet` modal instead, so nothing imports this yet. Kept for when
+  # the share targets are wired to real deep links (see the TODO(backend,
+  # minor) in shared/sheets/share_sheet.dart).
+  share_plus: ^13.3.0
   # App state (Pass 1: notifications / leaderboard / streaks) — confirmed
   # for Riverpod migration.
   flutter_riverpod: ^3.3.2
@@ -34,11 +53,70 @@ dependencies:
   modal_bottom_sheet: ^3.0.0
   # Real-time crash reporting and exception monitoring
   sentry_flutter: ^8.9.0
+  # Renders the brand splash Bodymovin/Lottie export (assets/animations/
+  # logo_splash.json) — confirmed per CLAUDE.md package policy. Pure Dart, no
+  # platform config; keeps the JSON as the source of truth so a re-export from
+  # design needs no code change.
+  lottie: ^3.5.1
+  # Immutable data-class code generation for backend-integration models.
+  json_annotation: ^4.12.0
+  freezed_annotation: ^3.1.0
+  # Exact-precision decimal arithmetic for money fields (Skillcoins, fiat
+  # amounts — backend returns these as decimal-formatted strings).
+  decimal: ^2.3.3
+  # Face ID / fingerprint for the post-sign-in gate (`198:16415`, `70:4453`).
+  # Confirmed per CLAUDE.md package policy: the platform prompt is system UI
+  # and cannot be hand-rolled.
+  local_auth: ^3.0.2
+  # Native gallery/camera picking for the Edit Profile avatar — confirmed
+  # "real" per package policy. Uses the OS photo picker on Android 13+ and
+  # camera-capture intents, so no Android manifest permissions are required
+  # (declaring CAMERA would *add* a runtime-permission requirement).
+  image_picker: ^1.1.2
+  # FCM receive/display (throwaway Firebase project skiflux-fcm-test).
+  # Exact pins per freezed precedent + FlutterFire BoM 4.17.1 co-release.
+  # Verified via `flutter pub add --dry-run` (2026-07-27). Swap later:
+  # replace google-services.json, GoogleService-Info.plist, firebase_options.dart.
+  firebase_core: 4.12.1
+  firebase_messaging: 16.4.3
+  # Home feed video playback + real progress bar (user-approved 2026-07-28).
+  # Exact pin per freezed/FCM precedent. Image feed items never use this.
+  video_player: 2.13.0
+  # Social sign-in / sign-up (user-approved 2026-07-28). The backend's
+  # `/auth/social/mobile/{google,apple}` endpoints each take a provider
+  # `id_token`, which only the native SDK can mint — there is nothing to
+  # hand-roll here. Exact pins per the freezed/FCM/video_player precedent.
+  #
+  # google_sign_in 7.x is a rewrite: `GoogleSignIn.instance` must be
+  # `initialize()`d once, `authenticate()` replaces signIn(), and on Android it
+  # runs on Credential Manager. Crucially it only returns an `idToken` when a
+  # **serverClientId** (the backend's *Web* OAuth client ID) is supplied — see
+  # EnvConfig.googleServerClientId.
+  google_sign_in: 7.2.0
+  # Apple requires this whenever a third-party sign-in is offered on iOS, so it
+  # is a store-review requirement, not just parity with the Figma frame.
+  sign_in_with_apple: 8.1.0
+
+flutter_launcher_icons:
+  image_path: "assets/app_icons/app_icon_source.png"
+  android: true
+  ios: true
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/app_icons/adaptive_foreground.png"
+  remove_alpha_ios: true
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^4.0.0
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+  # Code-gen for freezed models. Pinned exact: ^3.1.0 once resolved the
+  # 3.2.6-dev.1 prerelease, which emitted incomplete .freezed.dart files
+  # (mixin present, concrete _Class missing). 3.2.5 is the latest stable.
+  freezed: 3.2.5
+  build_runner: ^2.4.0
+  # JSON (de)serialization runner paired with freezed.
+  json_serializable: ^6.9.0
 
 flutter:
   uses-material-design: true
@@ -49,3 +127,11 @@ flutter:
     - assets/streaks/
     # Achievement badges + leaderboard podium (deferred screens).
     - assets/badges/
+    # Lottie/Bodymovin exports (brand splash).
+    - assets/animations/
+    # Onboarding artwork (Figma 224:3286 / 224:3332 / 224:3450).
+    - assets/illustrations/
+    # Third-party brand marks for social sign-in.
+    - assets/brand/
+    # SkillCoin mark on the transaction details summary (Figma 3664:13267).
+    - assets/wallet/

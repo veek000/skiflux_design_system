@@ -66,6 +66,16 @@ class ClassifiedError {
   final String? actionLabel;
 }
 
+/// The copy shown for both transport failures.
+///
+/// Named because two places need to *recognise* it, not just print it: the
+/// offline bar covers this exact condition globally, so an inline banner that
+/// repeats it word-for-word is redundant. Screens compare against this constant
+/// rather than a copy-pasted literal, so rewording the sentence cannot
+/// accidentally reintroduce the duplicate.
+const kNoConnectionMessage =
+    "Couldn't connect. Check your internet and try again.";
+
 /// Typed app failure — preferred throw type from notifiers / services.
 class SkifluxFailure implements Exception {
   const SkifluxFailure(this.kind, {this.cause, this.stackTrace});
@@ -131,16 +141,14 @@ class ErrorHandler {
       case SkifluxErrorKind.networkTimeout:
         return const ClassifiedError(
           uiType: ErrorUiType.toast,
-          message:
-              "Couldn't connect. Check your internet and try again.",
+          message: kNoConnectionMessage,
           kind: SkifluxErrorKind.networkTimeout,
           shouldReportToCrashReporting: false,
         );
       case SkifluxErrorKind.noConnection:
         return const ClassifiedError(
           uiType: ErrorUiType.toast,
-          message:
-              "Couldn't connect. Check your internet and try again.",
+          message: kNoConnectionMessage,
           kind: SkifluxErrorKind.noConnection,
           shouldReportToCrashReporting: false,
         );
@@ -154,8 +162,7 @@ class ErrorHandler {
       case SkifluxErrorKind.searchFailed:
         return const ClassifiedError(
           uiType: ErrorUiType.toast,
-          message:
-              'Something went wrong with your search. Please try again.',
+          message: 'Something went wrong with your search. Please try again.',
           kind: SkifluxErrorKind.searchFailed,
           shouldReportToCrashReporting: false,
         );
@@ -204,8 +211,7 @@ class ErrorHandler {
       case SkifluxErrorKind.paymentMethodActionFailed:
         return const ClassifiedError(
           uiType: ErrorUiType.modal,
-          message:
-              "We couldn't update your payment methods. Please try again.",
+          message: "We couldn't update your payment methods. Please try again.",
           kind: SkifluxErrorKind.paymentMethodActionFailed,
           shouldReportToCrashReporting: true,
           actionLabel: 'Try Again',
@@ -233,8 +239,7 @@ class ErrorHandler {
       case SkifluxErrorKind.sessionExpired:
         return const ClassifiedError(
           uiType: ErrorUiType.modal,
-          message:
-              'Your session timed out. Please log in again to continue.',
+          message: 'Your session timed out. Please log in again to continue.',
           kind: SkifluxErrorKind.sessionExpired,
           shouldReportToCrashReporting: true,
           actionLabel: 'Log In',

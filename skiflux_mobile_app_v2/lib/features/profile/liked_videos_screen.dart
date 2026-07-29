@@ -2,13 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
-import '../subscriptions/data/subscriptions_store.dart';
-import '../subscriptions/subscriptions_screen.dart';
+import '../../shared/error_handling/error_handler.dart';
+import '../../shared/toast/skiflux_toast.dart';
+import '../../shared/widgets/load_failure.dart';
+import 'data/library_episode.dart';
+import 'data/library_store.dart';
+import 'library_episode_player.dart';
+import 'library_episode_row.dart';
 
 // Figma: **Profile Flow 04** (`1256:25294`) — Liked Videos. Search field over
 // a list of liked-episode rows: 98px thumbnail (EP + duration pills), 2-line
 // title, creator avatar + name, views, red filled heart trailing. Tapping the
 // heart un-likes (removes) the row; tapping the row opens the episode player.
+//
+// Backed by `GET /me/liked`; the heart posts `POST /episodes/like`, which is a
+// toggle. Nothing is seeded — an empty list means the user has liked nothing.
 
 class LikedVideosScreen extends ConsumerStatefulWidget {
   const LikedVideosScreen({super.key});
@@ -20,21 +28,9 @@ class LikedVideosScreen extends ConsumerStatefulWidget {
 class _LikedVideosScreenState extends ConsumerState<LikedVideosScreen> {
   String _query = '';
 
-  /// Session-local demo "liked" set: first five feed episodes; un-liking
-  /// removes locally (no store — likes aren't modeled app-wide yet).
-  // TODO(backend, blocking): replace session-local liked list with real per-user liked videos fetched from backend — expects: List<{epNumber: int, title: String, creatorUsername: String, duration: String, views: String, postedAgo: String, isNew: bool, postedToday: bool, watchProgress: double}>
-  List<SubscriptionEpisode>? _liked;
-
   @override
   Widget build(BuildContext context) {
-    final subs = ref.watch(subscriptionsProvider);
-    _liked ??= subs.feed().take(5).toList();
-    final query = _query.trim().toLowerCase();
-    final visible = query.isEmpty
-        ? _liked!
-        : _liked!
-            .where((e) => e.title.toLowerCase().contains(query))
-            .toList();
+    final liked = ref.watch(likedEpisodesProvider);
 
     return Scaffold(
       backgroundColor: SkifluxColors.backgroundPrimary,
@@ -60,27 +56,16 @@ class _LikedVideosScreenState extends ConsumerState<LikedVideosScreen> {
               ),
             ),
             Expanded(
-              child: visible.isEmpty
-                  ? _empty()
-                  : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(
-                        SkifluxSpacing.spaceL,
-                        0,
-                        SkifluxSpacing.spaceL,
-                        SkifluxSpacing.spaceL,
-                      ),
-                      itemCount: visible.length,
-                      separatorBuilder: (_, __) =>
-                          const SizedBox(height: SkifluxSpacing.spaceL),
-                      itemBuilder: (_, i) => _LikedRow(
-                        episode: visible[i],
-                        onOpen: () =>
-                            showEpisodePlayerModal(context, visible[i]),
-                        onUnlike: () => setState(
-                          () => _liked!.remove(visible[i]),
-                        ),
-                      ),
-                    ),
+              child: switch (liked) {
+                AsyncLoading() => const LibraryListSkeleton(),
+                AsyncError(:final error) => LoadFailure(
+                  error: error,
+                  title: "We couldn't load your liked videos",
+                  onRetry: () =>
+                      ref.read(likedEpisodesProvider.notifier).refresh(),
+                ),
+                AsyncData(:final value) => _list(value),
+              },
             ),
           ],
         ),
@@ -88,181 +73,64 @@ class _LikedVideosScreenState extends ConsumerState<LikedVideosScreen> {
     );
   }
 
-  /// Shown when there are no liked videos (or none match the search).
-  Widget _empty() {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 98,
-            height: 98,
-            decoration: const BoxDecoration(
-              color: SkifluxColors.brand100,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              RemixIcons.heart_3_fill,
-              size: 48,
-              color: SkifluxColors.contentBrand,
-            ),
-          ),
-          const SizedBox(height: SkifluxSpacing.spaceL),
-          Text(
-            'No liked videos',
-            style: SkifluxTypography.headingH7Bold.copyWith(
-              color: SkifluxColors.contentPrimary,
-            ),
-          ),
-          const SizedBox(height: SkifluxSpacing.spaceS),
-          Text(
-            'Videos you like will show up here.',
-            style: SkifluxTypography.bodyP8Regular.copyWith(
-              color: SkifluxColors.contentTertiary,
-            ),
-          ),
-        ],
+  Widget _list(List<LibraryEpisode> episodes) {
+    final query = _query.trim().toLowerCase();
+    final visible = query.isEmpty
+        ? episodes
+        : episodes
+              .where((e) => e.title.toLowerCase().contains(query))
+              .toList();
+    if (visible.isEmpty) {
+      return SkifluxEmptyState(
+        icon: const Icon(
+          RemixIcons.heart_3_fill,
+          size: SkifluxEmptyState.iconSize,
+          color: SkifluxColors.contentBrand,
+        ),
+        title: query.isEmpty ? 'No liked videos' : 'No matches',
+        message: query.isEmpty
+            ? 'Videos you like will show up here.'
+            : 'No liked video matches “$_query”.',
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(
+        SkifluxSpacing.spaceL,
+        0,
+        SkifluxSpacing.spaceL,
+        SkifluxSpacing.spaceL,
       ),
-    );
-  }
-}
-
-/// One liked-episode row (`1256:25302`): thumbnail + title/creator/views +
-/// red heart.
-class _LikedRow extends ConsumerWidget {
-  const _LikedRow({
-    required this.episode,
-    required this.onOpen,
-    required this.onUnlike,
-  });
-
-  final SubscriptionEpisode episode;
-  final VoidCallback onOpen;
-  final VoidCallback onUnlike;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final creator = ref.watch(subscriptionsProvider).creatorOf(episode);
-    return InkWell(
-      onTap: onOpen,
-      borderRadius: SkifluxRadii.borderL,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _thumbnail(),
-          const SizedBox(width: SkifluxSpacing.spaceM),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  episode.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: SkifluxTypography.headingH10Bold.copyWith(
-                    color: SkifluxColors.contentPrimary,
-                  ),
-                ),
-                const SizedBox(height: SkifluxSpacing.spaceXs),
-                Row(
-                  children: [
-                    SkifluxAvatar(
-                      style: SkifluxAvatarStyle.initial,
-                      size: SkifluxSpacing.spaceL,
-                      initials: creator.initials,
-                    ),
-                    const SizedBox(width: SkifluxSpacing.spaceXs),
-                    Flexible(
-                      child: Text(
-                        creator.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: SkifluxTypography.bodyP11Regular.copyWith(
-                          color: SkifluxColors.contentTertiary,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: SkifluxSpacing.spaceXs),
-                Text(
-                  '${episode.views} views',
-                  style: SkifluxTypography.bodyP11Regular.copyWith(
-                    color: SkifluxColors.contentTertiary,
-                  ),
-                ),
-              ],
-            ),
+      itemCount: visible.length,
+      separatorBuilder: (_, _) => const SizedBox(height: SkifluxSpacing.spaceL),
+      itemBuilder: (_, i) => LibraryEpisodeRow(
+        episode: visible[i],
+        statusLine: '${visible[i].viewsLabel} views',
+        onTap: () => showLibraryEpisodePlayer(context, visible[i]),
+        trailing: IconButton(
+          padding: EdgeInsets.zero,
+          onPressed: () => _unlike(visible[i]),
+          icon: const Icon(
+            RemixIcons.heart_3_fill,
+            size: SkifluxIcons.sizeM,
+            color: SkifluxColors.contentNegative,
           ),
-          const SizedBox(width: SkifluxSpacing.spaceS),
-          IconButton(
-            padding: EdgeInsets.zero,
-            onPressed: onUnlike,
-            icon: const Icon(
-              RemixIcons.heart_3_fill,
-              size: SkifluxIcons.sizeM,
-              color: SkifluxColors.contentNegative,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _thumbnail() {
-    return ClipRRect(
-      borderRadius: SkifluxRadii.borderL,
-      child: SizedBox(
-        width: 128,
-        height: 98,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // TODO(backend, blocking): replace local placeholder asset with real CDN/backend episode thumbnail URL — expects: String (network URL)
-            Image.asset(
-              'assets/home_video_cover.png',
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) =>
-                  const ColoredBox(color: SkifluxColors.magenta900),
-            ),
-            Positioned(
-              top: SkifluxSpacing.spaceS,
-              left: SkifluxSpacing.spaceS,
-              child: _pill(
-                episode.epTag,
-                background: SkifluxColors.contentBrand,
-              ),
-            ),
-            Positioned(
-              bottom: SkifluxSpacing.spaceS,
-              right: SkifluxSpacing.spaceS,
-              child: _pill(
-                episode.duration,
-                background: SkifluxColors.overlay50,
-              ),
-            ),
-          ],
         ),
       ),
     );
   }
 
-  Widget _pill(String label, {required Color background}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: SkifluxSpacing.spaceS,
-        vertical: SkifluxSpacing.space2xs,
-      ),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: SkifluxRadii.borderX,
-      ),
-      child: Text(
-        label,
-        style: SkifluxTypography.bodyP11Semibold.copyWith(
-          color: SkifluxColors.contentPrimaryInverse,
-        ),
-      ),
-    );
+  Future<void> _unlike(LibraryEpisode episode) async {
+    try {
+      await ref.read(likedEpisodesProvider.notifier).unlike(episode);
+      if (mounted) SkifluxToast.info(context, 'Removed from liked videos');
+    } catch (error) {
+      // The row is already back — say why it came back.
+      if (!mounted) return;
+      SkifluxToast.error(
+        context,
+        ref.read(errorHandlerProvider).classify(error).message,
+      );
+    }
   }
 }

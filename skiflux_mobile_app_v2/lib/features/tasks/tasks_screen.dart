@@ -35,9 +35,9 @@ class _TasksBodyState extends ConsumerState<TasksBody> {
       children: [
         SubscriptionsTopBar(
           title: 'Tasks',
-          onSearch: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const SearchScreen()),
-          ),
+          onSearch: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const SearchScreen())),
           onNotification: () => Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const NotificationsScreen()),
           ),
@@ -52,17 +52,17 @@ class _TasksBodyState extends ConsumerState<TasksBody> {
         Expanded(
           child: switch (_segment) {
             0 => _LearningList(
-                state: tasks,
-                filter: _filter,
-                onFilter: (f) => setState(() => _filter = f),
-              ),
+              state: tasks,
+              filter: _filter,
+              onFilter: (f) => setState(() => _filter = f),
+            ),
             1 => _MissionList(
-                state: tasks,
-                onComplete: notifier.completeMission,
-              ),
+              state: tasks,
+              onComplete: notifier.completeMission,
+            ),
             _ => _MarketplaceEmpty(
-                onKeepLearning: () => setState(() => _segment = 0),
-              ),
+              onKeepLearning: () => setState(() => _segment = 0),
+            ),
           },
         ),
       ],
@@ -144,7 +144,7 @@ class _LearningList extends StatelessWidget {
                 )
               : ListView.separated(
                   itemCount: tasks.length,
-                  separatorBuilder: (_, __) =>
+                  separatorBuilder: (_, _) =>
                       const SizedBox(height: SkifluxSpacing.spaceM),
                   itemBuilder: (context, i) => _LearningTaskCard(
                     task: tasks[i],
@@ -169,9 +169,7 @@ class _LearningList extends StatelessWidget {
       return;
     }
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => SubmissionTaskScreen(taskId: task.id),
-      ),
+      MaterialPageRoute(builder: (_) => SubmissionTaskScreen(taskId: task.id)),
     );
   }
 
@@ -179,11 +177,9 @@ class _LearningList extends StatelessWidget {
     final quiz = task.quiz;
     if (task.kind == LearningTaskKind.quiz && quiz != null) {
       final total = quiz.questions.length;
-      final answers = task.quizAnswers ??
-          List<int?>.generate(
-            total,
-            (i) => quiz.questions[i].correctIndex,
-          );
+      final answers =
+          task.quizAnswers ??
+          List<int?>.generate(total, (i) => quiz.questions[i].correctIndex);
       final correct = task.quizCorrect ?? total;
       Navigator.of(context).push(
         MaterialPageRoute(
@@ -390,11 +386,12 @@ class _LearningTaskCard extends StatelessWidget {
               const Spacer(),
               _CardActionButton(
                 label: task.actionLabel,
-                enabled: task.actionEnabled ||
+                enabled:
+                    task.actionEnabled ||
                     task.status == LearningTaskStatus.completed,
-                destructive:
-                    task.status == LearningTaskStatus.actionNeeded,
-                secondary: task.status == LearningTaskStatus.completed ||
+                destructive: task.status == LearningTaskStatus.actionNeeded,
+                secondary:
+                    task.status == LearningTaskStatus.completed ||
                     task.status == LearningTaskStatus.inReview,
                 onPressed: task.status == LearningTaskStatus.inReview
                     ? null
@@ -410,21 +407,21 @@ class _LearningTaskCard extends StatelessWidget {
   static ({Color bg, Color fg}) _statusStyle(LearningTaskStatus s) {
     return switch (s) {
       LearningTaskStatus.completed => (
-          bg: SkifluxColors.backgroundPositiveSubtle,
-          fg: SkifluxColors.contentPositive,
-        ),
+        bg: SkifluxColors.backgroundPositiveSubtle,
+        fg: SkifluxColors.contentPositive,
+      ),
       LearningTaskStatus.pending => (
-          bg: SkifluxColors.backgroundNoticeSubtle,
-          fg: SkifluxColors.contentNotice,
-        ),
+        bg: SkifluxColors.backgroundNoticeSubtle,
+        fg: SkifluxColors.contentNotice,
+      ),
       LearningTaskStatus.inReview => (
-          bg: SkifluxColors.backgroundInfoSubtle,
-          fg: SkifluxColors.contentInfo,
-        ),
+        bg: SkifluxColors.backgroundInfoSubtle,
+        fg: SkifluxColors.contentInfo,
+      ),
       LearningTaskStatus.actionNeeded => (
-          bg: SkifluxColors.backgroundNegativeSubtle,
-          fg: SkifluxColors.contentNegative,
-        ),
+        bg: SkifluxColors.backgroundNegativeSubtle,
+        fg: SkifluxColors.contentNegative,
+      ),
     };
   }
 }
@@ -622,10 +619,7 @@ class _CardActionButton extends StatelessWidget {
 // ── Mission (TF14 · card `2902:13732`) ───────────────────────────────
 
 class _MissionList extends StatelessWidget {
-  const _MissionList({
-    required this.state,
-    required this.onComplete,
-  });
+  const _MissionList({required this.state, required this.onComplete});
 
   final TasksState state;
   final ValueChanged<String> onComplete;
@@ -647,23 +641,16 @@ class _MissionList extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListView.separated(
       itemCount: state.missions.length,
-      separatorBuilder: (_, __) =>
-          const SizedBox(height: SkifluxSpacing.spaceM),
+      separatorBuilder: (_, _) => const SizedBox(height: SkifluxSpacing.spaceM),
       itemBuilder: (context, i) {
-        return _MissionCard(
-          mission: state.missions[i],
-          onComplete: onComplete,
-        );
+        return _MissionCard(mission: state.missions[i], onComplete: onComplete);
       },
     );
   }
 }
 
 class _MissionCard extends StatelessWidget {
-  const _MissionCard({
-    required this.mission,
-    required this.onComplete,
-  });
+  const _MissionCard({required this.mission, required this.onComplete});
 
   final MissionTask mission;
   final ValueChanged<String> onComplete;
@@ -798,14 +785,10 @@ class _MarketplaceEmpty extends StatelessWidget {
               ),
             ),
             const SizedBox(height: SkifluxSpacing.spaceS),
-            SkifluxButton(
-              label: 'Keep Learning',
-              onPressed: onKeepLearning,
-            ),
+            SkifluxButton(label: 'Keep Learning', onPressed: onKeepLearning),
           ],
         ),
       ),
     );
   }
 }
-

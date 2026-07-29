@@ -6,14 +6,13 @@ import 'package:skiflux_design_system/skiflux_design_system.dart';
 // Settings screen and every grouped detail screen (Notifications, Security,
 // Privacy & Data, Download Quality, …) so the card/row look stays identical.
 
-/// A grey uppercase-ish label above a bordered card of [children] rows,
-/// hairline-separated.
+/// Figma's "Notification icon" badge: a 20px glyph with 5px padding inside a
+/// pill, i.e. a 30×30 circle. Neither 30 nor 5 exists on the token scale.
+const double _iconBadgeSize = 30;
+
+/// A grey label above a bordered card of [children] rows, hairline-separated.
 class SettingsSection extends StatelessWidget {
-  const SettingsSection({
-    super.key,
-    this.label,
-    required this.children,
-  });
+  const SettingsSection({super.key, this.label, required this.children});
 
   final String? label;
   final List<Widget> children;
@@ -26,13 +25,14 @@ class SettingsSection extends StatelessWidget {
         if (label != null) ...[
           Text(
             label!,
-            style: SkifluxTypography.bodyP11Regular.copyWith(
+            style: SkifluxTypography.uiButtonMedium.copyWith(
               color: SkifluxColors.contentTertiary,
             ),
           ),
           const SizedBox(height: SkifluxSpacing.spaceS),
         ],
         Container(
+          clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
             color: SkifluxColors.backgroundPrimary,
             borderRadius: SkifluxRadii.borderL,
@@ -93,15 +93,20 @@ class SettingsTile extends StatelessWidget {
     final row = Padding(
       padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
       child: Row(
+        // Two-line rows top-align icon/chevron with the title; single-line rows
+        // centre everything against the 30px badge.
+        crossAxisAlignment: subtitle == null
+            ? CrossAxisAlignment.center
+            : CrossAxisAlignment.start,
         children: [
           Container(
-            width: SkifluxUnit.u40,
-            height: SkifluxUnit.u40,
+            width: _iconBadgeSize,
+            height: _iconBadgeSize,
             decoration: BoxDecoration(
               color: iconBackground,
-              borderRadius: BorderRadius.circular(SkifluxRadii.m),
+              shape: BoxShape.circle,
             ),
-            child: Icon(icon, size: SkifluxIcons.sizeS, color: iconColor),
+            child: Icon(icon, size: SkifluxUnit.u20, color: iconColor),
           ),
           const SizedBox(width: SkifluxSpacing.spaceL),
           Expanded(
@@ -111,47 +116,48 @@ class SettingsTile extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: SkifluxTypography.uiButtonMedium.copyWith(
-                    color: titleColor ?? SkifluxColors.contentPrimary,
+                  style: SkifluxTypography.headingH10Bold.copyWith(
+                    color: titleColor ?? SkifluxColors.contentSecondary,
                   ),
                 ),
                 if (subtitle != null) ...[
-                  const SizedBox(height: SkifluxSpacing.space2xs),
+                  const SizedBox(height: SkifluxSpacing.spaceXs),
                   Text(
                     subtitle!,
-                    style: SkifluxTypography.bodyP11Regular.copyWith(
+                    style: SkifluxTypography.bodyP10Regular.copyWith(
                       color: SkifluxColors.contentTertiary,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ],
             ),
           ),
-          const SizedBox(width: SkifluxSpacing.spaceS),
-          trailing ?? const _Chevron(),
+          const SizedBox(width: SkifluxSpacing.spaceL),
+          trailing ?? _Chevron(color: titleColor),
         ],
       ),
     );
 
     if (onTap == null) return row;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: SkifluxRadii.borderL,
-      child: row,
-    );
+    return InkWell(onTap: onTap, child: row);
   }
 }
 
-/// Trailing "›" used by navigable rows.
+/// Trailing "›" used by navigable rows. Destructive rows tint it to match the
+/// title (Figma's red "Log out" chevron).
 class _Chevron extends StatelessWidget {
-  const _Chevron();
+  const _Chevron({this.color});
+
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
-    return const Icon(
+    return Icon(
       RemixIcons.arrow_right_s_line,
       size: SkifluxIcons.sizeM,
-      color: SkifluxColors.contentTertiary,
+      color: color ?? SkifluxColors.contentSecondary,
     );
   }
 }
@@ -169,16 +175,12 @@ class SettingsValueTrailing extends StatelessWidget {
       children: [
         Text(
           value,
-          style: SkifluxTypography.bodyP11Regular.copyWith(
+          style: SkifluxTypography.bodyP10Regular.copyWith(
             color: SkifluxColors.contentTertiary,
           ),
         ),
-        const SizedBox(width: SkifluxSpacing.spaceXs),
-        const Icon(
-          RemixIcons.arrow_right_s_line,
-          size: SkifluxIcons.sizeM,
-          color: SkifluxColors.contentTertiary,
-        ),
+        const SizedBox(width: SkifluxSpacing.spaceS),
+        const _Chevron(),
       ],
     );
   }
@@ -193,7 +195,7 @@ class SettingsExternalTrailing extends StatelessWidget {
     return const Icon(
       RemixIcons.arrow_right_up_line,
       size: SkifluxIcons.sizeM,
-      color: SkifluxColors.contentTertiary,
+      color: SkifluxColors.contentSecondary,
     );
   }
 }

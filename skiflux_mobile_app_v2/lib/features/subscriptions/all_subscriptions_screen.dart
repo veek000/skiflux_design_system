@@ -44,10 +44,12 @@ class _AllSubscriptionsScreenState
     final creators = ref
         .watch(subscriptionsProvider)
         .sortedCreators(_sort)
-        .where((c) =>
-            q.isEmpty ||
-            c.name.toLowerCase().contains(q) ||
-            c.username.toLowerCase().contains(q))
+        .where(
+          (c) =>
+              q.isEmpty ||
+              c.name.toLowerCase().contains(q) ||
+              c.username.toLowerCase().contains(q),
+        )
         .toList();
 
     return Scaffold(
@@ -130,8 +132,10 @@ class _AllSubscriptionsScreenState
           // activity / A–Z).
           GestureDetector(
             onTap: () async {
-              final picked =
-                  await showSubscriptionSortSheet(context, current: _sort);
+              final picked = await showSubscriptionSortSheet(
+                context,
+                current: _sort,
+              );
               if (picked != null) setState(() => _sort = picked);
             },
             behavior: HitTestBehavior.opaque,

@@ -20,6 +20,10 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   final _next = TextEditingController();
   final _confirm = TextEditingController();
 
+  /// Per-field reveal state behind the trailing eye icon Figma puts on every
+  /// password field.
+  final _revealed = <TextEditingController, bool>{};
+
   @override
   void dispose() {
     _current.dispose();
@@ -28,18 +32,26 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     super.dispose();
   }
 
-  /// 0 = empty, 1 = weak, 2 = medium, 3 = strong.
-  int get _strength {
+  /// Maps the new password onto the [SkifluxPasswordStrength] variants: empty
+  /// is the neutral default, anything under the 8-character minimum is "too
+  /// short", and past that each satisfied rule fills one more bar.
+  SkifluxPasswordStrengthLevel get _strength {
     final value = _next.text;
-    if (value.isEmpty) return 0;
-    var score = 0;
-    if (value.length >= 8) score++;
+    if (value.isEmpty) return SkifluxPasswordStrengthLevel.none;
+    if (value.length < 8) return SkifluxPasswordStrengthLevel.tooShort;
+    var score = 1;
+    if (value.length >= 12) score++;
     if (RegExp(r'[0-9]').hasMatch(value)) score++;
     if (RegExp(r'[A-Z]').hasMatch(value) ||
         RegExp(r'[^A-Za-z0-9]').hasMatch(value)) {
       score++;
     }
-    return score.clamp(1, 3);
+    return switch (score) {
+      1 => SkifluxPasswordStrengthLevel.weak,
+      2 => SkifluxPasswordStrengthLevel.fair,
+      3 => SkifluxPasswordStrengthLevel.good,
+      _ => SkifluxPasswordStrengthLevel.strong,
+    };
   }
 
   bool get _canSubmit =>
@@ -71,30 +83,20 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                 children: [
                   _label('Current Password'),
                   const SizedBox(height: SkifluxSpacing.spaceS),
-                  SkifluxInputField(
-                    controller: _current,
-                    obscureText: true,
-                    onChanged: (_) => setState(() {}),
-                  ),
+                  _passwordField(_current),
                   const SizedBox(height: SkifluxSpacing.spaceL),
                   _label('Create New Password'),
                   const SizedBox(height: SkifluxSpacing.spaceS),
-                  SkifluxInputField(
-                    controller: _next,
-                    obscureText: true,
-                    onChanged: (_) => setState(() {}),
-                  ),
-                  const SizedBox(height: SkifluxSpacing.spaceS),
-                  _StrengthMeter(strength: _strength),
+                  _passwordField(_next),
+                  const SizedBox(height: SkifluxSpacing.spaceL),
+                  SkifluxPasswordStrength(level: _strength),
                   const SizedBox(height: SkifluxSpacing.spaceL),
                   _label('Confirm New Password'),
                   const SizedBox(height: SkifluxSpacing.spaceS),
-                  SkifluxInputField(
-                    controller: _confirm,
-                    obscureText: true,
-                    hasError: _confirm.text.isNotEmpty &&
-                        _confirm.text != _next.text,
-                    onChanged: (_) => setState(() {}),
+                  _passwordField(
+                    _confirm,
+                    hasError:
+                        _confirm.text.isNotEmpty && _confirm.text != _next.text,
                   ),
                 ],
               ),
@@ -116,9 +118,30 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   Widget _label(String text) {
     return Text(
       text,
-      style: SkifluxTypography.headingH9Bold.copyWith(
+      style: SkifluxTypography.uiInputLabel.copyWith(
         color: SkifluxColors.contentPrimary,
       ),
+    );
+  }
+
+  Widget _passwordField(
+    TextEditingController controller, {
+    bool hasError = false,
+  }) {
+    final revealed = _revealed[controller] ?? false;
+    return SkifluxInputField(
+      controller: controller,
+      obscureText: !revealed,
+      hasError: hasError,
+      trailingIcon: GestureDetector(
+        onTap: () => setState(() => _revealed[controller] = !revealed),
+        child: Icon(
+          revealed ? RemixIcons.eye_off_fill : RemixIcons.eye_fill,
+          size: SkifluxIcons.sizeS,
+          color: SkifluxColors.contentTertiary,
+        ),
+      ),
+      onChanged: (_) => setState(() {}),
     );
   }
 
@@ -126,56 +149,10 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     await showSuccessSheet(
       context,
       title: 'Password Updated Successfully',
-      message: 'Your password has been changed. Use your new password the '
+      message:
+          'Your password has been changed. Use your new password the '
           'next time you log in.',
     );
     if (mounted) Navigator.of(context).pop();
-  }
-}
-
-/// "Password strength" label + three segments that fill weak→strong.
-class _StrengthMeter extends StatelessWidget {
-  const _StrengthMeter({required this.strength});
-
-  final int strength;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = switch (strength) {
-      0 => SkifluxColors.borderTertiary,
-      1 => SkifluxColors.contentNegative,
-      2 => SkifluxColors.contentNoticeBold,
-      _ => SkifluxColors.contentPositive,
-    };
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Password strength',
-          style: SkifluxTypography.bodyP11Regular.copyWith(
-            color: SkifluxColors.contentTertiary,
-          ),
-        ),
-        const SizedBox(height: SkifluxSpacing.spaceXs),
-        Row(
-          children: [
-            for (var i = 0; i < 3; i++) ...[
-              if (i > 0) const SizedBox(width: SkifluxSpacing.spaceXs),
-              Expanded(
-                child: Container(
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: i < strength
-                        ? color
-                        : SkifluxColors.borderTertiary,
-                    borderRadius: SkifluxRadii.borderPill,
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ],
-    );
   }
 }

@@ -33,9 +33,9 @@ class HelpCentreScreen extends StatelessWidget {
               label: 'Contact Support',
               children: [
                 SettingsTile(
-                  icon: RemixIcons.chat_3_fill,
+                  icon: RemixIcons.question_answer_fill,
                   iconBackground: SkifluxColors.backgroundPositiveSubtle,
-                  iconColor: SkifluxColors.contentPositive,
+                  iconColor: SkifluxColors.contentPositiveBold,
                   title: 'Chat with us',
                   subtitle: 'Typically replies in 5 mins',
                   onTap: () => SkifluxToast.info(context, 'Starting a chat…'),
@@ -62,12 +62,13 @@ class HelpCentreScreen extends StatelessWidget {
                   'Earning badges',
                 ])
                   SettingsTile(
-                    icon: RemixIcons.article_fill,
+                    icon: RemixIcons.newspaper_fill,
                     iconBackground: SkifluxColors.backgroundHover,
                     iconColor: SkifluxColors.contentSecondary,
                     title: topic,
                     trailing: const SettingsExternalTrailing(),
-                    onTap: () => SkifluxToast.info(context, 'Opening “$topic”…'),
+                    onTap: () =>
+                        SkifluxToast.info(context, 'Opening “$topic”…'),
                   ),
               ],
             ),

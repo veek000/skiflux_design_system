@@ -121,7 +121,9 @@ class _QuizAssessmentScreenState extends ConsumerState<QuizAssessmentScreen> {
       if (ref.read(tasksProvider).byId(widget.taskId) == null) {
         throw const SkifluxFailure(SkifluxErrorKind.quizSubmission);
       }
-      ref.read(tasksProvider.notifier).recordQuizResult(
+      ref
+          .read(tasksProvider.notifier)
+          .recordQuizResult(
             id: widget.taskId,
             answers: _answers,
             correct: correct,
@@ -258,7 +260,8 @@ class _QuizAssessmentScreenState extends ConsumerState<QuizAssessmentScreen> {
                     selected: selected == i,
                     reviewMode: widget.reviewMode,
                     isCorrect: i == q.correctIndex,
-                    isWrongPick: widget.reviewMode &&
+                    isWrongPick:
+                        widget.reviewMode &&
                         selected == i &&
                         i != q.correctIndex,
                     onTap: () => _select(i),

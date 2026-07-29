@@ -1,9 +1,38 @@
-/// Demo leaderboard data backing the Leaderboard screen (Figma Profile
-/// Flow 01 `1256:25612`). Static in-memory only, mirroring the other
-/// feature stores.
+/// Leaderboard backing the Leaderboard screen (Figma Profile Flow 01
+/// `1256:25612`).
+///
+/// Nothing is seeded. Signed out there is nothing to rank, so the provider
+/// resolves empty and the screen shows its empty state; a failed request stays
+/// an `AsyncError` so the screen offers a retry rather than printing a sample
+/// cast — and, worse, a sample *standing*, which is what made "#12" look like
+/// the signed-in user's real position when it was a constant.
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../shared/network/token_store.dart';
+import '../../profile/data/models/user_profile.dart';
+import '../../profile/data/profile_store.dart';
+import 'leaderboard_repository.dart';
+import 'models/leaderboard_row.dart';
+
+// TODO(backend, minor): confirm the league vocabulary — the spec's `level`
+// filter documents novice | amateur | senior | expert | professional, but the
+// design's pill group also carries "Veteran" — expects: the level values the
+// leaderboard actually accepts, or the pill dropped from the design
+/// League pills (Figma Button Group Pill `1256:25615`).
+///
+/// The first pill is "All": the endpoint's default is every learner, and the
+/// "better than N%" standing only reads correctly against that.
+const kLeaderboardLeagues = <String>[
+  'All',
+  'Novice',
+  'Amateur',
+  'Senior',
+  'Expert',
+  'Professional',
+  'Veteran',
+];
 
 class LeaderboardEntry {
   const LeaderboardEntry({
@@ -12,6 +41,8 @@ class LeaderboardEntry {
     required this.username,
     required this.initials,
     required this.xp,
+    this.avatarUrl,
+    this.isCurrentUser = false,
   });
 
   final int rank;
@@ -19,6 +50,15 @@ class LeaderboardEntry {
   final String username;
   final String initials;
   final int xp;
+
+  /// Remote avatar, null whenever the payload omits it — `SkifluxAvatar` then
+  /// draws the [initials] circle.
+  final String? avatarUrl;
+
+  /// Whether this row is the signed-in learner, which is what the highlighted
+  /// row keys off. Resolved in [LeaderboardNotifier], not sent as-is: see
+  /// [LeaderboardNotifier.resolve] for the order of evidence.
+  final bool isCurrentUser;
 
   String get handle => '@$username';
 
@@ -34,155 +74,181 @@ class LeaderboardEntry {
   }
 }
 
-/// Immutable demo leaderboard snapshot.
-///
-/// Riverpod choice: plain [Provider] — data is fully static (no mark-read,
-/// no celebrate flag). NotifierProvider would be ceremony with no mutations.
+/// One answer from `GET /me/leaderboard`, for one league filter.
 class LeaderboardData {
   const LeaderboardData({
-    required this.leagues,
-    required this.currentRank,
-    required this.betterThanPercent,
     required this.entries,
+    this.currentRank,
+    this.betterThanPercent,
   });
 
-  /// League pills (Figma Button Group Pill `1256:25615`).
-  final List<String> leagues;
+  static const empty = LeaderboardData(entries: []);
 
-  final int currentRank;
-  final int betterThanPercent;
-
-  /// Ranked entries, podium first. Demo cast reuses the subscriptions
-  /// creators plus filler names; XP descends with rank.
+  /// Ranked entries, podium first.
   final List<LeaderboardEntry> entries;
 
-  List<LeaderboardEntry> get podium => entries.sublist(0, 3);
+  /// The signed-in learner's standing. Null when it is genuinely unknown —
+  /// the payload omitted it and they are not on the page — so the screen can
+  /// say nothing rather than claim a rank.
+  final int? currentRank;
+  final int? betterThanPercent;
 
-  List<LeaderboardEntry> get ranked => entries.sublist(3);
+  bool get isEmpty => entries.isEmpty;
+
+  /// Top three. `take`/`skip` rather than `sublist` because a filtered league
+  /// can come back with fewer than three learners in it.
+  List<LeaderboardEntry> get podium => entries.take(3).toList(growable: false);
+
+  List<LeaderboardEntry> get ranked => entries.skip(3).toList(growable: false);
+
+  /// Index of the signed-in learner's row within [ranked], or -1. Drives the
+  /// rank card's opening scroll position.
+  int get currentIndexInRanked =>
+      ranked.indexWhere((entry) => entry.isCurrentUser);
 }
 
-// TODO(backend, blocking): replace static leaderboard rankings with live weekly ranking data fetched from backend — expects: List<{rank: int, name: String, username: String, initials: String, xp: int}> plus currentUserRank: int and betterThanPercent: int
-/// Seeded once — signed-in user (Amara) at rank #12, matching My Profile.
-const LeaderboardData _kLeaderboardData = LeaderboardData(
-  leagues: [
-    'Novice',
-    'Amateur',
-    'Senior',
-    'Expert',
-    'Professional',
-    'Veteran',
-  ],
-  currentRank: 12,
-  betterThanPercent: 60,
-  entries: [
-    LeaderboardEntry(
-      rank: 1,
-      name: 'Lola Motion',
-      username: 'lolamotion',
-      initials: 'L',
-      xp: 4820,
-    ),
-    LeaderboardEntry(
-      rank: 2,
-      name: 'Kojo Sketches',
-      username: 'kojosketch',
-      initials: 'K',
-      xp: 4515,
-    ),
-    LeaderboardEntry(
-      rank: 3,
-      name: 'Design Dan',
-      username: 'designdan',
-      initials: 'D',
-      xp: 4230,
-    ),
-    LeaderboardEntry(
-      rank: 4,
-      name: 'Pixel Priye',
-      username: 'pixelpriye',
-      initials: 'P',
-      xp: 3980,
-    ),
-    LeaderboardEntry(
-      rank: 5,
-      name: 'Uche Draws',
-      username: 'uchedraws',
-      initials: 'U',
-      xp: 3760,
-    ),
-    LeaderboardEntry(
-      rank: 6,
-      name: 'Sade Studio',
-      username: 'sadestudio',
-      initials: 'S',
-      xp: 3540,
-    ),
-    LeaderboardEntry(
-      rank: 7,
-      name: 'Femi Frames',
-      username: 'femiframes',
-      initials: 'F',
-      xp: 3310,
-    ),
-    LeaderboardEntry(
-      rank: 8,
-      name: 'Nia Vectors',
-      username: 'niavectors',
-      initials: 'N',
-      xp: 3090,
-    ),
-    LeaderboardEntry(
-      rank: 9,
-      name: 'Tobi Types',
-      username: 'tobitypes',
-      initials: 'T',
-      xp: 2870,
-    ),
-    LeaderboardEntry(
-      rank: 10,
-      name: 'Zara Zines',
-      username: 'zarazines',
-      initials: 'Z',
-      xp: 2680,
-    ),
-    LeaderboardEntry(
-      rank: 11,
-      name: 'Ify Inks',
-      username: 'ifyinks',
-      initials: 'I',
-      xp: 2560,
-    ),
-    LeaderboardEntry(
-      rank: 12,
-      name: 'Amara Design',
-      username: 'amara',
-      initials: 'AD',
-      xp: 2450,
-    ),
-    LeaderboardEntry(
-      rank: 13,
-      name: 'Bode Brushes',
-      username: 'bodebrushes',
-      initials: 'B',
-      xp: 2310,
-    ),
-    LeaderboardEntry(
-      rank: 14,
-      name: 'Chi Canvas',
-      username: 'chicanvas',
-      initials: 'C',
-      xp: 2180,
-    ),
-    LeaderboardEntry(
-      rank: 15,
-      name: 'Wale Works',
-      username: 'waleworks',
-      initials: 'W',
-      xp: 2040,
-    ),
-  ],
-);
+/// Which league the pills are currently filtered to — index into
+/// [kLeaderboardLeagues]. Kept outside the async provider so a pill tap
+/// re-runs `build` instead of the screen holding a second copy of the
+/// selection in `setState`.
+///
+/// [Notifier], not `StateProvider` — the latter is gone in Riverpod 3.x.
+class LeaderboardLeagueNotifier extends Notifier<int> {
+  @override
+  int build() => 0;
 
-final leaderboardProvider = Provider<LeaderboardData>((ref) {
-  return _kLeaderboardData;
-});
+  /// Ignores an out-of-range index rather than filtering by a league that
+  /// isn't in the pill group.
+  void select(int index) {
+    if (index < 0 || index >= kLeaderboardLeagues.length) return;
+    state = index;
+  }
+}
+
+final leaderboardLeagueProvider =
+    NotifierProvider<LeaderboardLeagueNotifier, int>(
+      LeaderboardLeagueNotifier.new,
+    );
+
+final leaderboardProvider =
+    AsyncNotifierProvider<LeaderboardNotifier, LeaderboardData>(
+      LeaderboardNotifier.new,
+    );
+
+class LeaderboardNotifier extends AsyncNotifier<LeaderboardData> {
+  /// The spec caps `page_size` at 50. The rank card scrolls, so ask for the
+  /// maximum instead of paginating — the list is a leaderboard, not a feed.
+  static const pageSize = 50;
+
+  @override
+  Future<LeaderboardData> build() async {
+    // Every dependency is subscribed to before the first await: a `ref.watch`
+    // past an await point is no longer inside the build that owns it.
+    final index = ref.watch(leaderboardLeagueProvider);
+    // Index 0 is the "All" pill, which sends no `level` filter.
+    final level = index == 0 ? null : kLeaderboardLeagues[index].toLowerCase();
+    final tokens = ref.read(tokenStoreProvider);
+    final repository = ref.read(leaderboardRepositoryProvider);
+    // The profile is the fallback identity when the rows carry no "this is
+    // you" flag. Subscribed here, awaited below.
+    final profile = ref.watch(meProfileProvider.future);
+
+    if (!await tokens.hasSession()) return LeaderboardData.empty;
+
+    final page = await repository.getLeaderboard(
+      level: level,
+      pageSize: pageSize,
+    );
+
+    // A profile that failed to load is not worth failing the board over, so it
+    // degrades to "no row highlighted" rather than throwing.
+    UserProfile? me;
+    try {
+      me = await profile;
+    } catch (_) {
+      me = null;
+    }
+
+    return resolve(page, me);
+  }
+
+  /// Refetches. Invalidation rather than an in-place reload so the league
+  /// subscription above is re-established with it.
+  void refresh() => ref.invalidateSelf();
+
+  /// Assembles the screen's model from a page and the signed-in learner.
+  ///
+  /// Which row is "you" is decided on the best evidence available, in order:
+  ///
+  /// 1. the row's own `is_current_user` flag, if the backend sends one;
+  /// 2. a username match against `GET /me/profile`;
+  /// 3. the payload's `current_user_rank`, matched against the row ranks.
+  ///
+  /// Rank 3 is last because it is the weakest: a rank is only "you" if the
+  /// standing field and the rows were computed over the same filter, which is
+  /// not guaranteed for a league-filtered page.
+  ///
+  /// Static so provider tests can exercise the matching without a container.
+  static LeaderboardData resolve(LeaderboardPage page, UserProfile? me) {
+    final myUsername = me?.username.replaceFirst('@', '').trim().toLowerCase();
+
+    var matched = false;
+    final entries = <LeaderboardEntry>[];
+    for (final row in page.rows) {
+      final isMe =
+          row.isCurrentUser ||
+          (myUsername != null &&
+              myUsername.isNotEmpty &&
+              row.username.trim().toLowerCase() == myUsername);
+      matched |= isMe;
+      entries.add(_toEntry(row, isCurrentUser: isMe));
+    }
+
+    // The standing the screen shows: the payload's own field first, then the
+    // matched row, then the profile's cached rank.
+    final currentRank =
+        page.currentRank ??
+        (matched
+            ? entries.firstWhere((entry) => entry.isCurrentUser).rank
+            : me?.rank);
+
+    // Nothing matched by flag or username, but the payload named a rank —
+    // fall back to marking the row that holds it.
+    if (!matched && currentRank != null) {
+      for (var i = 0; i < entries.length; i++) {
+        if (entries[i].rank != currentRank) continue;
+        entries[i] = _toEntry(page.rows[i], isCurrentUser: true);
+        break;
+      }
+    }
+
+    return LeaderboardData(
+      entries: entries,
+      currentRank: currentRank,
+      betterThanPercent:
+          page.betterThanPercent ?? _percentileOf(currentRank, page.rows.length),
+    );
+  }
+
+  /// "Better than N%" when the payload didn't compute it, derived from the
+  /// rank's position in the page. Null unless both inputs are usable — an
+  /// invented percentage is worse than an absent one.
+  static int? _percentileOf(int? rank, int total) {
+    if (rank == null || rank < 1 || total < 2 || rank > total) return null;
+    return ((total - rank) / (total - 1) * 100).round();
+  }
+
+  static LeaderboardEntry _toEntry(
+    LeaderboardRow row, {
+    required bool isCurrentUser,
+  }) => LeaderboardEntry(
+    rank: row.rank,
+    name: row.displayName,
+    username: row.username,
+    // Derived, never sent: see `LeaderboardRow.initials`.
+    initials: row.initials,
+    xp: row.xp,
+    avatarUrl: row.avatarUrl,
+    isCurrentUser: isCurrentUser,
+  );
+}

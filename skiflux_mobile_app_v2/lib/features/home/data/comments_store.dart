@@ -52,8 +52,9 @@ class CommentsState {
     return CommentsState(
       comments: comments ?? this.comments,
       composeState: composeState ?? this.composeState,
-      playingIndex:
-          clearPlayingIndex ? null : (playingIndex ?? this.playingIndex),
+      playingIndex: clearPlayingIndex
+          ? null
+          : (playingIndex ?? this.playingIndex),
     );
   }
 }
@@ -102,10 +103,7 @@ class CommentsNotifier extends Notifier<CommentsState> {
 
   void togglePlay(int index) {
     final next = state.playingIndex == index ? null : index;
-    state = state.copyWith(
-      playingIndex: next,
-      clearPlayingIndex: next == null,
-    );
+    state = state.copyWith(playingIndex: next, clearPlayingIndex: next == null);
   }
 
   void clearPlaying() {
@@ -151,5 +149,5 @@ class CommentsNotifier extends Notifier<CommentsState> {
 // TODO(backend, blocking): replace seeded demo comments with real per-video comments fetched from backend, and persist sent comments/voicenotes server-side — expects: List<{author: SkifluxCommentAuthor, body: SkifluxCommentBody, authorName: String, handle: String, message: String?, audioPath: String?, timeLabel: String}>
 final commentsProvider =
     NotifierProvider.autoDispose<CommentsNotifier, CommentsState>(
-  CommentsNotifier.new,
-);
+      CommentsNotifier.new,
+    );

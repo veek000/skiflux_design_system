@@ -22,10 +22,7 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pump();
       expect(find.text('Task completed'), findsOneWidget);
-      expect(
-        find.byIcon(RemixIcons.checkbox_circle_fill),
-        findsOneWidget,
-      );
+      expect(find.byIcon(RemixIcons.checkbox_circle_fill), findsOneWidget);
     });
 
     testWidgets('error shows message with warning icon', (tester) async {
@@ -45,10 +42,7 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pump();
       expect(find.text('Something went wrong'), findsOneWidget);
-      expect(
-        find.byIcon(RemixIcons.error_warning_fill),
-        findsOneWidget,
-      );
+      expect(find.byIcon(RemixIcons.error_warning_fill), findsOneWidget);
     });
 
     testWidgets('info shows message with info icon', (tester) async {
@@ -57,8 +51,7 @@ void main() {
           home: Scaffold(
             body: Builder(
               builder: (context) => ElevatedButton(
-                onPressed: () =>
-                    SkifluxToast.info(context, 'Download started'),
+                onPressed: () => SkifluxToast.info(context, 'Download started'),
                 child: const Text('Show'),
               ),
             ),
@@ -68,10 +61,7 @@ void main() {
       await tester.tap(find.text('Show'));
       await tester.pump();
       expect(find.text('Download started'), findsOneWidget);
-      expect(
-        find.byIcon(RemixIcons.information_fill),
-        findsOneWidget,
-      );
+      expect(find.byIcon(RemixIcons.information_fill), findsOneWidget);
     });
   });
 }

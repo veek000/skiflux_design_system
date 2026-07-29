@@ -21,8 +21,11 @@ class _Badge {
 /// Demo badge set (3 of 8 earned, matching the Figma frame).
 // TODO(backend, blocking): replace static badge list with real per-user badge progress fetched from backend — expects: List<{assetUrl: String, caption: String, earned: bool}>
 const List<_Badge> _kBadges = [
-  _Badge('assets/badges/badge_first_task_completed.svg', 'Earned',
-      earned: true),
+  _Badge(
+    'assets/badges/badge_first_task_completed.svg',
+    'Earned',
+    earned: true,
+  ),
   _Badge('assets/badges/badge_3_days_streak.svg', 'Earned', earned: true),
   _Badge('assets/badges/badge_top_learner.svg', 'Earned', earned: true),
   _Badge('assets/badges/badge_10_days_streak.svg', 'Complete 10 days'),

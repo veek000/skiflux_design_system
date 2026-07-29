@@ -1,5 +1,10 @@
+import 'dart:async' show unawaited;
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:lottie/lottie.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/sheets/share_sheet.dart';
@@ -29,12 +34,16 @@ class _StreakScreenState extends ConsumerState<StreakScreen> {
   @override
   void initState() {
     super.initState();
-    // Screen 04: the milestone sheet opens over the screen when a
-    // milestone was just reached (once per session for the demo).
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
+      // Real stats first, so the milestone check below tests the user's
+      // actual streak rather than the demo seed's.
+      await ref.read(streaksProvider.notifier).refreshFromBackend();
+      if (!mounted) return;
+      // Screen 04: the milestone sheet opens over the screen when a
+      // milestone was just reached (once per session).
       if (ref.read(streaksProvider.notifier).consumeCelebration()) {
-        showMilestoneSheet(context);
+        unawaited(showMilestoneSheet(context));
       }
     });
   }
@@ -125,7 +134,7 @@ class _StreakHero extends StatelessWidget {
     final active = streak > 0;
     return Column(
       children: [
-        SkifluxFlame(active: active),
+        _StreakFlame(active: active),
         const SizedBox(height: SkifluxSpacing.spaceM),
         Text(
           '$streak',
@@ -147,6 +156,83 @@ class _StreakHero extends StatelessWidget {
         const SizedBox(height: SkifluxSpacing.spaceM),
         const _PendingTaskPill(),
       ],
+    );
+  }
+}
+
+/// Streak hero flame: keeps the Figma-matched soft glow (blurred silhouette
+/// under the glyph, offset 0/4, σ10) and, when active, draws the looping
+/// `assets/animations/streak_fire.json` Lottie on top instead of the static
+/// SVG. Inactive stays the grey static flame from the design system asset.
+class _StreakFlame extends StatelessWidget {
+  const _StreakFlame({required this.active});
+
+  final bool active;
+
+  /// Match [SkifluxFlame.defaultHeight] so layout doesn't jump.
+  static const double _height = SkifluxFlame.defaultHeight;
+  static const double _aspect = 76.884 / 98.001;
+  static const Color _activeGlow = Color(0xFFFBAC74); // Orange/300
+  static const Color _inactiveGlow = Color(0xFFE5E5E5); // Neutral/100
+  static const String _activeSvg =
+      'packages/skiflux_design_system/assets/images/flame_active.svg';
+  static const String _inactiveSvg =
+      'packages/skiflux_design_system/assets/images/flame_inactive.svg';
+
+  @override
+  Widget build(BuildContext context) {
+    const width = _height * _aspect;
+    final glowAsset = active ? _activeSvg : _inactiveSvg;
+
+    return SizedBox(
+      height: _height,
+      width: width,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          // Soft shadow / glow — same technique as [SkifluxFlame], kept under
+          // the Lottie so the fire still “sits” on a warm drop shadow.
+          Positioned(
+            top: 4,
+            left: 0,
+            right: 0,
+            child: ImageFiltered(
+              imageFilter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: SvgPicture.asset(
+                glowAsset,
+                height: _height,
+                width: width,
+                colorFilter: ColorFilter.mode(
+                  active ? _activeGlow : _inactiveGlow,
+                  BlendMode.srcIn,
+                ),
+              ),
+            ),
+          ),
+          if (active)
+            Lottie.asset(
+              'assets/animations/streak_fire.json',
+              height: _height,
+              width: width,
+              fit: BoxFit.contain,
+              repeat: true,
+              // If the asset fails, fall back to the static active SVG so the
+              // hero never goes empty.
+              errorBuilder: (_, _, _) => SvgPicture.asset(
+                _activeSvg,
+                height: _height,
+                width: width,
+              ),
+            )
+          else
+            SvgPicture.asset(
+              _inactiveSvg,
+              height: _height,
+              width: width,
+            ),
+        ],
+      ),
     );
   }
 }
@@ -240,8 +326,7 @@ class _ThisWeekCard extends StatelessWidget {
           const SizedBox(height: SkifluxSpacing.spaceL),
           Row(
             children: [
-              for (final day in week.days)
-                Expanded(child: _DayCell(day: day)),
+              for (final day in week.days) Expanded(child: _DayCell(day: day)),
             ],
           ),
         ],
@@ -326,10 +411,7 @@ class _DayCell extends StatelessWidget {
         Container(
           width: SkifluxUnit.u40,
           height: SkifluxUnit.u40,
-          decoration: BoxDecoration(
-            color: _background,
-            shape: BoxShape.circle,
-          ),
+          decoration: BoxDecoration(color: _background, shape: BoxShape.circle),
           child: Center(child: _content),
         ),
       ],
@@ -337,37 +419,37 @@ class _DayCell extends StatelessWidget {
   }
 
   Color get _background => switch (day.state) {
-        StreakDayState.completed => SkifluxColors.orange500,
-        StreakDayState.missed => SkifluxColors.backgroundNegativeSubtle,
-        StreakDayState.today => SkifluxColors.orange200,
-        StreakDayState.future => SkifluxColors.backgroundPressed,
-      };
+    StreakDayState.completed => SkifluxColors.orange500,
+    StreakDayState.missed => SkifluxColors.backgroundNegativeSubtle,
+    StreakDayState.today => SkifluxColors.orange200,
+    StreakDayState.future => SkifluxColors.backgroundPressed,
+  };
 
   Widget get _content => switch (day.state) {
-        // Figma icon size inside the 40px circle: 26.67 (40 × ⅔).
-        StreakDayState.completed => const Icon(
-            RemixIcons.check_fill,
-            size: 26.67,
-            color: SkifluxColors.contentPrimaryInverse,
-          ),
-        StreakDayState.missed => const Icon(
-            RemixIcons.close_fill,
-            size: 26.67,
-            color: SkifluxColors.contentNegative,
-          ),
-        StreakDayState.today => Text(
-            '${day.number}',
-            style: SkifluxTypography.headingH9Bold.copyWith(
-              color: SkifluxColors.orange600,
-            ),
-          ),
-        StreakDayState.future => Text(
-            '${day.number}',
-            style: SkifluxTypography.headingH9Bold.copyWith(
-              color: SkifluxColors.contentDisabled,
-            ),
-          ),
-      };
+    // Figma icon size inside the 40px circle: 26.67 (40 × ⅔).
+    StreakDayState.completed => const Icon(
+      RemixIcons.check_fill,
+      size: 26.67,
+      color: SkifluxColors.contentPrimaryInverse,
+    ),
+    StreakDayState.missed => const Icon(
+      RemixIcons.close_fill,
+      size: 26.67,
+      color: SkifluxColors.contentNegative,
+    ),
+    StreakDayState.today => Text(
+      '${day.number}',
+      style: SkifluxTypography.headingH9Bold.copyWith(
+        color: SkifluxColors.orange600,
+      ),
+    ),
+    StreakDayState.future => Text(
+      '${day.number}',
+      style: SkifluxTypography.headingH9Bold.copyWith(
+        color: SkifluxColors.contentDisabled,
+      ),
+    ),
+  };
 }
 
 // ── Stat cards ───────────────────────────────────────────────────────

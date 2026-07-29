@@ -1,122 +1,277 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:local_auth/local_auth.dart';
+import 'package:lottie/lottie.dart';
+import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import 'package:skiflux_mobile_app_v2/features/auth/auth_flow.dart';
 import 'package:skiflux_mobile_app_v2/features/auth/data/auth_store.dart';
+import 'package:skiflux_mobile_app_v2/features/auth/data/biometric_store.dart';
+import 'package:skiflux_mobile_app_v2/features/auth/data/legal_documents.dart';
+import 'package:skiflux_mobile_app_v2/features/settings/data/settings_store.dart';
+
+/// Stands in for the platform plugin, which has no implementation under the
+/// test binding. [mode] null means "this device cannot offer biometrics" —
+/// the state a stock emulator with nothing enrolled is in.
+class _FakeBiometrics extends BiometricAuthenticator {
+  _FakeBiometrics(this.mode) : super(LocalAuthentication());
+
+  final BiometricMode? mode;
+
+  @override
+  Future<BiometricMode?> availableMode() async => mode;
+
+  @override
+  Future<bool> authenticate() async => true;
+}
+
+/// Mounts [AuthFlow] already past the splash.
+///
+/// The splash now runs a 5s Lottie composition and advances on *its*
+/// completion, so tests about onboarding and sign-in seed the stage directly
+/// rather than waiting out an animation they aren't exercising. Splash
+/// behaviour has its own group below.
+///
+/// [biometrics] is what the device reports it can do. It defaults to an
+/// enrolled fingerprint so the sign-in tests reach the gate; pass null for the
+/// no-biometrics device.
+Future<ProviderContainer> _pumpAtOnboarding(
+  WidgetTester tester, {
+  BiometricMode? biometrics = BiometricMode.fingerprint,
+  bool biometricLoginEnabled = false,
+}) async {
+  final container = ProviderContainer(
+    overrides: [
+      biometricAuthenticatorProvider.overrideWithValue(
+        _FakeBiometrics(biometrics),
+      ),
+    ],
+  );
+  addTearDown(container.dispose);
+  container.read(settingsProvider.notifier).setBiometricLogin(
+        biometricLoginEnabled,
+      );
+  container.read(authFlowProvider.notifier).show(AuthStage.onboarding);
+
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: const MaterialApp(home: AuthFlow()),
+    ),
+  );
+  return container;
+}
 
 void main() {
-  group('AuthFlow widget', () {
-    testWidgets('splash renders brand mark', (tester) async {
+  group('AuthFlow splash', () {
+    testWidgets('renders the brand Lottie composition', (tester) async {
       await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(
-            home: AuthFlow(),
-          ),
-        ),
+        const ProviderScope(child: MaterialApp(home: AuthFlow())),
       );
-      // Splash screen shows the brand mark.
-      expect(find.text('S'), findsOneWidget);
+
+      expect(find.byType(LottieBuilder), findsOneWidget);
+      expect(find.text('Your CV is officially dead.'), findsNothing);
     });
 
-    testWidgets('splash timer transitions to onboarding after 900ms',
-        (tester) async {
+    testWidgets('watchdog advances to onboarding if the animation never ends', (
+      tester,
+    ) async {
       await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(
-            home: AuthFlow(),
-          ),
-        ),
+        const ProviderScope(child: MaterialApp(home: AuthFlow())),
       );
-      // Splash renders first.
-      expect(find.text('S'), findsOneWidget);
+      expect(find.byType(LottieBuilder), findsOneWidget);
 
-      // Advance past the 900ms splash timer.
-      await tester.pump(const Duration(milliseconds: 901));
+      // Past the 8s ceiling: the splash must hand off even when the
+      // composition never reports completion.
+      await tester.pump(const Duration(seconds: 9));
       await tester.pump(const Duration(milliseconds: 50));
 
-      // Onboarding screen renders with title.
       expect(find.text('Your CV is officially dead.'), findsOneWidget);
     });
+  });
 
-    testWidgets('onboarding "Login" transitions to sign-in screen',
-        (tester) async {
-      await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(
-            home: AuthFlow(),
-          ),
-        ),
+  group('AuthFlow onboarding', () {
+    testWidgets('swiping advances through all three pages', (tester) async {
+      await _pumpAtOnboarding(tester);
+
+      expect(find.text('Your CV is officially dead.'), findsOneWidget);
+
+      await tester.fling(find.byType(PageView), const Offset(-400, 0), 1000);
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Build a portfolio that actually pays.'),
+        findsOneWidget,
       );
-      // Advance past splash.
-      await tester.pump(const Duration(milliseconds: 901));
-      await tester.pump(const Duration(milliseconds: 50));
 
-      // Tap "Login" on onboarding screen.
-      await tester.tap(find.text('Login'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      // Sign-in screen renders with email and password fields.
-      expect(find.text('Welcome Back'), findsOneWidget);
-      expect(find.text('Email Address'), findsOneWidget);
-      expect(find.text('Password'), findsOneWidget);
-      expect(find.text('Sign in'), findsOneWidget);
+      await tester.fling(find.byType(PageView), const Offset(-400, 0), 1000);
+      await tester.pumpAndSettle();
+      expect(find.text('Learn it. Prove it. Earn it.'), findsOneWidget);
     });
 
-    testWidgets('correct demo credentials transition to fingerprint screen',
-        (tester) async {
-      // Use tall viewport so the ListView renders all form children.
+    testWidgets('the footer buttons persist across pages', (tester) async {
+      await _pumpAtOnboarding(tester);
+
+      // Both CTAs belong to the sticky footer, not the paged content, so a
+      // swipe must leave them untouched.
+      expect(find.text('Create an account'), findsOneWidget);
+      expect(find.text('Login'), findsOneWidget);
+
+      await tester.fling(find.byType(PageView), const Offset(-400, 0), 1000);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Create an account'), findsOneWidget);
+      expect(find.text('Login'), findsOneWidget);
+    });
+  });
+
+  group('AuthFlow legal documents', () {
+    testWidgets('the onboarding legal links open each document', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1080, 2400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
 
-      await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(
-            home: AuthFlow(),
-          ),
-        ),
-      );
-      // Advance past splash → onboarding → tap Login → sign-in.
-      await tester.pump(const Duration(milliseconds: 901));
-      await tester.pump(const Duration(milliseconds: 50));
-      await tester.tap(find.text('Login'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
+      await _pumpAtOnboarding(tester);
 
-      // Enter demo credentials into the two TextFields.
-      final textFields = find.byType(TextField);
-      expect(textFields, findsAtLeastNWidgets(2));
-      await tester.enterText(textFields.at(0), 'veek@nexacorp.io');
-      await tester.enterText(textFields.at(1), 'skiflux');
-      await tester.pump();
+      // The two links are spans inside the legal line's RichText, so they are
+      // reached by text range rather than by widget.
+      await tester.tapOnText(find.textRange.ofSubstring('Terms of use'));
+      await tester.pumpAndSettle();
+      expect(find.text('Terms of Use'), findsOneWidget);
+      expect(find.text('1. The Skiflux Ecosystem'), findsOneWidget);
+      expect(find.text('Last Updated May 24th, 2026'), findsOneWidget);
 
-      // Tap "Sign in".
-      await tester.tap(find.text('Sign in'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
+      // The chevron returns to onboarding, not into sign-up.
+      await tester.tap(find.byIcon(RemixIcons.arrow_left_s_line));
+      await tester.pumpAndSettle();
+      expect(find.text('Your CV is officially dead.'), findsOneWidget);
 
-      // Biometric (fingerprint) screen renders.
-      expect(find.text('Welcome Back'), findsOneWidget);
-      expect(find.text('Verify Identity'), findsOneWidget);
+      await tester.tapOnText(find.textRange.ofSubstring('Privacy Policy'));
+      await tester.pumpAndSettle();
+      expect(find.text('1. Information We Collect'), findsOneWidget);
     });
 
-    testWidgets('incorrect password shows inline error on the password field',
-        (tester) async {
+    testWidgets('a document renders every section heading', (tester) async {
       tester.view.physicalSize = const Size(1080, 2400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
 
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      container.read(authFlowProvider.notifier).show(AuthStage.privacy);
+
       await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(
-            home: AuthFlow(),
-          ),
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: AuthFlow()),
         ),
       );
-      await tester.pump(const Duration(milliseconds: 901));
-      await tester.pump(const Duration(milliseconds: 50));
+
+      for (final section in privacyPolicy.sections) {
+        // Long documents scroll, so headings past the fold need scrolling into
+        // view before they are hit-testable.
+        await tester.scrollUntilVisible(
+          find.text(section.heading),
+          200,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(find.text(section.heading), findsOneWidget);
+      }
+      expect(find.textContaining('support@skiflux.com'), findsOneWidget);
+    });
+  });
+
+  group('AuthFlow widget', () {
+    testWidgets(
+      'biometric OFF: onboarding Login opens password sign-in (never biometric)',
+      (tester) async {
+        await _pumpAtOnboarding(tester, biometricLoginEnabled: false);
+
+        await tester.tap(find.text('Login'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(find.text('Email Address'), findsOneWidget);
+        expect(find.text('Password'), findsOneWidget);
+        expect(find.text('Sign in'), findsOneWidget);
+        expect(find.text('Verify Identity'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'biometric ON + device capable: onboarding Login opens biometric first',
+      (tester) async {
+        await _pumpAtOnboarding(
+          tester,
+          biometricLoginEnabled: true,
+          biometrics: BiometricMode.fingerprint,
+        );
+
+        await tester.tap(find.text('Login'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+
+        // Biometric *is* the login screen — no password fields yet.
+        expect(find.text('Verify Identity'), findsOneWidget);
+        expect(find.text('Login with Password'), findsOneWidget);
+        expect(find.text('Email Address'), findsNothing);
+        expect(find.text('Password'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'biometric ON but no enrolled biometrics: Login falls back to password',
+      (tester) async {
+        await _pumpAtOnboarding(
+          tester,
+          biometricLoginEnabled: true,
+          biometrics: null,
+        );
+
+        await tester.tap(find.text('Login'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(find.text('Verify Identity'), findsNothing);
+        expect(find.text('Email Address'), findsOneWidget);
+        expect(find.text('Sign in'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'biometric ON: Login with Password fallback reaches password form',
+      (tester) async {
+        await _pumpAtOnboarding(
+          tester,
+          biometricLoginEnabled: true,
+          biometrics: BiometricMode.fingerprint,
+        );
+
+        await tester.tap(find.text('Login'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(find.text('Verify Identity'), findsOneWidget);
+
+        await tester.tap(find.text('Login with Password'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(find.text('Email Address'), findsOneWidget);
+        expect(find.text('Sign in'), findsOneWidget);
+        expect(find.text('Verify Identity'), findsNothing);
+      },
+    );
+
+    testWidgets('incorrect password shows inline error on the password field', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await _pumpAtOnboarding(tester);
       await tester.tap(find.text('Login'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
@@ -139,21 +294,14 @@ void main() {
       expect(find.textContaining('Incorrect password'), findsOneWidget);
     });
 
-    testWidgets('returning to sign-in from forgot password is possible',
-        (tester) async {
+    testWidgets('returning to sign-in from forgot password is possible', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1080, 2400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
 
-      await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(
-            home: AuthFlow(),
-          ),
-        ),
-      );
-      await tester.pump(const Duration(milliseconds: 901));
-      await tester.pump(const Duration(milliseconds: 50));
+      await _pumpAtOnboarding(tester);
       await tester.tap(find.text('Login'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
@@ -166,21 +314,14 @@ void main() {
       expect(find.text('Forgot your password?'), findsOneWidget);
     });
 
-    testWidgets('create account screen renders from onboarding',
-        (tester) async {
+    testWidgets('create account screen renders from onboarding', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1080, 2400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
 
-      await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(
-            home: AuthFlow(),
-          ),
-        ),
-      );
-      await tester.pump(const Duration(milliseconds: 901));
-      await tester.pump(const Duration(milliseconds: 50));
+      await _pumpAtOnboarding(tester);
 
       // Tap "Create an account".
       await tester.tap(find.text('Create an account'));
@@ -197,21 +338,16 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
-      // Begin sign-in flow.
       final notifier = container.read(authFlowProvider.notifier);
       notifier.show(AuthStage.signIn);
-      notifier.signIn('veek@nexacorp.io', 'skiflux');
-      expect(container.read(authFlowProvider).stage, AuthStage.fingerprint);
-
-      // Set some user data.
       notifier.setUsername('testuser');
       notifier.setGoal('goal');
       notifier.setSkillworld('Design');
+      expect(container.read(authFlowProvider).stage, AuthStage.signIn);
 
-      // Now invalidate — simulate what happens after successful login.
+      // Simulate what happens after successful login / _enterApp.
       container.invalidate(authFlowProvider);
 
-      // Provider must return to initial state.
       final fresh = container.read(authFlowProvider);
       expect(fresh.stage, AuthStage.splash);
       expect(fresh.username, isEmpty);

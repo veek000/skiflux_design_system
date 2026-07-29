@@ -49,11 +49,7 @@ abstract final class SkifluxToast {
       SnackBar(
         content: Row(
           children: [
-            Icon(
-              style.icon,
-              size: SkifluxIcons.sizeS,
-              color: style.foreground,
-            ),
+            Icon(style.icon, size: SkifluxIcons.sizeS, color: style.foreground),
             const SizedBox(width: SkifluxSpacing.spaceS),
             Expanded(
               child: Text(
@@ -68,9 +64,7 @@ abstract final class SkifluxToast {
         backgroundColor: style.background,
         behavior: SnackBarBehavior.floating,
         duration: duration,
-        shape: RoundedRectangleBorder(
-          borderRadius: SkifluxRadii.borderM,
-        ),
+        shape: RoundedRectangleBorder(borderRadius: SkifluxRadii.borderM),
       ),
     );
   }

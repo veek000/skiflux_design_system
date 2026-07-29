@@ -47,6 +47,47 @@ void main() {
       expect(pressed, isFalse);
     });
 
+    testWidgets('loading shows a spinner and keeps the label\'s space', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: SkifluxButton(label: 'Sign in', loading: true),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byType(SkifluxSpinner), findsOneWidget);
+      // Still laid out, just invisible — otherwise the button would shrink to
+      // the spinner's width the moment a request starts.
+      expect(find.text('Sign in'), findsOneWidget);
+      expect(
+        tester.widget<Opacity>(find.byType(Opacity).first).opacity,
+        0,
+      );
+    });
+
+    testWidgets('loading blocks taps', (tester) async {
+      var pressed = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SkifluxButton(
+              label: 'Sign in',
+              loading: true,
+              onPressed: () => pressed = true,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.byType(SkifluxButton));
+      expect(pressed, isFalse);
+    });
+
     testWidgets('renders with leading icon', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(

@@ -3,16 +3,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:skiflux_mobile_app_v2/features/tasks/submission_task_screen.dart';
+import 'package:skiflux_mobile_app_v2/shared/sheets/skiflux_sheet.dart';
 
 void main() {
   group('Task submission flow', () {
-    testWidgets('task screen renders with correct title and submit button',
-        (tester) async {
+    testWidgets('task screen renders with correct title and submit button', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         const ProviderScope(
-          child: MaterialApp(
-            home: SubmissionTaskScreen(taskId: 'learn-2'),
-          ),
+          child: MaterialApp(home: SubmissionTaskScreen(taskId: 'learn-2')),
         ),
       );
       await tester.pump();
@@ -23,8 +23,9 @@ void main() {
       expect(find.text('Submit Task & Earn 25 coins'), findsOneWidget);
     });
 
-    testWidgets('enter valid link and submit shows success dialog',
-        (tester) async {
+    testWidgets('enter valid link and submit shows success sheet', (
+      tester,
+    ) async {
       // Use a taller viewport so the ListView renders scroll-fold children.
       tester.view.physicalSize = const Size(1080, 2400);
       tester.view.devicePixelRatio = 1.0;
@@ -32,9 +33,7 @@ void main() {
 
       await tester.pumpWidget(
         const ProviderScope(
-          child: MaterialApp(
-            home: SubmissionTaskScreen(taskId: 'learn-2'),
-          ),
+          child: MaterialApp(home: SubmissionTaskScreen(taskId: 'learn-2')),
         ),
       );
       await tester.pump();
@@ -52,21 +51,24 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
-      // Success dialog appears.
+      // Confirmation renders as the app-wide bottom sheet, not a centred
+      // Material Dialog.
       expect(find.text('Task Submitted!'), findsOneWidget);
+      expect(find.text('Back to Tasks'), findsOneWidget);
+      expect(find.byType(SkifluxSheetShell), findsOneWidget);
+      expect(find.byType(Dialog), findsNothing);
     });
 
-    testWidgets('submit with invalid http link shows error modal',
-        (tester) async {
+    testWidgets('submit with invalid http link shows error modal', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1080, 2400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
 
       await tester.pumpWidget(
         const ProviderScope(
-          child: MaterialApp(
-            home: SubmissionTaskScreen(taskId: 'learn-2'),
-          ),
+          child: MaterialApp(home: SubmissionTaskScreen(taskId: 'learn-2')),
         ),
       );
       await tester.pump();
@@ -92,9 +94,7 @@ void main() {
     testWidgets('task not found shows error fallback', (tester) async {
       await tester.pumpWidget(
         const ProviderScope(
-          child: MaterialApp(
-            home: SubmissionTaskScreen(taskId: 'nonexistent'),
-          ),
+          child: MaterialApp(home: SubmissionTaskScreen(taskId: 'nonexistent')),
         ),
       );
       await tester.pump();

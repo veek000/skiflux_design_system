@@ -58,8 +58,7 @@ class Playlist {
 
   int get episodeCount => episodes.length;
   String get metaLine => '$creatorName · $episodeCount Episodes';
-  String get detailMeta =>
-      '$viewsLabel · $episodeCount Episodes';
+  String get detailMeta => '$viewsLabel · $episodeCount Episodes';
 }
 
 /// Badge shown on a coin pack card.
@@ -85,10 +84,10 @@ class CoinPack {
   String get priceLabel => '₦${thousands(priceNaira)}';
 
   String? get badgeLabel => switch (badge) {
-        CoinPackBadge.none => null,
-        CoinPackBadge.bestValue => 'Best Value',
-        CoinPackBadge.save => 'Save $savePercent%',
-      };
+    CoinPackBadge.none => null,
+    CoinPackBadge.bestValue => 'Best Value',
+    CoinPackBadge.save => 'Save $savePercent%',
+  };
 
   /// Thousands-separates an integer: 1240 → "1,240".
   static String thousands(int value) {
@@ -104,10 +103,7 @@ class CoinPack {
 
 /// Snapshot of wallet + default playlist.
 class PlaylistsState {
-  PlaylistsState({
-    required this.skillCoins,
-    required this.defaultPlaylist,
-  });
+  PlaylistsState({required this.skillCoins, required this.defaultPlaylist});
 
   int skillCoins;
   final Playlist defaultPlaylist;
@@ -133,9 +129,14 @@ class PlaylistsState {
 class PlaylistsNotifier extends Notifier<PlaylistsState> {
   @override
   PlaylistsState build() {
-    return PlaylistsState(
-      skillCoins: 100,
-      defaultPlaylist: _seedPlaylist(),
+    return PlaylistsState(skillCoins: 100, defaultPlaylist: _seedPlaylist());
+  }
+
+  /// Syncs the SkillCoin balance from `GET /wallet/my-wallet` (whole coins).
+  void setSkillCoins(int coins) {
+    state = PlaylistsState(
+      skillCoins: coins < 0 ? 0 : coins,
+      defaultPlaylist: state.defaultPlaylist,
     );
   }
 
@@ -271,8 +272,9 @@ class PlaylistsNotifier extends Notifier<PlaylistsState> {
   }
 }
 
-final playlistsProvider =
-    NotifierProvider<PlaylistsNotifier, PlaylistsState>(PlaylistsNotifier.new);
+final playlistsProvider = NotifierProvider<PlaylistsNotifier, PlaylistsState>(
+  PlaylistsNotifier.new,
+);
 
 /// SkillCoin packs offered in Buy Coins (Other Video Player Flow 04).
 /// Rate: 1 coin = ₦6 (Flow 03 `1256:27795`).
@@ -312,6 +314,13 @@ class PlayerPrefsState {
     return '${speed}x';
   }
 
+  /// The same value without the trailing `.0`, for the full-screen player's
+  /// 48px control circle — Figma `3416:12837` prints "1x", not "1.0x".
+  String get speedLabelShort {
+    if (speed == speed.roundToDouble()) return '${speed.toInt()}x';
+    return '${speed}x';
+  }
+
   PlayerPrefsState copyWith({
     double? speed,
     bool? captionsOn,
@@ -346,5 +355,5 @@ class PlayerPrefsNotifier extends Notifier<PlayerPrefsState> {
 
 final playerPrefsProvider =
     NotifierProvider<PlayerPrefsNotifier, PlayerPrefsState>(
-  PlayerPrefsNotifier.new,
-);
+      PlayerPrefsNotifier.new,
+    );

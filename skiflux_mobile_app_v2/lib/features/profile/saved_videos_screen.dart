@@ -2,40 +2,34 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/error_handling/error_handler.dart';
 import '../../shared/toast/skiflux_toast.dart';
-import '../subscriptions/data/subscriptions_store.dart';
-import '../subscriptions/subscriptions_screen.dart';
+import '../../shared/widgets/load_failure.dart';
+import 'data/library_episode.dart';
+import 'data/library_store.dart';
+import 'library_episode_player.dart';
 import 'library_episode_row.dart';
 
 // Figma: **Profile Flow 12** (`1256:24572`) — Saved Videos. Search field +
-// saved rows ("Saved 2 days ago") with a filled brand bookmark trailing;
-// tapping the bookmark un-saves (removes) the row.
+// saved rows with a filled brand bookmark trailing; tapping the bookmark
+// un-saves (removes) the row.
+//
+// Backed by `GET /me/saved`; the bookmark posts `POST /episodes/save`, a
+// toggle. Nothing is seeded.
 
 class SavedVideosScreen extends ConsumerStatefulWidget {
   const SavedVideosScreen({super.key});
 
   @override
-  ConsumerState<SavedVideosScreen> createState() =>
-      _SavedVideosScreenState();
+  ConsumerState<SavedVideosScreen> createState() => _SavedVideosScreenState();
 }
 
 class _SavedVideosScreenState extends ConsumerState<SavedVideosScreen> {
   String _query = '';
 
-  /// Session-local demo saved set (no app-wide save model yet).
-  // TODO(backend, blocking): replace session-local saved list with real per-user saved/bookmarked videos from backend — expects: List<{epNumber: int, title: String, creatorUsername: String, duration: String, views: String, postedAgo: String, isNew: bool, postedToday: bool, watchProgress: double}>
-  List<SubscriptionEpisode>? _saved;
-
   @override
   Widget build(BuildContext context) {
-    final subs = ref.watch(subscriptionsProvider);
-    _saved ??= subs.feed().take(5).toList();
-    final query = _query.trim().toLowerCase();
-    final visible = query.isEmpty
-        ? _saved!
-        : _saved!
-            .where((e) => e.title.toLowerCase().contains(query))
-            .toList();
+    final saved = ref.watch(savedEpisodesProvider);
 
     return Scaffold(
       backgroundColor: SkifluxColors.backgroundPrimary,
@@ -61,40 +55,16 @@ class _SavedVideosScreenState extends ConsumerState<SavedVideosScreen> {
               ),
             ),
             Expanded(
-              child: visible.isEmpty
-                  ? _empty()
-                  : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(
-                        SkifluxSpacing.spaceL,
-                        0,
-                        SkifluxSpacing.spaceL,
-                        SkifluxSpacing.spaceL,
-                      ),
-                      itemCount: visible.length,
-                      separatorBuilder: (_, __) =>
-                          const SizedBox(height: SkifluxSpacing.spaceL),
-                      itemBuilder: (_, i) => LibraryEpisodeRow(
-                        episode: visible[i],
-                        statusLine: 'Saved 2 days ago',
-                        trailing: IconButton(
-                          padding: EdgeInsets.zero,
-                          onPressed: () {
-                            setState(() => _saved!.remove(visible[i]));
-                            SkifluxToast.info(
-                              context,
-                              'Removed from saved videos',
-                            );
-                          },
-                          icon: const Icon(
-                            RemixIcons.bookmark_fill,
-                            size: SkifluxIcons.sizeM,
-                            color: SkifluxColors.contentBrand,
-                          ),
-                        ),
-                        onTap: () =>
-                            showEpisodePlayerModal(context, visible[i]),
-                      ),
-                    ),
+              child: switch (saved) {
+                AsyncLoading() => const LibraryListSkeleton(),
+                AsyncError(:final error) => LoadFailure(
+                  error: error,
+                  title: "We couldn't load your saved videos",
+                  onRetry: () =>
+                      ref.read(savedEpisodesProvider.notifier).refresh(),
+                ),
+                AsyncData(:final value) => _list(value),
+              },
             ),
           ],
         ),
@@ -102,40 +72,63 @@ class _SavedVideosScreenState extends ConsumerState<SavedVideosScreen> {
     );
   }
 
-  Widget _empty() {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 98,
-            height: 98,
-            decoration: const BoxDecoration(
-              color: SkifluxColors.brand100,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              RemixIcons.bookmark_fill,
-              size: 48,
-              color: SkifluxColors.contentBrand,
-            ),
+  Widget _list(List<LibraryEpisode> episodes) {
+    final query = _query.trim().toLowerCase();
+    final visible = query.isEmpty
+        ? episodes
+        : episodes
+              .where((e) => e.title.toLowerCase().contains(query))
+              .toList();
+    if (visible.isEmpty) {
+      return SkifluxEmptyState(
+        icon: const Icon(
+          RemixIcons.bookmark_fill,
+          size: SkifluxEmptyState.iconSize,
+          color: SkifluxColors.contentBrand,
+        ),
+        title: query.isEmpty ? 'No saved videos' : 'No matches',
+        message: query.isEmpty
+            ? 'Videos you save will show up here.'
+            : 'No saved video matches “$_query”.',
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(
+        SkifluxSpacing.spaceL,
+        0,
+        SkifluxSpacing.spaceL,
+        SkifluxSpacing.spaceL,
+      ),
+      itemCount: visible.length,
+      separatorBuilder: (_, _) => const SizedBox(height: SkifluxSpacing.spaceL),
+      itemBuilder: (_, i) => LibraryEpisodeRow(
+        episode: visible[i],
+        statusLine: '${visible[i].viewsLabel} views',
+        onTap: () => showLibraryEpisodePlayer(context, visible[i]),
+        trailing: IconButton(
+          padding: EdgeInsets.zero,
+          onPressed: () => _unsave(visible[i]),
+          icon: const Icon(
+            RemixIcons.bookmark_fill,
+            size: SkifluxIcons.sizeM,
+            color: SkifluxColors.contentBrand,
           ),
-          const SizedBox(height: SkifluxSpacing.spaceL),
-          Text(
-            'No saved videos',
-            style: SkifluxTypography.headingH7Bold.copyWith(
-              color: SkifluxColors.contentPrimary,
-            ),
-          ),
-          const SizedBox(height: SkifluxSpacing.spaceS),
-          Text(
-            'Videos you save will show up here.',
-            style: SkifluxTypography.bodyP8Regular.copyWith(
-              color: SkifluxColors.contentTertiary,
-            ),
-          ),
-        ],
+        ),
       ),
     );
+  }
+
+  Future<void> _unsave(LibraryEpisode episode) async {
+    try {
+      await ref.read(savedEpisodesProvider.notifier).unsave(episode);
+      if (mounted) SkifluxToast.info(context, 'Removed from saved videos');
+    } catch (error) {
+      if (!mounted) return;
+      SkifluxToast.error(
+        context,
+        ref.read(errorHandlerProvider).classify(error).message,
+      );
+    }
   }
 }

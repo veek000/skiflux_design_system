@@ -153,6 +153,7 @@ class CoinPackBadgePill extends StatelessWidget {
     );
   }
 }
+
 /// Card / Bank Transfer payment picker (`1256:27722`). A bordered card with
 /// two selectable rows; [cardSelected] true → Card, false → Bank Transfer.
 class PaymentMethodSelector extends StatelessWidget {
@@ -230,10 +231,7 @@ class PaymentMethodSelector extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.all(5),
-              decoration: BoxDecoration(
-                color: iconBg,
-                shape: BoxShape.circle,
-              ),
+              decoration: BoxDecoration(color: iconBg, shape: BoxShape.circle),
               child: Icon(icon, size: SkifluxUnit.u20, color: iconColor),
             ),
             const SizedBox(width: SkifluxSpacing.spaceL),
@@ -398,4 +396,3 @@ class CoinSummaryCard extends StatelessWidget {
     );
   }
 }
-

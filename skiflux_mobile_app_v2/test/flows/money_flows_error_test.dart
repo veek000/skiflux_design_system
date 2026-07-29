@@ -15,11 +15,7 @@ class _SingleCardPaymentNotifier extends PaymentCardsNotifier {
   @override
   List<SavedCard> build() {
     return const [
-      SavedCard(
-        brand: CardBrand.mastercard,
-        last4: '8810',
-        expiry: '09/27',
-      ),
+      SavedCard(brand: CardBrand.mastercard, last4: '8810', expiry: '09/27'),
     ];
   }
 }
@@ -82,12 +78,9 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
-              paymentCardsProvider
-                  .overrideWith(_SingleCardPaymentNotifier.new),
+              paymentCardsProvider.overrideWith(_SingleCardPaymentNotifier.new),
             ],
-            child: const MaterialApp(
-              home: PaymentMethodsScreen(),
-            ),
+            child: const MaterialApp(home: PaymentMethodsScreen()),
           ),
         );
         await tester.pumpAndSettle();
@@ -115,17 +108,14 @@ void main() {
         addTearDown(() => tester.view.resetPhysicalSize());
 
         await tester.pumpWidget(
-          const ProviderScope(
-            child: MaterialApp(
-              home: WithdrawScreen(),
-            ),
-          ),
+          const ProviderScope(child: MaterialApp(home: WithdrawScreen())),
         );
         await tester.pumpAndSettle();
 
         // Launch withdraw(3000) asynchronously (modal sheet stays open until dismissed)
-        final state =
-            tester.state<WithdrawScreenState>(find.byType(WithdrawScreen));
+        final state = tester.state<WithdrawScreenState>(
+          find.byType(WithdrawScreen),
+        );
         unawaited(state.withdraw(3000));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
@@ -133,7 +123,8 @@ void main() {
         // Expect error modal for skillCoinWithdrawal
         expect(
           find.textContaining(
-              "We couldn't process your withdrawal. No coins were deducted."),
+            "We couldn't process your withdrawal. No coins were deducted.",
+          ),
           findsOneWidget,
         );
       },
@@ -147,17 +138,14 @@ void main() {
         addTearDown(() => tester.view.resetPhysicalSize());
 
         await tester.pumpWidget(
-          const ProviderScope(
-            child: MaterialApp(
-              home: BuyCoinsScreen(),
-            ),
-          ),
+          const ProviderScope(child: MaterialApp(home: BuyCoinsScreen())),
         );
         await tester.pumpAndSettle();
 
         // Launch pay(null) asynchronously on state to exercise coinPurchaseFailed error handling
-        final state =
-            tester.state<BuyCoinsScreenState>(find.byType(BuyCoinsScreen));
+        final state = tester.state<BuyCoinsScreenState>(
+          find.byType(BuyCoinsScreen),
+        );
         unawaited(state.pay(null));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
@@ -165,7 +153,8 @@ void main() {
         // Expect error modal for coinPurchaseFailed
         expect(
           find.textContaining(
-              "We couldn't process your coin purchase. No charges were made."),
+            "We couldn't process your coin purchase. No charges were made.",
+          ),
           findsOneWidget,
         );
       },

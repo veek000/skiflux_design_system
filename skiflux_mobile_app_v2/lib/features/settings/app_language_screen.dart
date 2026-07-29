@@ -46,8 +46,8 @@ class AppLanguageScreen extends ConsumerWidget {
                           Expanded(
                             child: Text(
                               language.label,
-                              style: SkifluxTypography.uiButtonMedium.copyWith(
-                                color: SkifluxColors.contentPrimary,
+                              style: SkifluxTypography.headingH10Bold.copyWith(
+                                color: SkifluxColors.contentSecondary,
                               ),
                             ),
                           ),

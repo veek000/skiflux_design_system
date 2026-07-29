@@ -1,3 +1,5 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
@@ -44,6 +46,15 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   int _tabIndex = 0;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(ref.read(notificationsProvider.notifier).refreshFromBackend());
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final all = ref.watch(notificationsProvider);
     final notifier = ref.read(notificationsProvider.notifier);
@@ -76,10 +87,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
             child: SkifluxTextTabs(
               tabs: [
                 const SkifluxTextTab(label: 'All'),
-                SkifluxTextTab(
-                  label: 'Unread',
-                  count: unreadCount,
-                ),
+                SkifluxTextTab(label: 'Unread', count: unreadCount),
               ],
               selectedIndex: _tabIndex,
               onSelected: (index) => setState(() => _tabIndex = index),
@@ -115,8 +123,9 @@ class _NotificationList extends StatelessWidget {
       final startOfToday = DateTime(now.year, now.month, now.day);
       if (!n.time.isBefore(startOfToday)) {
         today.add(n);
-      } else if (!n.time
-          .isBefore(startOfToday.subtract(const Duration(days: 1)))) {
+      } else if (!n.time.isBefore(
+        startOfToday.subtract(const Duration(days: 1)),
+      )) {
         yesterday.add(n);
       } else {
         earlier.add(n);
@@ -142,8 +151,9 @@ class _NotificationList extends StatelessWidget {
 
 /// Section-card rounding (`Frame 5811` radius L). Const so the clip and
 /// the foreground stroke use the exact same geometry.
-const BorderRadius _sectionRadius =
-    BorderRadius.all(Radius.circular(SkifluxRadii.l));
+const BorderRadius _sectionRadius = BorderRadius.all(
+  Radius.circular(SkifluxRadii.l),
+);
 
 /// Section label + card stack. The stack is a bordered card (`Frame
 /// 5811`): 1px borderTertiary stroke on ALL sides, radius L corners,
@@ -180,14 +190,16 @@ class _Section extends StatelessWidget {
               width: SkifluxBorderWidth.xs,
             ),
           ),
-          child: Column(
-            children: [
-              for (var i = 0; i < notifications.length; i++)
-                _NotificationCard(
-                  notifications[i],
-                  showDivider: i < notifications.length - 1,
-                ),
-            ],
+          child: ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: notifications.length,
+            itemBuilder: (context, i) {
+              return _NotificationCard(
+                notifications[i],
+                showDivider: i < notifications.length - 1,
+              );
+            },
           ),
         ),
       ],

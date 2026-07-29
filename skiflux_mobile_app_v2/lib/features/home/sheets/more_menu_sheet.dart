@@ -9,6 +9,7 @@ import '../../playlists/data/playlists_store.dart';
 import '../../tasks/data/tasks_store.dart';
 import '../../tasks/quiz_intro_screen.dart';
 import '../../tasks/submission_task_screen.dart';
+import '../full_screen_player_screen.dart';
 import 'episode_resources_sheet.dart';
 import 'playback_speed_sheet.dart';
 
@@ -86,8 +87,13 @@ class _MoreMenuSheet extends ConsumerWidget {
             icon: RemixIcons.fullscreen_fill,
             label: 'Full Screen',
             onTap: () {
-              Navigator.of(context).pop();
-              SkifluxToast.info(context, 'Full screen player');
+              final navigator = Navigator.of(context);
+              navigator.pop();
+              navigator.push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const FullScreenPlayerScreen(),
+                ),
+              );
             },
           ),
           _MenuRow(
@@ -155,9 +161,7 @@ class _MoreMenuSheet extends ConsumerWidget {
     if (target == null) return;
     if (target.kind == LearningTaskKind.quiz) {
       Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => QuizIntroScreen(taskId: target!.id),
-        ),
+        MaterialPageRoute(builder: (_) => QuizIntroScreen(taskId: target!.id)),
       );
     } else {
       Navigator.of(context).push(
@@ -168,7 +172,6 @@ class _MoreMenuSheet extends ConsumerWidget {
     }
   }
 }
-
 
 class _FeatureCard extends StatelessWidget {
   const _FeatureCard({

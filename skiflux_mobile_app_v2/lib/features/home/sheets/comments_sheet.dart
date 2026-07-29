@@ -73,10 +73,7 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
       await ErrorDisplay.show(
         context,
         ref,
-        SkifluxFailure(
-          SkifluxErrorKind.likeCommentReactionFailed,
-          cause: e,
-        ),
+        SkifluxFailure(SkifluxErrorKind.likeCommentReactionFailed, cause: e),
         stackTrace: st,
       );
     }
@@ -94,17 +91,19 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Flexible(
-            child: ListView(
+            child: ListView.builder(
               shrinkWrap: true,
-              // Sheet drags down only when the list is at its top.
               controller: ModalScrollController.of(context),
               padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
-              children: [
-                for (var i = 0; i < session.comments.length; i++) ...[
-                  if (i > 0) const SizedBox(height: SkifluxSpacing.spaceL),
-                  _buildComment(i, session, notifier),
-                ],
-              ],
+              itemCount: session.comments.length,
+              itemBuilder: (context, i) {
+                final comment = _buildComment(i, session, notifier);
+                if (i == 0) return comment;
+                return Padding(
+                  padding: const EdgeInsets.only(top: SkifluxSpacing.spaceL),
+                  child: comment,
+                );
+              },
             ),
           ),
           Padding(

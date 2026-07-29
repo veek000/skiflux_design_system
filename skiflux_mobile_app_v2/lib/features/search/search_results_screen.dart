@@ -28,8 +28,9 @@ class SearchResultsScreen extends StatefulWidget {
 
 class _SearchResultsScreenState extends State<SearchResultsScreen> {
   late SearchCategory _tab = widget.initialTab;
-  late final TextEditingController _queryController =
-      TextEditingController(text: widget.results.query);
+  late final TextEditingController _queryController = TextEditingController(
+    text: widget.results.query,
+  );
 
   SearchResults get _results => widget.results;
 
@@ -40,9 +41,9 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
   }
 
   void _openCreatorProfile() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const ProfileScreen()),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
   }
 
   void _openUserProfile(PersonResult person) {
@@ -143,36 +144,36 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
   Widget _tabContent() {
     final items = switch (_tab) {
       SearchCategory.episodes => [
-          for (final e in _results.episodes)
-            EpisodeResultCard(episode: e, onTap: () {}),
-        ],
+        for (final e in _results.episodes)
+          EpisodeResultCard(episode: e, onTap: () {}),
+      ],
       SearchCategory.creators => [
-          for (final c in _results.creators)
-            PersonResultRow(
-              person: c,
-              actionLabel: 'Follow',
-              onAction: () {},
-              onTap: _openCreatorProfile,
-            ),
-        ],
+        for (final c in _results.creators)
+          PersonResultRow(
+            person: c,
+            actionLabel: 'Follow',
+            onAction: () {},
+            onTap: _openCreatorProfile,
+          ),
+      ],
       SearchCategory.users => [
-          for (final u in _results.users)
-            PersonResultRow(
-              person: u,
-              actionLabel: 'View Profile',
-              onAction: () => _openUserProfile(u),
-              onTap: () => _openUserProfile(u),
-            ),
-        ],
+        for (final u in _results.users)
+          PersonResultRow(
+            person: u,
+            actionLabel: 'View Profile',
+            onAction: () => _openUserProfile(u),
+            onTap: () => _openUserProfile(u),
+          ),
+      ],
       SearchCategory.playlists => [
-          for (final p in _results.playlists)
-            PlaylistResultCard(
-              playlist: p,
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const PlaylistScreen()),
-              ),
-            ),
-        ],
+        for (final p in _results.playlists)
+          PlaylistResultCard(
+            playlist: p,
+            onTap: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const PlaylistScreen())),
+          ),
+      ],
     };
 
     if (items.isEmpty) {
@@ -195,8 +196,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
     return ListView.separated(
       padding: EdgeInsets.zero,
       itemCount: items.length,
-      separatorBuilder: (_, __) =>
-          const SizedBox(height: SkifluxSpacing.spaceL),
+      separatorBuilder: (_, _) => const SizedBox(height: SkifluxSpacing.spaceL),
       itemBuilder: (_, i) => items[i],
     );
   }

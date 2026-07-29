@@ -41,14 +41,21 @@ class _WeekPickerSheetState extends ConsumerState<_WeekPickerSheet> {
   late StreakWeek _selected = widget.selected;
 
   /// First day of the month currently shown in the grid.
-  late DateTime _month = DateTime(
-    _selected.start.year,
-    _selected.start.month,
-  );
+  late DateTime _month = DateTime(_selected.start.year, _selected.start.month);
 
   static const _monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June', 'July',
-    'August', 'September', 'October', 'November', 'December',
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
   ];
 
   @override
@@ -148,13 +155,15 @@ class _WeekPickerSheetState extends ConsumerState<_WeekPickerSheet> {
     var cursor = first.subtract(Duration(days: first.weekday % 7));
     final rows = <Widget>[];
     while (!cursor.isAfter(last)) {
-      rows.add(_WeekRow(
-        sunday: cursor,
-        month: _month.month,
-        selected: _selected,
-        weekContaining: streaks.weekContaining,
-        onSelect: (week) => setState(() => _selected = week),
-      ));
+      rows.add(
+        _WeekRow(
+          sunday: cursor,
+          month: _month.month,
+          selected: _selected,
+          weekContaining: streaks.weekContaining,
+          onSelect: (week) => setState(() => _selected = week),
+        ),
+      );
       cursor = cursor.add(const Duration(days: 7));
     }
     return rows;
@@ -233,10 +242,11 @@ class _WeekRow extends StatelessWidget {
       child: Center(
         child: Text(
           '${date.day}',
-          style: (isSelected
-                  ? SkifluxTypography.bodyP9Semibold
-                  : SkifluxTypography.bodyP9Regular)
-              .copyWith(color: color),
+          style:
+              (isSelected
+                      ? SkifluxTypography.bodyP9Semibold
+                      : SkifluxTypography.bodyP9Regular)
+                  .copyWith(color: color),
         ),
       ),
     );

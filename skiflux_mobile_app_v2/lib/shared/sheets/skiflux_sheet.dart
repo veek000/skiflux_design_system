@@ -26,18 +26,18 @@ Future<T?> showSkifluxSheet<T>({
 /// scrim, and the sheet card gets the grabber pill overlay.
 class _SkifluxSheetRoute<T> extends ModalSheetRoute<T> {
   _SkifluxSheetRoute({required super.builder})
-      : super(
-          expanded: false,
-          bounce: false,
-          enableDrag: true,
-          isDismissible: true,
-          // Painted by [buildModalBarrier] instead.
-          modalBarrierColor: const Color(0x00000000),
-          duration: const Duration(milliseconds: 260),
-          animationCurve: Curves.easeOutCubic,
-          containerBuilder: (context, animation, child) =>
-              _GrabberOverlay(child: child),
-        );
+    : super(
+        expanded: false,
+        bounce: false,
+        enableDrag: true,
+        isDismissible: true,
+        // Painted by [buildModalBarrier] instead.
+        modalBarrierColor: const Color(0x00000000),
+        duration: const Duration(milliseconds: 260),
+        animationCurve: Curves.easeOutCubic,
+        containerBuilder: (context, animation, child) =>
+            _GrabberOverlay(child: child),
+      );
 
   /// Blurred + dimmed backdrop; tap to dismiss. Follows [animation] so the
   /// blur/scrim also relax while the sheet is dragged down.
@@ -58,8 +58,9 @@ class _SkifluxSheetRoute<T> extends ModalSheetRoute<T> {
             sigmaY: 5 * curved.value,
           ),
           child: ColoredBox(
-            color: SkifluxColors.overlay50
-                .withValues(alpha: 0.5 * curved.value),
+            color: SkifluxColors.overlay50.withValues(
+              alpha: 0.5 * curved.value,
+            ),
           ),
         ),
       ),
@@ -224,24 +225,35 @@ class SkifluxSheetShell extends StatelessWidget {
               ],
             ),
           ),
-          // Close control — grey circle + close-line (198:13830).
-          Material(
-            color: SkifluxColors.backgroundPressed,
-            shape: const CircleBorder(),
-            child: InkWell(
-              customBorder: const CircleBorder(),
-              onTap: () => Navigator.of(context).pop(),
-              child: const Padding(
-                padding: EdgeInsets.all(SkifluxSpacing.spaceS),
-                child: Icon(
-                  RemixIcons.close_line,
-                  size: SkifluxIcons.sizeM,
-                  color: SkifluxColors.contentPrimary,
-                ),
-              ),
-            ),
-          ),
+          const SkifluxSheetCloseButton(),
         ],
+      ),
+    );
+  }
+}
+
+/// Close control shared by the sheet header and the headerless dialog cards:
+/// a grey circle with 8px padding around a 24px close-line, i.e. 40×40
+/// (Figma `198:13830`, and the "Main Avatar" in every confirm/success modal).
+class SkifluxSheetCloseButton extends StatelessWidget {
+  const SkifluxSheetCloseButton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: SkifluxColors.backgroundPressed,
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: () => Navigator.of(context).pop(),
+        child: const Padding(
+          padding: EdgeInsets.all(SkifluxSpacing.spaceS),
+          child: Icon(
+            RemixIcons.close_line,
+            size: SkifluxIcons.sizeM,
+            color: SkifluxColors.contentPrimary,
+          ),
+        ),
       ),
     );
   }

@@ -5,6 +5,7 @@ import 'package:skiflux_design_system/skiflux_design_system.dart';
 import '../playlists/data/playlists_store.dart';
 import 'buy_coins_screen.dart';
 import 'data/wallet_store.dart';
+import 'transaction_details_screen.dart';
 import 'withdraw_screen.dart';
 
 // Figma: **Profile Flow 11/02** (`1256:24678` / `1256:24006`) — SkillCoin
@@ -26,17 +27,24 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
   _TxnFilter _filter = _TxnFilter.all;
 
   @override
+  void initState() {
+    super.initState();
+    // Refresh ledger when the screen opens (session may already exist).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(walletProvider.notifier).refreshFromBackend();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final coins = ref.watch(playlistsProvider).skillCoins;
     final wallet = ref.watch(walletProvider);
     final txns = switch (_filter) {
       _TxnFilter.all => wallet.transactions,
-      _TxnFilter.earned => wallet.transactions
-          .where((t) => t.type == CoinTxnType.earned)
-          .toList(),
-      _TxnFilter.spent => wallet.transactions
-          .where((t) => t.type != CoinTxnType.earned)
-          .toList(),
+      _TxnFilter.earned =>
+        wallet.transactions.where((t) => t.type == CoinTxnType.earned).toList(),
+      _TxnFilter.spent =>
+        wallet.transactions.where((t) => t.type != CoinTxnType.earned).toList(),
     };
 
     return Scaffold(
@@ -166,9 +174,7 @@ class _BalanceHero extends StatelessWidget {
                   label: 'Withdraw',
                   expanded: true,
                   onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const WithdrawScreen(),
-                    ),
+                    MaterialPageRoute(builder: (_) => const WithdrawScreen()),
                   ),
                 ),
               ),
@@ -181,9 +187,7 @@ class _BalanceHero extends StatelessWidget {
                   type: SkifluxButtonType.tertiaryMono,
                   expanded: true,
                   onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const BuyCoinsScreen(),
-                    ),
+                    MaterialPageRoute(builder: (_) => const BuyCoinsScreen()),
                   ),
                 ),
               ),
@@ -293,18 +297,32 @@ class _TxnCard extends StatelessWidget {
           width: SkifluxBorderWidth.xs,
         ),
       ),
-      child: Column(
-        children: [
-          for (var i = 0; i < txns.length; i++) ...[
-            if (i > 0)
-              const Divider(
-                height: SkifluxBorderWidth.xs,
-                thickness: SkifluxBorderWidth.xs,
-                color: SkifluxColors.borderTertiary,
+      child: ListView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: txns.length,
+        itemBuilder: (context, i) {
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (i > 0)
+                const Divider(
+                  height: SkifluxBorderWidth.xs,
+                  thickness: SkifluxBorderWidth.xs,
+                  color: SkifluxColors.borderTertiary,
+                ),
+              // Rows open the details frame (`3664:13258`).
+              InkWell(
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => TransactionDetailsScreen(txn: txns[i]),
+                  ),
+                ),
+                child: _TxnRow(txn: txns[i]),
               ),
-            _TxnRow(txn: txns[i]),
-          ],
-        ],
+            ],
+          );
+        },
       ),
     );
   }

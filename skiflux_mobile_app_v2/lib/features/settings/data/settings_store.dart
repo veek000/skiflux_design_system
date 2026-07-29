@@ -96,8 +96,9 @@ class SettingsState {
   }
 }
 
-final settingsProvider =
-    NotifierProvider<SettingsNotifier, SettingsState>(SettingsNotifier.new);
+final settingsProvider = NotifierProvider<SettingsNotifier, SettingsState>(
+  SettingsNotifier.new,
+);
 
 class SettingsNotifier extends Notifier<SettingsState> {
   @override
@@ -114,7 +115,8 @@ class SettingsNotifier extends Notifier<SettingsState> {
         NotificationPref.badges: false,
         NotificationPref.platformAnnouncements: true,
       },
-      biometricLogin: true,
+      // Opt-in: biometric is an alternative login path, not on by default.
+      biometricLogin: false,
       twoFactorAuth: false,
       autoPlayNext: true,
       downloadQuality: DownloadQuality.hd720,

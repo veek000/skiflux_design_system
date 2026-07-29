@@ -343,7 +343,8 @@ class SearchSectionHeader extends StatelessWidget {
         Expanded(
           child: Text(
             title,
-            style: titleStyle ??
+            style:
+                titleStyle ??
                 SkifluxTypography.headingH10Bold.copyWith(
                   color: SkifluxColors.contentTertiary,
                 ),

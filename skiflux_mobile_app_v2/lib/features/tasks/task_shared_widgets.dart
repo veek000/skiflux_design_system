@@ -135,13 +135,11 @@ class TaskEpisodeRow extends StatelessWidget {
 ///
 /// Takes [ref] (not [ProviderScope.containerOf]) so callers that already
 /// have a [WidgetRef] use the same pattern as the rest of the app.
-void openTaskEpisode(
-  BuildContext context,
-  WidgetRef ref,
-  LearningTask task,
-) {
-  final match = RegExp(r'EP\s*(\d+)', caseSensitive: false)
-      .firstMatch(task.episodeLabel);
+void openTaskEpisode(BuildContext context, WidgetRef ref, LearningTask task) {
+  final match = RegExp(
+    r'EP\s*(\d+)',
+    caseSensitive: false,
+  ).firstMatch(task.episodeLabel);
   final epNumber = int.tryParse(match?.group(1) ?? '') ?? 1;
 
   final subs = ref.read(subscriptionsProvider);
@@ -156,7 +154,8 @@ void openTaskEpisode(
     }
   }
 
-  final episode = fromFeed ??
+  final episode =
+      fromFeed ??
       SubscriptionEpisode(
         epNumber: epNumber,
         title: task.episodeTitle,

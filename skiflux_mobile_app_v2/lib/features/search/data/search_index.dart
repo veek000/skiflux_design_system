@@ -14,19 +14,19 @@ enum SearchCategory { episodes, creators, users, playlists }
 extension SearchCategoryLabel on SearchCategory {
   /// Tab / section-header label ("Episodes", "Creators", …).
   String get label => switch (this) {
-        SearchCategory.episodes => 'Episodes',
-        SearchCategory.creators => 'Creators',
-        SearchCategory.users => 'Users',
-        SearchCategory.playlists => 'Playlists',
-      };
+    SearchCategory.episodes => 'Episodes',
+    SearchCategory.creators => 'Creators',
+    SearchCategory.users => 'Users',
+    SearchCategory.playlists => 'Playlists',
+  };
 
   /// Singular form for recent-search subtitles ("Creator · 1 result").
   String get singularLabel => switch (this) {
-        SearchCategory.episodes => 'Episode',
-        SearchCategory.creators => 'Creator',
-        SearchCategory.users => 'User',
-        SearchCategory.playlists => 'Playlist',
-      };
+    SearchCategory.episodes => 'Episode',
+    SearchCategory.creators => 'Creator',
+    SearchCategory.users => 'User',
+    SearchCategory.playlists => 'Playlist',
+  };
 }
 
 class EpisodeResult {
@@ -98,11 +98,11 @@ class SearchResults {
   bool get isEmpty => total == 0;
 
   int countFor(SearchCategory category) => switch (category) {
-        SearchCategory.episodes => episodes.length,
-        SearchCategory.creators => creators.length,
-        SearchCategory.users => users.length,
-        SearchCategory.playlists => playlists.length,
-      };
+    SearchCategory.episodes => episodes.length,
+    SearchCategory.creators => creators.length,
+    SearchCategory.users => users.length,
+    SearchCategory.playlists => playlists.length,
+  };
 
   /// Category with the most hits — recorded on recent-search entries
   /// ("Episodes · 2 results").
@@ -164,11 +164,7 @@ class SearchIndex {
   ];
 
   static const List<PersonResult> _creators = [
-    PersonResult(
-      name: 'Amara Design',
-      username: 'amara',
-      subscribers: '12.4k',
-    ),
+    PersonResult(name: 'Amara Design', username: 'amara', subscribers: '12.4k'),
     PersonResult(
       name: 'Kojo Sketches',
       username: 'kojosketch',
@@ -177,11 +173,7 @@ class SearchIndex {
   ];
 
   static const List<PersonResult> _users = [
-    PersonResult(
-      name: 'Amara Design',
-      username: 'amara',
-      subscribers: '12.4k',
-    ),
+    PersonResult(name: 'Amara Design', username: 'amara', subscribers: '12.4k'),
     PersonResult(
       name: 'Design Dan',
       username: 'designdan',

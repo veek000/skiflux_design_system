@@ -7,7 +7,7 @@ import 'package:skiflux_design_system/skiflux_design_system.dart';
 // session-local Riverpod store seeded with the two cards shown in the frame.
 // TODO(backend, blocking): replace with tokenized cards from the payment processor (never store PANs) — expects: {cards: List<{brand: String, last4: String, expiry: String}>}
 
-/// Card network — picks the row's tint + glyph.
+/// Card network — picks the row's scheme logo.
 enum CardBrand {
   visa('Visa'),
   mastercard('Mastercard'),
@@ -38,23 +38,19 @@ class SavedCard {
   /// "Expires 09/27".
   String get subtitle => 'Expires $expiry';
 
-  Color get tint => switch (brand) {
-        CardBrand.visa => SkifluxColors.backgroundInfoSubtle,
-        CardBrand.mastercard => SkifluxColors.backgroundNoticeSubtle,
-        CardBrand.verve => SkifluxColors.backgroundPositiveSubtle,
-      };
-
-  Color get glyph => switch (brand) {
-        CardBrand.visa => SkifluxColors.contentInfoBold,
-        CardBrand.mastercard => SkifluxColors.contentNoticeBold,
-        CardBrand.verve => SkifluxColors.contentPositiveBold,
-      };
+  /// Figma `1256:20596` puts the scheme's own logo in the badge — Mastercard
+  /// and Verve use the filled mark, Visa the line mark.
+  IconData get logo => switch (brand) {
+    CardBrand.visa => RemixIcons.visa_line,
+    CardBrand.mastercard => RemixIcons.mastercard_fill,
+    CardBrand.verve => RemixIcons.bank_card_fill,
+  };
 }
 
 final paymentCardsProvider =
     NotifierProvider<PaymentCardsNotifier, List<SavedCard>>(
-  PaymentCardsNotifier.new,
-);
+      PaymentCardsNotifier.new,
+    );
 
 class PaymentCardsNotifier extends Notifier<List<SavedCard>> {
   @override

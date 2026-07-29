@@ -84,11 +84,18 @@ class PlaylistEpisodeRow extends StatelessWidget {
           ),
         ),
         // Trailing control sits centered in a 48px slot (Figma "Avatar").
+        // 48 is the floor, not the width: the coin pill is as wide as its
+        // price, and a three-figure cost overflowed a fixed box — which
+        // clipped the number the row exists to show.
         if (!playing)
-          SizedBox(
-            width: SkifluxUnit.u48,
-            height: SkifluxUnit.u48,
+          ConstrainedBox(
+            constraints: const BoxConstraints(
+              minWidth: SkifluxUnit.u48,
+              minHeight: SkifluxUnit.u48,
+            ),
             child: Center(
+              widthFactor: 1,
+              heightFactor: 1,
               child: locked ? _coinPill() : _playIcon(),
             ),
           ),
@@ -247,9 +254,7 @@ class _Thumb extends StatelessWidget {
                   height: SkifluxSpacing.spaceXs,
                   child: Stack(
                     children: [
-                      const ColoredBox(
-                        color: SkifluxColors.backgroundSelected,
-                      ),
+                      const ColoredBox(color: SkifluxColors.backgroundSelected),
                       FractionallySizedBox(
                         widthFactor: progress!.clamp(0, 1),
                         child: const ColoredBox(

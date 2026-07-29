@@ -132,8 +132,7 @@ class QuizIntroScreen extends ConsumerWidget {
                   onPressed: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) =>
-                            QuizAssessmentScreen(taskId: taskId),
+                        builder: (_) => QuizAssessmentScreen(taskId: taskId),
                       ),
                     );
                   },

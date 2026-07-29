@@ -1,15 +1,14 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:skiflux_design_system/skiflux_design_system.dart';
-
-import '../subscriptions/data/subscriptions_store.dart';
-
 // Shared row for the profile library screens — Watch History (`1256:24224`),
 // Downloads (`1256:24465`), Saved Videos (`1256:24572`), Liked Videos.
 // 128×98 thumbnail (EP pill + duration pill), 2-line H10 title, creator
 // avatar + name, a per-screen status line, and a per-screen trailing control.
 
-class LibraryEpisodeRow extends ConsumerWidget {
+import 'package:flutter/material.dart';
+import 'package:skiflux_design_system/skiflux_design_system.dart';
+
+import 'data/library_episode.dart';
+
+class LibraryEpisodeRow extends StatelessWidget {
   const LibraryEpisodeRow({
     super.key,
     required this.episode,
@@ -18,10 +17,10 @@ class LibraryEpisodeRow extends ConsumerWidget {
     this.onTap,
   });
 
-  final SubscriptionEpisode episode;
+  final LibraryEpisode episode;
 
   /// Per-screen meta line, e.g. "72% watched · Today, 9:20 AM",
-  /// "112 MB · SD 480p", "Saved 2 days ago".
+  /// "112 MB · SD 480p", "1.2K views".
   final String statusLine;
 
   /// Per-screen control: more-menu glyph, trash, bookmark, heart…
@@ -29,8 +28,7 @@ class LibraryEpisodeRow extends ConsumerWidget {
   final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final creator = ref.watch(subscriptionsProvider).creatorOf(episode);
+  Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
       borderRadius: SkifluxRadii.borderL,
@@ -57,12 +55,12 @@ class LibraryEpisodeRow extends ConsumerWidget {
                     SkifluxAvatar(
                       style: SkifluxAvatarStyle.initial,
                       size: SkifluxSpacing.spaceL,
-                      initials: creator.initials,
+                      initials: episode.creatorInitials,
                     ),
                     const SizedBox(width: SkifluxSpacing.spaceXs),
                     Flexible(
                       child: Text(
-                        creator.name,
+                        episode.creatorName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: SkifluxTypography.bodyP11Regular.copyWith(
@@ -92,10 +90,63 @@ class LibraryEpisodeRow extends ConsumerWidget {
   }
 }
 
+/// The row's silhouette while the list is in flight — same 128×98 block and
+/// three text lines, so nothing shifts when the real rows arrive.
+class LibraryEpisodeRowSkeleton extends StatelessWidget {
+  const LibraryEpisodeRowSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const SkifluxSkeletonGroup(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SkifluxSkeleton(width: 128, height: 98, radius: SkifluxRadii.l),
+          SizedBox(width: SkifluxSpacing.spaceM),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SkifluxSkeleton.text(height: SkifluxSpacing.spaceL),
+                SizedBox(height: SkifluxSpacing.spaceS),
+                SkifluxSkeleton.text(width: 120),
+                SizedBox(height: SkifluxSpacing.spaceS),
+                SkifluxSkeleton.text(width: 80, height: SkifluxSpacing.spaceS),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A list of [LibraryEpisodeRowSkeleton]s laid out like the real list.
+class LibraryListSkeleton extends StatelessWidget {
+  const LibraryListSkeleton({super.key, this.rows = 5});
+
+  final int rows;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(
+        SkifluxSpacing.spaceL,
+        0,
+        SkifluxSpacing.spaceL,
+        SkifluxSpacing.spaceL,
+      ),
+      itemCount: rows,
+      separatorBuilder: (_, _) => const SizedBox(height: SkifluxSpacing.spaceL),
+      itemBuilder: (_, _) => const LibraryEpisodeRowSkeleton(),
+    );
+  }
+}
+
 class _Thumbnail extends StatelessWidget {
   const _Thumbnail({required this.episode});
 
-  final SubscriptionEpisode episode;
+  final LibraryEpisode episode;
 
   @override
   Widget build(BuildContext context) {
@@ -107,13 +158,7 @@ class _Thumbnail extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // TODO(backend, blocking): replace local placeholder asset with real CDN/backend episode thumbnail URL — expects: String (network URL)
-            Image.asset(
-              'assets/home_video_cover.png',
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) =>
-                  const ColoredBox(color: SkifluxColors.magenta900),
-            ),
+            _cover(),
             Positioned(
               top: SkifluxSpacing.spaceS,
               left: SkifluxSpacing.spaceS,
@@ -122,14 +167,15 @@ class _Thumbnail extends StatelessWidget {
                 background: SkifluxColors.contentBrand,
               ),
             ),
-            Positioned(
-              bottom: SkifluxSpacing.spaceS,
-              right: SkifluxSpacing.spaceS,
-              child: _pill(
-                episode.duration,
-                background: SkifluxColors.overlay50,
+            if (episode.durationLabel.isNotEmpty)
+              Positioned(
+                bottom: SkifluxSpacing.spaceS,
+                right: SkifluxSpacing.spaceS,
+                child: _pill(
+                  episode.durationLabel,
+                  background: SkifluxColors.overlay50,
+                ),
               ),
-            ),
             // Brand watch-progress strip along the bottom edge (Watch
             // History rows show partial progress in the frame).
             if (episode.watchProgress > 0)
@@ -160,6 +206,24 @@ class _Thumbnail extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  /// The CDN thumbnail, with a shimmering block while it decodes. An episode
+  /// with no `thumbnail_url` gets the block permanently rather than a stock
+  /// image that would imply the wrong content.
+  Widget _cover() {
+    final url = episode.thumbnailUrl;
+    if (url == null || url.isEmpty) {
+      return const ColoredBox(color: SkifluxColors.backgroundDisabled);
+    }
+    return Image.network(
+      url,
+      fit: BoxFit.cover,
+      loadingBuilder: (context, child, progress) =>
+          progress == null ? child : const SkifluxSkeleton(radius: 0),
+      errorBuilder: (_, _, _) =>
+          const ColoredBox(color: SkifluxColors.backgroundDisabled),
     );
   }
 

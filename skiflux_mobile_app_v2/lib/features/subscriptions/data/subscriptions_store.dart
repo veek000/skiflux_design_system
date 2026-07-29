@@ -12,11 +12,11 @@ enum SubscriptionFeedFilter { recent, today, continueWatching, unwatched }
 
 extension SubscriptionFeedFilterLabel on SubscriptionFeedFilter {
   String get label => switch (this) {
-        SubscriptionFeedFilter.recent => 'Recent',
-        SubscriptionFeedFilter.today => 'Today',
-        SubscriptionFeedFilter.continueWatching => 'Continue watching',
-        SubscriptionFeedFilter.unwatched => 'Unwatched',
-      };
+    SubscriptionFeedFilter.recent => 'Recent',
+    SubscriptionFeedFilter.today => 'Today',
+    SubscriptionFeedFilter.continueWatching => 'Continue watching',
+    SubscriptionFeedFilter.unwatched => 'Unwatched',
+  };
 }
 
 /// All Subscriptions sort — the "Filter" link's sheet options
@@ -25,10 +25,10 @@ enum SubscriptionListSort { mostRelevant, newActivity, aToZ }
 
 extension SubscriptionListSortLabel on SubscriptionListSort {
   String get label => switch (this) {
-        SubscriptionListSort.mostRelevant => 'Most relevant',
-        SubscriptionListSort.newActivity => 'New activity',
-        SubscriptionListSort.aToZ => 'A–Z',
-      };
+    SubscriptionListSort.mostRelevant => 'Most relevant',
+    SubscriptionListSort.newActivity => 'New activity',
+    SubscriptionListSort.aToZ => 'A–Z',
+  };
 }
 
 /// Per-creator post-notification level — the bell pill's dropdown options
@@ -37,10 +37,10 @@ enum CreatorNotificationMode { all, personalized, none }
 
 extension CreatorNotificationModeLabel on CreatorNotificationMode {
   String get label => switch (this) {
-        CreatorNotificationMode.all => 'All',
-        CreatorNotificationMode.personalized => 'Personalized',
-        CreatorNotificationMode.none => 'None',
-      };
+    CreatorNotificationMode.all => 'All',
+    CreatorNotificationMode.personalized => 'Personalized',
+    CreatorNotificationMode.none => 'None',
+  };
 }
 
 class SubscribedCreator {
@@ -107,10 +107,7 @@ class SubscriptionEpisode {
 
 /// In-memory snapshot for the subscriptions tab.
 class SubscriptionsState {
-  SubscriptionsState({
-    required this.creators,
-    required this.episodes,
-  });
+  SubscriptionsState({required this.creators, required this.episodes});
 
   final List<SubscribedCreator> creators;
   final List<SubscriptionEpisode> episodes;
@@ -156,8 +153,9 @@ class SubscriptionsState {
     list = switch (filter) {
       SubscriptionFeedFilter.recent => list,
       SubscriptionFeedFilter.today => list.where((e) => e.postedToday),
-      SubscriptionFeedFilter.continueWatching =>
-        list.where((e) => e.isContinueWatching),
+      SubscriptionFeedFilter.continueWatching => list.where(
+        (e) => e.isContinueWatching,
+      ),
       SubscriptionFeedFilter.unwatched => list.where((e) => e.isUnwatched),
     };
     final sorted = list.toList()
@@ -214,10 +212,21 @@ class SubscriptionsNotifier extends Notifier<SubscriptionsState> {
     );
   }
 
-  void setNotificationMode(
-    SubscribedCreator c,
-    CreatorNotificationMode mode,
-  ) {
+  /// Follow / subscribe — inverse of [unsubscribe]. No-op if already present.
+  /// Used by the home creator-avatar "+" control (and any future follow CTAs).
+  void subscribe(SubscribedCreator c) {
+    if (state.creators.any((x) => x.username == c.username)) return;
+    state = SubscriptionsState(
+      creators: [...state.creators, c],
+      episodes: state.episodes,
+    );
+  }
+
+  /// Whether the signed-in user already follows [username] in the local demo.
+  bool isSubscribed(String username) =>
+      state.creators.any((c) => c.username == username);
+
+  void setNotificationMode(SubscribedCreator c, CreatorNotificationMode mode) {
     c.notificationMode = mode;
     state = SubscriptionsState(
       creators: List<SubscribedCreator>.of(state.creators),
@@ -310,5 +319,5 @@ class SubscriptionsNotifier extends Notifier<SubscriptionsState> {
 
 final subscriptionsProvider =
     NotifierProvider<SubscriptionsNotifier, SubscriptionsState>(
-  SubscriptionsNotifier.new,
-);
+      SubscriptionsNotifier.new,
+    );

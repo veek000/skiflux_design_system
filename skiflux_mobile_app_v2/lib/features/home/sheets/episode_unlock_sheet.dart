@@ -130,8 +130,7 @@ class _EpisodeUnlockSheetState extends ConsumerState<_EpisodeUnlockSheet> {
                 label: 'Back',
                 type: SkifluxButtonType.secondary,
                 expanded: true,
-                onPressed:
-                    _busy ? null : () => Navigator.of(context).pop(),
+                onPressed: _busy ? null : () => Navigator.of(context).pop(),
               ),
             ] else ...[
               SkifluxButton(
@@ -166,10 +165,11 @@ class _EpisodeUnlockSheetState extends ConsumerState<_EpisodeUnlockSheet> {
         Expanded(
           child: Text(
             label,
-            style: (bold
-                    ? SkifluxTypography.headingH10Bold
-                    : SkifluxTypography.bodyP10Regular)
-                .copyWith(color: SkifluxColors.contentSecondary),
+            style:
+                (bold
+                        ? SkifluxTypography.headingH10Bold
+                        : SkifluxTypography.bodyP10Regular)
+                    .copyWith(color: SkifluxColors.contentSecondary),
           ),
         ),
         if (emphasizeCoins)

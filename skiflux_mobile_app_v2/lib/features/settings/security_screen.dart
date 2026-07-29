@@ -55,7 +55,7 @@ class SecurityScreen extends ConsumerWidget {
               label: 'Advanced Security',
               children: [
                 SettingsTile(
-                  icon: RemixIcons.fingerprint_fill,
+                  icon: RemixIcons.fingerprint_2_fill,
                   iconBackground: SkifluxColors.brand100,
                   iconColor: SkifluxColors.contentBrand,
                   title: 'Biometric Login',

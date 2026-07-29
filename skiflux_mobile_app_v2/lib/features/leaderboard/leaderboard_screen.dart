@@ -1,8 +1,11 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/widgets/load_failure.dart';
 import 'data/leaderboard_store.dart';
 
 // Figma: **Profile Flow 01** (`1256:25612`) — Leaderboard screen.
@@ -10,25 +13,23 @@ import 'data/leaderboard_store.dart';
 // top-3 avatars, then the RANK / TOTAL XP card (`1256:25657`) docked to
 // the bottom at the podium's width (16px margins, 24px corners) with its
 // own scrolling list — opened pre-scrolled so the signed-in user's
-// highlighted row is in view (Figma shows rows 10–13). League switching
-// only re-selects the pill — the demo store has one league of data.
+// highlighted row is in view (Figma shows rows 10–13). Tapping a league
+// pill refetches `GET /me/leaderboard` filtered to that level.
 
-class LeaderboardScreen extends ConsumerStatefulWidget {
+class LeaderboardScreen extends ConsumerWidget {
   const LeaderboardScreen({super.key});
 
-  @override
-  ConsumerState<LeaderboardScreen> createState() => _LeaderboardScreenState();
-}
-
-class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
   /// How far the rank card slides up over the podium steps (Figma:
   /// podium bottom y565.92 − card top y538, in 361-frame units).
-  static const double _cardOverlap = 27.92;
+  static const double cardOverlap = 27.92;
 
-  int _leagueIndex = 0;
+  /// The least the rank card may be squeezed to: its header plus about two
+  /// rows. Below this the podium gives ground instead, because a card with a
+  /// negative height is a layout assertion rather than a tight design.
+  static const double minRankCardHeight = 200;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final board = ref.watch(leaderboardProvider);
 
     return Scaffold(
@@ -45,70 +46,168 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
         // 24px spacer mirrors the leading icon to keep the title centered.
         trailing: const SizedBox(width: SkifluxSpacing.spaceXl),
       ),
-      // Top content is fixed (matching the Figma frame); only the rank
-      // card's list scrolls. The card overlaps the podium's bottom by
-      // ~28px (Figma: card top y538 vs podium bottom y565.9), sliding
-      // over the steps, so the two live in a Stack.
       body: Column(
         children: [
           const SizedBox(height: SkifluxSpacing.spaceL),
-          _pillGroup(board),
+          const _LeaguePills(),
           const SizedBox(height: SkifluxSpacing.spaceL),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: SkifluxSpacing.spaceL),
-            child: _RankNotification(board: board),
+            padding: const EdgeInsets.symmetric(
+              horizontal: SkifluxSpacing.spaceL,
+            ),
+            child: _RankNotification(board: board.value),
           ),
           const SizedBox(height: SkifluxSpacing.spaceL),
           Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final width =
-                    constraints.maxWidth - SkifluxSpacing.spaceL * 2;
-                final scale = width / _Podium.frameW;
-                final podiumHeight = _Podium.frameH * scale;
-                return Stack(
-                  children: [
-                    Positioned(
-                      top: 0,
-                      left: SkifluxSpacing.spaceL,
-                      right: SkifluxSpacing.spaceL,
-                      child: _Podium(board: board),
-                    ),
-                    Positioned(
-                      // Figma overlap: 565.92 − 538 ≈ 28 (scaled).
-                      top: podiumHeight - _cardOverlap * scale,
-                      left: SkifluxSpacing.spaceL,
-                      right: SkifluxSpacing.spaceL,
-                      bottom: 0,
-                      child: _RankTable(board: board),
-                    ),
-                  ],
-                );
-              },
-            ),
+            child: switch (board) {
+              AsyncLoading() => const _LeaderboardSkeleton(),
+              AsyncError(:final error) => LoadFailure(
+                error: error,
+                title: "We couldn't load the leaderboard",
+                onRetry: () => ref.read(leaderboardProvider.notifier).refresh(),
+              ),
+              AsyncData(:final value) when value.isEmpty => const Center(
+                child: SkifluxEmptyState(
+                  icon: Icon(
+                    RemixIcons.trophy_fill,
+                    size: SkifluxEmptyState.iconSize,
+                    color: SkifluxColors.contentBrand,
+                  ),
+                  title: 'No rankings yet',
+                  message: 'Earn XP to appear on the leaderboard.',
+                ),
+              ),
+              AsyncData(:final value) => _Board(board: value),
+            },
           ),
         ],
       ),
     );
   }
+}
 
-  /// League pills (`1256:25615`) — same Button Group Pill pattern as the
-  /// creator profile (size S, selected = primary).
-  Widget _pillGroup(LeaderboardData board) {
+/// Podium + rank card. Split out of the screen so the async switch above
+/// reads as four states rather than four states and a layout.
+class _Board extends StatelessWidget {
+  const _Board({required this.board});
+
+  final LeaderboardData board;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth - SkifluxSpacing.spaceL * 2;
+        final scale = width / _Podium.frameW;
+
+        // Measured, not estimated. The podium art scales with the screen but
+        // the type inside a column does not, so the only honest way to know
+        // how far a column rises above its step is to lay the two lines out.
+        final rise = _Podium.columnRiseFor(context);
+        final natural = _Podium.heightAt(scale, rise);
+
+        // On a short screen the podium yields rather than pushing the rank
+        // card to a negative height. Shrinking the whole group uniformly
+        // keeps every clearance inside it proportional, so nothing that fits
+        // at full size can start overlapping at reduced size.
+        final budget = math.max(
+          0.0,
+          constraints.maxHeight - LeaderboardScreen.minRankCardHeight,
+        );
+        final shrink = natural <= budget || natural == 0
+            ? 1.0
+            : budget / natural;
+        final drawn = natural * shrink;
+
+        return Stack(
+          children: [
+            Positioned(
+              top: 0,
+              left: SkifluxSpacing.spaceL,
+              right: SkifluxSpacing.spaceL,
+              height: drawn,
+              child: _ShrinkToFit(
+                naturalHeight: natural,
+                scale: shrink,
+                child: _Podium(board: board, rise: rise),
+              ),
+            ),
+            Positioned(
+              // Figma overlap: 565.92 − 538 ≈ 28 (scaled).
+              top: drawn - LeaderboardScreen.cardOverlap * scale * shrink,
+              left: SkifluxSpacing.spaceL,
+              right: SkifluxSpacing.spaceL,
+              bottom: 0,
+              child: _RankTable(board: board),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Lays [child] out at [naturalHeight] and draws it at [scale], anchored to
+/// the bottom so the podium stays sitting on the rank card's top edge.
+///
+/// [Transform.scale] alone does not change the space a child takes, and
+/// `FittedBox` would re-measure the child under unbounded constraints — which
+/// the podium cannot answer, since its geometry is width-driven.
+class _ShrinkToFit extends StatelessWidget {
+  const _ShrinkToFit({
+    required this.naturalHeight,
+    required this.scale,
+    required this.child,
+  });
+
+  final double naturalHeight;
+  final double scale;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (scale >= 1) return child;
+    return ClipRect(
+      child: OverflowBox(
+        alignment: Alignment.bottomCenter,
+        minHeight: naturalHeight,
+        maxHeight: naturalHeight,
+        child: Transform.scale(
+          scale: scale,
+          alignment: Alignment.bottomCenter,
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+/// League pills (`1256:25615`) — same Button Group Pill pattern as the
+/// creator profile (size S, selected = primary).
+class _LeaguePills extends ConsumerWidget {
+  const _LeaguePills();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selected = ref.watch(leaderboardLeagueProvider);
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: SkifluxSpacing.spaceL),
       child: Row(
         children: [
-          for (var i = 0; i < board.leagues.length; i++) ...[
+          for (var i = 0; i < kLeaderboardLeagues.length; i++) ...[
             if (i > 0) const SizedBox(width: SkifluxSpacing.spaceS),
             SkifluxButton(
-              label: board.leagues[i],
+              label: kLeaderboardLeagues[i],
               size: SkifluxButtonSize.s,
-              type: i == _leagueIndex
+              type: i == selected
                   ? SkifluxButtonType.primary
                   : SkifluxButtonType.secondary,
-              onPressed: () => setState(() => _leagueIndex = i),
+              // Writing the selection re-runs the provider's build, which
+              // refetches with the new `level` — the screen holds no second
+              // copy of which pill is on.
+              onPressed: () =>
+                  ref.read(leaderboardLeagueProvider.notifier).select(i),
             ),
           ],
         ],
@@ -119,13 +218,20 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
 
 /// Notification pill (`1256:25616`): brand-subtle pill, 32px brand "#12"
 /// avatar, Creato Bold 14 brand message.
+///
+/// Both halves are only drawn once the standing is actually known. Before
+/// then the rank badge shimmers and the sentence is withheld — an invented
+/// "#12 / better than 60%" was the previous behaviour and read as fact.
 class _RankNotification extends StatelessWidget {
   const _RankNotification({required this.board});
 
-  final LeaderboardData board;
+  final LeaderboardData? board;
 
   @override
   Widget build(BuildContext context) {
+    final rank = board?.currentRank;
+    final percent = board?.betterThanPercent;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(
@@ -138,34 +244,41 @@ class _RankNotification extends StatelessWidget {
         color: SkifluxColors.backgroundBrandOpacity50,
         borderRadius: SkifluxRadii.borderPill,
       ),
-      child: Row(
-        children: [
-          Container(
-            width: SkifluxUnit.u32,
-            height: SkifluxUnit.u32,
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(
-              color: SkifluxColors.backgroundBrand,
-              shape: BoxShape.circle,
-            ),
-            child: Text(
-              '#${board.currentRank}',
-              style: SkifluxTypography.uiBadgeTagSmall.copyWith(
-                color: SkifluxColors.contentPrimaryInverse,
+      child: SkifluxSkeletonGroup(
+        child: Row(
+          children: [
+            if (rank == null)
+              const SkifluxSkeleton.circle(size: SkifluxUnit.u32)
+            else
+              Container(
+                width: SkifluxUnit.u32,
+                height: SkifluxUnit.u32,
+                alignment: Alignment.center,
+                decoration: const BoxDecoration(
+                  color: SkifluxColors.backgroundBrand,
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  '#$rank',
+                  style: SkifluxTypography.uiBadgeTagSmall.copyWith(
+                    color: SkifluxColors.contentPrimaryInverse,
+                  ),
+                ),
               ),
+            const SizedBox(width: SkifluxSpacing.spaceS),
+            Expanded(
+              child: percent == null
+                  ? const SkifluxSkeleton.text(width: 200)
+                  : Text(
+                      'You are doing better than '
+                      '$percent% of other participants',
+                      style: SkifluxTypography.uiButtonMedium.copyWith(
+                        color: SkifluxColors.contentBrand,
+                      ),
+                    ),
             ),
-          ),
-          const SizedBox(width: SkifluxSpacing.spaceS),
-          Expanded(
-            child: Text(
-              'You are doing better than '
-              '${board.betterThanPercent}% of other participants',
-              style: SkifluxTypography.uiButtonMedium.copyWith(
-                color: SkifluxColors.contentBrand,
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -174,23 +287,89 @@ class _RankNotification extends StatelessWidget {
 // ── Podium ───────────────────────────────────────────────────────────
 
 /// Podium group (`1256:25622`): the podium SVG (baked 1st/2nd/3rd laurel
-/// numerals) with the top-3 avatar columns above each step. Figma frame
+/// numerals) with the top-3 avatar columns standing on each step. Figma frame
 /// is 361×325.92 with the SVG bottom-anchored at y 110.68; positions
 /// scale with the available width.
 class _Podium extends StatelessWidget {
-  const _Podium({required this.board});
+  const _Podium({required this.board, required this.rise});
 
   final LeaderboardData board;
+
+  /// How far the tallest column reaches above the step it stands on, from
+  /// [columnRiseFor].
+  final double rise;
 
   // Figma geometry (361-wide frame) — shared with the screen's Stack so
   // the rank-card overlap scales with the same factor.
   static const double frameW = 361;
   static const double frameH = 325.92;
   static const double _svgH = 215.25;
-  // Avatar-column centers (x) and tops (y) per place.
-  static const double _firstX = 182.22, _firstY = 0;
-  static const double _secondX = 60.29, _secondY = 48;
-  static const double _thirdX = 300.71, _thirdY = 72.26;
+
+  /// The crown badge hangs this far above the avatar it sits on
+  /// (`_CrownBadge` is offset by `-spaceM` inside an unclipped Stack).
+  static const double _crownOverhang = SkifluxSpacing.spaceM;
+
+  /// Everything in a column that is *not* the two text lines: the crown's
+  /// overhang, the 64px avatar, the gap under it, the gap between the two
+  /// lines, and the clearance that keeps the XP off the step's bevel.
+  static const double _columnChrome =
+      _crownOverhang +
+      SkifluxUnit.u64 +
+      SkifluxSpacing.spaceS +
+      SkifluxSpacing.spaceXs +
+      SkifluxSpacing.spaceXs;
+
+  /// The exact height of a podium column above its step, for the text metrics
+  /// in force in [context].
+  ///
+  /// This used to be a constant with slack added on top, and the slack is what
+  /// failed: the two lines are laid out in logical pixels and grow with the
+  /// system text size, while the frame they sit in scales with the screen's
+  /// width. Any fixed guess is therefore right at exactly one combination of
+  /// the two and wrong at the rest — under-guessing clipped the crown and ran
+  /// the column up into the standing pill above it, over-guessing pushed the
+  /// whole podium and rank card down the screen. Laying the lines out costs
+  /// two [TextPainter]s and is right at every combination.
+  static double columnRiseFor(BuildContext context) {
+    final scaler = MediaQuery.textScalerOf(context);
+    return _columnChrome +
+        _lineHeight(SkifluxTypography.uiButtonMedium, scaler) +
+        _lineHeight(SkifluxTypography.codeInline, scaler);
+  }
+
+  static double _lineHeight(TextStyle style, TextScaler scaler) {
+    final painter = TextPainter(
+      // Ascender + descender: the tallest a single line of this style gets.
+      text: TextSpan(text: 'Ag', style: style),
+      textDirection: TextDirection.ltr,
+      textScaler: scaler,
+      maxLines: 1,
+    )..layout();
+    return painter.height;
+  }
+
+  /// The podium's drawn height at [scale] with a column rising [rise] above
+  /// the top step: whichever of the art and the tallest column needs more.
+  static double heightAt(double scale, double rise) =>
+      math.max(frameH * scale, rise + _firstStep * scale);
+
+  /// Avatar-column centers (x) per place — the middle of each step.
+  static const double _firstX = 182.22, _secondX = 60.29, _thirdX = 300.71;
+
+  /// The top surface of each step, measured **up from the frame's bottom** in
+  /// frame units: the y of that step's leading edge in
+  /// `assets/badges/podium.svg` (22.20 / 48.74 / 73.68 in its 216-tall viewBox),
+  /// mapped through the SVG's draw height.
+  ///
+  /// Columns are anchored to *this*, not to a fixed avatar top: the name and XP
+  /// hang below the avatar, and bottom-anchoring is what guarantees they cannot
+  /// grow down onto the step no matter what the text metrics do at a given
+  /// screen width. That overlap is exactly what these labels were previously
+  /// moved above the avatar to escape.
+  static const double _svgScale = _svgH / 216;
+  static const double _firstStep = _svgH - 22.2031 * _svgScale;
+  static const double _secondStep = _svgH - 48.7402 * _svgScale;
+  static const double _thirdStep = _svgH - 73.6758 * _svgScale;
 
   @override
   Widget build(BuildContext context) {
@@ -199,7 +378,7 @@ class _Podium extends StatelessWidget {
         final scale = constraints.maxWidth / frameW;
         final podium = board.podium;
         return SizedBox(
-          height: frameH * scale,
+          height: heightAt(scale, rise),
           child: Stack(
             children: [
               Positioned(
@@ -213,9 +392,17 @@ class _Podium extends StatelessWidget {
                   fit: BoxFit.fill,
                 ),
               ),
-              _place(podium[0], _firstX, _firstY, scale, crowned: true),
-              _place(podium[1], _secondX, _secondY, scale),
-              _place(podium[2], _thirdX, _thirdY, scale),
+              // A league filter can come back with fewer than three learners,
+              // so each step is placed only if someone is standing on it.
+              _place(
+                podium.elementAtOrNull(0),
+                _firstX,
+                _firstStep,
+                scale,
+                crowned: true,
+              ),
+              _place(podium.elementAtOrNull(1), _secondX, _secondStep, scale),
+              _place(podium.elementAtOrNull(2), _thirdX, _thirdStep, scale),
             ],
           ),
         );
@@ -224,24 +411,28 @@ class _Podium extends StatelessWidget {
   }
 
   Widget _place(
-    LeaderboardEntry entry,
+    LeaderboardEntry? entry,
     double centerX,
-    double top,
+    double stepTop,
     double scale, {
     bool crowned = false,
   }) {
+    if (entry == null) return const SizedBox.shrink();
     const columnW = 90.0;
     return Positioned(
       left: centerX * scale - columnW / 2,
-      top: top * scale,
+      // Measured from the frame's bottom so the column stands *on* the step:
+      // whatever height the avatar + labels come to, they stack upward.
+      bottom: stepTop * scale,
       width: columnW,
       child: _PodiumColumn(entry: entry, crowned: crowned),
     );
   }
 }
 
-/// One avatar column (`1256:25638`…): 64px initials avatar (1st place
-/// gets the crown badge), Creato Bold 14 name, DM Mono 10 XP.
+/// One podium column: the avatar, with the name and XP **under** it, resting on
+/// the step. See [_Podium._firstStep] for why the column is bottom-anchored
+/// rather than placed by its avatar.
 class _PodiumColumn extends StatelessWidget {
   const _PodiumColumn({required this.entry, required this.crowned});
 
@@ -251,15 +442,13 @@ class _PodiumColumn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Stack(
           clipBehavior: Clip.none,
+          alignment: Alignment.center,
           children: [
-            SkifluxAvatar(
-              style: SkifluxAvatarStyle.initial,
-              size: SkifluxUnit.u64,
-              initials: entry.initials,
-            ),
+            _EntryAvatar(entry: entry, size: SkifluxUnit.u64),
             if (crowned)
               const Positioned(
                 top: -SkifluxSpacing.spaceM,
@@ -279,6 +468,7 @@ class _PodiumColumn extends StatelessWidget {
             color: SkifluxColors.contentPrimary,
           ),
         ),
+        // Figma `1256:25641`: the XP line sits 4 below the name's box.
         const SizedBox(height: SkifluxSpacing.spaceXs),
         Text(
           '${entry.xpLabel} XP',
@@ -290,6 +480,9 @@ class _PodiumColumn extends StatelessWidget {
             letterSpacing: 0,
           ),
         ),
+        // Clears the step's leading edge so the XP line does not sit flush on
+        // the bevel it is standing on.
+        const SizedBox(height: SkifluxSpacing.spaceXs),
       ],
     );
   }
@@ -352,6 +545,18 @@ class _RankTableState extends State<_RankTable> {
     );
     // The initial offset can overshoot maxScrollExtent before layout;
     // settle it once the list has dimensions.
+    _settleAfterLayout();
+  }
+
+  @override
+  void didUpdateWidget(_RankTable oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A league filter reshuffles the rows, so the user's row has moved and the
+    // pre-scroll has to run again.
+    if (!identical(oldWidget.board, widget.board)) _settleAfterLayout();
+  }
+
+  void _settleAfterLayout() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_controller.hasClients) return;
       _controller.jumpTo(
@@ -361,10 +566,7 @@ class _RankTableState extends State<_RankTable> {
   }
 
   double get _userOffset {
-    final board = widget.board;
-    final index = board.ranked.indexWhere(
-      (entry) => entry.rank == board.currentRank,
-    );
+    final index = widget.board.currentIndexInRanked;
     if (index <= 2) return 0;
     return (index - 2) * _rowExtent;
   }
@@ -388,39 +590,7 @@ class _RankTableState extends State<_RankTable> {
       ),
       child: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.fromLTRB(
-              SkifluxSpacing.spaceL,
-              SkifluxSpacing.spaceL,
-              SkifluxSpacing.spaceL,
-              SkifluxSpacing.spaceS,
-            ),
-            decoration: const BoxDecoration(
-              border: Border(
-                bottom: BorderSide(
-                  color: SkifluxColors.borderSecondary,
-                  width: SkifluxBorderWidth.xs,
-                ),
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'RANK',
-                  style: SkifluxTypography.uiInputContent.copyWith(
-                    color: SkifluxColors.contentPrimary,
-                  ),
-                ),
-                Text(
-                  'TOTAL XP',
-                  style: SkifluxTypography.uiInputContent.copyWith(
-                    color: SkifluxColors.contentPrimary,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          const _RankTableHeader(),
           Expanded(
             child: ListView.builder(
               controller: _controller,
@@ -432,14 +602,54 @@ class _RankTableState extends State<_RankTable> {
               itemBuilder: (context, index) {
                 final entry = board.ranked[index];
                 return Padding(
-                  padding:
-                      const EdgeInsets.only(bottom: SkifluxSpacing.spaceS),
+                  padding: const EdgeInsets.only(bottom: SkifluxSpacing.spaceS),
                   child: _RankRow(
                     entry: entry,
-                    highlighted: entry.rank == board.currentRank,
+                    highlighted: entry.isCurrentUser,
                   ),
                 );
               },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RankTableHeader extends StatelessWidget {
+  const _RankTableHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(
+        SkifluxSpacing.spaceL,
+        SkifluxSpacing.spaceL,
+        SkifluxSpacing.spaceL,
+        SkifluxSpacing.spaceS,
+      ),
+      decoration: const BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: SkifluxColors.borderSecondary,
+            width: SkifluxBorderWidth.xs,
+          ),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            'RANK',
+            style: SkifluxTypography.uiInputContent.copyWith(
+              color: SkifluxColors.contentPrimary,
+            ),
+          ),
+          Text(
+            'TOTAL XP',
+            style: SkifluxTypography.uiInputContent.copyWith(
+              color: SkifluxColors.contentPrimary,
             ),
           ),
         ],
@@ -480,11 +690,7 @@ class _RankRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: SkifluxSpacing.spaceS),
-          SkifluxAvatar(
-            style: SkifluxAvatarStyle.initial,
-            size: SkifluxUnit.u48,
-            initials: entry.initials,
-          ),
+          _EntryAvatar(entry: entry, size: SkifluxUnit.u48),
           const SizedBox(width: SkifluxSpacing.spaceS),
           Expanded(
             child: Column(
@@ -516,6 +722,28 @@ class _RankRow extends StatelessWidget {
           _XpChip(label: entry.xpLabel),
         ],
       ),
+    );
+  }
+}
+
+/// A learner's avatar: their photo when the API sent one, else the initials
+/// circle. [SkifluxAvatar] itself falls back to initials on a decode/network
+/// error, so a broken URL degrades rather than showing a blank.
+class _EntryAvatar extends StatelessWidget {
+  const _EntryAvatar({required this.entry, required this.size});
+
+  final LeaderboardEntry entry;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = entry.avatarUrl;
+    final hasPhoto = url != null && url.isNotEmpty;
+    return SkifluxAvatar(
+      style: hasPhoto ? SkifluxAvatarStyle.avatar : SkifluxAvatarStyle.initial,
+      size: size,
+      initials: entry.initials,
+      image: hasPhoto ? NetworkImage(url) : null,
     );
   }
 }
@@ -564,6 +792,105 @@ class _XpChip extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Loading ──────────────────────────────────────────────────────────
+
+/// The board's shape while `GET /me/leaderboard` is in flight: three podium
+/// columns of descending height, then the rank card's rows.
+class _LeaderboardSkeleton extends StatelessWidget {
+  const _LeaderboardSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SkifluxSkeletonGroup(
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: SkifluxSpacing.spaceL),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(height: SkifluxSpacing.spaceXl),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _PodiumColumnSkeleton(stepHeight: 56),
+                _PodiumColumnSkeleton(stepHeight: 88),
+                _PodiumColumnSkeleton(stepHeight: 36),
+              ],
+            ),
+            SizedBox(height: SkifluxSpacing.spaceL),
+            Expanded(child: _RankListSkeleton()),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PodiumColumnSkeleton extends StatelessWidget {
+  const _PodiumColumnSkeleton({required this.stepHeight});
+
+  final double stepHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SkifluxSkeleton.circle(size: SkifluxUnit.u64),
+        const SizedBox(height: SkifluxSpacing.spaceS),
+        const SkifluxSkeleton.text(width: 64),
+        const SizedBox(height: SkifluxSpacing.spaceXs),
+        const SkifluxSkeleton.text(width: 40, height: SkifluxSpacing.spaceM),
+        const SizedBox(height: SkifluxSpacing.spaceS),
+        SkifluxSkeleton(
+          width: 90,
+          height: stepHeight,
+          radius: SkifluxRadii.s,
+        ),
+      ],
+    );
+  }
+}
+
+class _RankListSkeleton extends StatelessWidget {
+  const _RankListSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      padding: const EdgeInsets.only(top: SkifluxSpacing.spaceL),
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: 6,
+      separatorBuilder: (_, _) => const SizedBox(height: SkifluxSpacing.spaceS),
+      itemBuilder: (_, _) => const SizedBox(
+        height: SkifluxUnit.u56,
+        child: Row(
+          children: [
+            SkifluxSkeleton.text(width: SkifluxSpacing.spaceL),
+            SizedBox(width: SkifluxSpacing.spaceS),
+            SkifluxSkeleton.circle(size: SkifluxUnit.u48),
+            SizedBox(width: SkifluxSpacing.spaceS),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SkifluxSkeleton.text(width: 120),
+                  SizedBox(height: SkifluxSpacing.spaceXs),
+                  SkifluxSkeleton.text(width: 72, height: SkifluxSpacing.spaceS),
+                ],
+              ),
+            ),
+            SizedBox(width: SkifluxSpacing.spaceS),
+            SkifluxSkeleton(width: 72, height: SkifluxUnit.u32,
+              radius: SkifluxRadii.pill),
+          ],
+        ),
       ),
     );
   }

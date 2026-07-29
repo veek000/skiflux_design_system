@@ -75,9 +75,7 @@ class _BuyCoinsSheetState extends ConsumerState<_BuyCoinsSheet> {
             for (var i = 0; i < kCoinPacks.length; i += 2)
               Padding(
                 padding: EdgeInsets.only(
-                  bottom: i + 2 < kCoinPacks.length
-                      ? SkifluxSpacing.spaceL
-                      : 0,
+                  bottom: i + 2 < kCoinPacks.length ? SkifluxSpacing.spaceL : 0,
                 ),
                 // IntrinsicHeight bounds the stretch — a bare stretch Row
                 // inside a scrollable forces infinite height and blanks the
@@ -98,9 +96,7 @@ class _BuyCoinsSheetState extends ConsumerState<_BuyCoinsSheet> {
               ),
             const SizedBox(height: SkifluxSpacing.spaceL),
             SkifluxButton(
-              label: _selected == null
-                  ? 'Choose a coin pack'
-                  : 'Continue',
+              label: _selected == null ? 'Choose a coin pack' : 'Continue',
               expanded: true,
               onPressed: _selected == null
                   ? null

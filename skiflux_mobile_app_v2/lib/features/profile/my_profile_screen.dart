@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/sheets/share_sheet.dart';
+import '../../shared/toast/skiflux_toast.dart';
 import '../leaderboard/leaderboard_screen.dart';
 import '../playlists/data/playlists_store.dart';
 import '../search/search_screen.dart';
@@ -12,26 +14,24 @@ import '../subscriptions/data/subscriptions_store.dart';
 import '../subscriptions/subscriptions_screen.dart' show CircleTapTarget;
 import '../wallet/wallet_screen.dart';
 import 'badges_screen.dart';
+import 'change_skill_world_sheet.dart';
+import 'data/models/user_profile.dart';
+import 'data/profile_store.dart';
+import 'data/skill_world_store.dart';
 import 'downloads_screen.dart';
 import 'liked_videos_screen.dart';
 import 'saved_videos_screen.dart';
 import 'watch_history_screen.dart';
 
 // Figma: **Profile Flow 17** (`1256:23812`) — "My Profile" bottom-nav tab
-// root. Header (avatar, name/handle, coins · XP · streak pills, gradient
-// "Design World" button), Watch History rail, and the menu list
-// (Leaderboard / Downloads / Saved / Liked / Badges). Detail screens are
-// deferred — rows and pills are inert stubs for now.
+// root. Identity from [meProfileProvider] when signed in; demo fallback offline.
 
-/// Demo identity/stats shown on the tab (no auth yet). Coins now come live
-/// from [playlistsProvider] (see _ProfileHeader).
-// TODO(backend, blocking): replace hardcoded user identity (name, handle, initials, XP, world, rank) with real authenticated user profile data from backend — expects: {name: String, handle: String, initials: String, xp: int, world: String, leaderboardRank: int}
+/// Demo identity when `GET /me/profile` has not loaded yet.
 abstract final class _MyProfileDemo {
   static const name = 'Amara Design';
   static const handle = '@amara';
   static const initials = 'AD';
   static const xp = '2,450';
-  static const world = 'Design World';
   static const leaderboardRank = '#12 in Master';
 }
 
@@ -40,10 +40,13 @@ class MyProfileBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final session = ref.watch(hasSessionProvider);
     final subs = ref.watch(subscriptionsProvider);
     final history = subs.creators.isEmpty
         ? const <SubscriptionEpisode>[]
         : subs.feed().take(5).toList();
+    // Session gate: still show chrome while loading; signed-out keeps demo.
+    final signedOut = session.value == false;
     return Column(
       children: [
         _topBar(context),
@@ -51,6 +54,17 @@ class MyProfileBody extends ConsumerWidget {
         Expanded(
           child: ListView(
             children: [
+              if (signedOut)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: SkifluxSpacing.spaceL),
+                  child: Text(
+                    'Sign in to see your profile, coins, and history.',
+                    textAlign: TextAlign.center,
+                    style: SkifluxTypography.bodyP10Regular.copyWith(
+                      color: SkifluxColors.contentTertiary,
+                    ),
+                  ),
+                ),
               const _ProfileHeader(),
               const SizedBox(height: SkifluxSpacing.spaceL),
               const _WatchHistoryHeading(),
@@ -67,15 +81,14 @@ class MyProfileBody extends ConsumerWidget {
   }
 
   /// Search circle · "My Profile" (H8 Bold 20) · settings circle.
-  // TODO(backend, blocking): gate entire My Profile tab behind real authentication — currently no auth layer exists; user identity is hardcoded demo data — expects: TBD, no current placeholder structure to infer from
   Widget _topBar(BuildContext context) {
     return Row(
       children: [
         CircleTapTarget(
           icon: RemixIcons.search_fill,
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const SearchScreen()),
-          ),
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const SearchScreen())),
         ),
         Expanded(
           child: Center(
@@ -89,9 +102,9 @@ class MyProfileBody extends ConsumerWidget {
         ),
         CircleTapTarget(
           icon: RemixIcons.settings_4_fill,
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const SettingsScreen()),
-          ),
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const SettingsScreen())),
         ),
       ],
     );
@@ -106,25 +119,53 @@ class _ProfileHeader extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final streak = ref.watch(streaksProvider).streak;
-    // Live wallet balance — updates after buy-coins / unlock / withdraw.
     final coins = ref.watch(playlistsProvider).skillCoins;
+    final profileAsync = ref.watch(meProfileProvider);
+    final UserProfile? profile = profileAsync.value;
+
+    final name = profile?.displayName ?? _MyProfileDemo.name;
+    final handle = (profile?.handle.isNotEmpty ?? false)
+        ? profile!.handle
+        : _MyProfileDemo.handle;
+    final initials = profile?.initials ?? _MyProfileDemo.initials;
+    final xpLabel = profile?.xpLabel ?? _MyProfileDemo.xp;
+    final streakLabel = profile != null && profile.streakCount > 0
+        ? '${profile.streakCount}'
+        : '$streak';
+    final avatarUrl = profile?.avatarUrl;
+
     return Column(
       children: [
-        const SkifluxAvatar(
-          style: SkifluxAvatarStyle.initial,
-          size: SkifluxUnit.u64,
-          initials: _MyProfileDemo.initials,
-        ),
+        if (avatarUrl != null && avatarUrl.isNotEmpty)
+          ClipOval(
+            child: Image.network(
+              avatarUrl,
+              width: 64,
+              height: 64,
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => SkifluxAvatar(
+                style: SkifluxAvatarStyle.initial,
+                size: SkifluxUnit.u64,
+                initials: initials,
+              ),
+            ),
+          )
+        else
+          SkifluxAvatar(
+            style: SkifluxAvatarStyle.initial,
+            size: SkifluxUnit.u64,
+            initials: initials,
+          ),
         const SizedBox(height: SkifluxSpacing.spaceS),
         Text(
-          _MyProfileDemo.name,
+          name,
           style: SkifluxTypography.headingH8Bold.copyWith(
             color: SkifluxColors.contentPrimary,
           ),
         ),
         const SizedBox(height: SkifluxSpacing.spaceXs),
         Text(
-          _MyProfileDemo.handle,
+          handle,
           style: SkifluxTypography.bodyP11Regular.copyWith(
             color: SkifluxColors.contentPrimary,
           ),
@@ -139,27 +180,27 @@ class _ProfileHeader extends ConsumerWidget {
               background: SkifluxColors.backgroundNoticeSubtle,
               foreground: SkifluxColors.contentNotice,
               chevron: true,
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const WalletScreen()),
-              ),
+              onTap: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const WalletScreen())),
             ),
             const SizedBox(width: SkifluxSpacing.spaceS),
-            const _StatPill(
+            _StatPill(
               icon: RemixIcons.flashlight_fill,
-              label: _MyProfileDemo.xp,
+              label: xpLabel,
               background: SkifluxColors.backgroundBrandOpacity50,
               foreground: SkifluxColors.contentBrand,
             ),
             const SizedBox(width: SkifluxSpacing.spaceS),
             _StatPill(
               icon: RemixIcons.fire_fill,
-              label: '$streak',
+              label: streakLabel,
               background: SkifluxColors.orange100,
               foreground: SkifluxColors.orange500,
               chevron: true,
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const StreakScreen()),
-              ),
+              onTap: () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const StreakScreen())),
             ),
           ],
         ),
@@ -226,61 +267,141 @@ class _StatPill extends StatelessWidget {
   }
 }
 
-/// Gradient "Design World ›" pill with the purple drop shadow.
-class _WorldButton extends StatelessWidget {
+/// Gradient "Design World ›" pill — tap to change SkillWorld (`1256:24173`).
+///
+/// Figma (`1256:24041`) fills the 130×32 pill with a *radial* gradient: a 10px
+/// circle stretched by `matrix(7.2573 2.8214 -9.5762 1.7987 65 16)` about the
+/// pill's centre, so blue sits in the middle and every corner runs
+/// violet → magenta. Under it a `0 4 5 rgba(86,16,171,.6)` drop shadow, plus
+/// the `Inner shadow` effect style as a hairline highlight on the top edge.
+class _WorldButton extends ConsumerWidget {
   const _WorldButton();
 
+  /// Gradient stops — authored directly in Figma, not colour variables.
+  static const _gradientColors = [
+    Color(0xFF3B82F6),
+    Color(0xFF3B82F6),
+    Color(0xFF5C5EF2),
+    Color(0xFF7C3AED),
+    Color(0xFFAB40EE),
+    Color(0xFFD946EF),
+  ];
+  static const _gradientStops = [0.0, 0.3, 0.45, 0.6, 0.8, 1.0];
+
+  /// The pill is 32 tall (16px content + `Space/S` padding) and Flutter
+  /// resolves [RadialGradient.radius] against that shortest side, so Figma's
+  /// `r="10"` becomes 10/32.
+  static const double _gradientRadius = 10 / SkifluxUnit.u32;
+
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(SkifluxSpacing.spaceS),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF3B82F6),
-            Color(0xFF3B82F6),
-            Color(0xFF7C3AED),
-            Color(0xFFD946EF),
-          ],
-          stops: [0.0, 0.3, 0.6, 1.0],
-        ),
-        borderRadius: SkifluxRadii.borderPill,
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x995610AB),
-            offset: Offset(0, 4),
-            blurRadius: 10,
+  Widget build(BuildContext context, WidgetRef ref) {
+    final world = ref.watch(skillWorldProvider);
+    return GestureDetector(
+      onTap: () => showChangeSkillWorldSheet(context),
+      child: Container(
+        padding: const EdgeInsets.all(SkifluxSpacing.spaceS),
+        decoration: BoxDecoration(
+          gradient: const RadialGradient(
+            radius: _gradientRadius,
+            colors: _gradientColors,
+            stops: _gradientStops,
+            transform: _WorldGradientTransform(),
           ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(
-            RemixIcons.pen_nib_fill,
-            size: SkifluxIcons.sizeS,
-            color: SkifluxColors.contentPrimaryInverse,
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: SkifluxSpacing.spaceXs,
+          borderRadius: SkifluxRadii.borderPill,
+          boxShadow: [
+            BoxShadow(
+              color: SkifluxColors.brand500.withValues(alpha: 0.6),
+              offset: const Offset(0, 4),
+              blurRadius: 5,
             ),
-            child: Text(
-              _MyProfileDemo.world,
-              style: SkifluxTypography.uiButtonSmall.copyWith(
-                color: SkifluxColors.contentPrimaryInverse,
+          ],
+        ),
+        // Flutter has no inner shadow on [BoxDecoration]; the effect style's
+        // light 1px inset reads as a fade over the top 2px of the pill.
+        foregroundDecoration: BoxDecoration(
+          borderRadius: SkifluxRadii.borderPill,
+          gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [SkifluxEffects.innerShadowColor, Color(0x00FFF8F4)],
+            stops: [0, 2 / SkifluxUnit.u32],
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // The selected world's own glyph, not a fixed one — the label
+            // beside it already says which world, and the pair reads as a
+            // single "you are in X" statement. Figma's frame shows Design's
+            // nib because Design is the world its example is in.
+            Icon(
+              world.icon,
+              size: SkifluxIcons.sizeS,
+              color: SkifluxColors.contentPrimaryInverse,
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: SkifluxSpacing.spaceXs,
+              ),
+              child: Text(
+                world.pillLabel,
+                style: SkifluxTypography.uiButtonSmall.copyWith(
+                  color: SkifluxColors.contentPrimaryInverse,
+                ),
               ),
             ),
-          ),
-          const Icon(
-            RemixIcons.arrow_right_s_line,
-            size: SkifluxIcons.sizeS,
-            color: SkifluxColors.contentPrimaryInverse,
-          ),
-        ],
+            const Icon(
+              RemixIcons.arrow_right_s_line,
+              size: SkifluxIcons.sizeS,
+              color: SkifluxColors.contentPrimaryInverse,
+            ),
+          ],
+        ),
       ),
+    );
+  }
+}
+
+/// Figma's `gradientTransform` for the pill: the radial gradient's circle is
+/// scaled/skewed by `matrix(7.2573 2.8214 -9.5762 1.7987)` about the pill's
+/// centre (the matrix' 65/16 translation *is* that centre, so it drops out).
+///
+/// Flutter hands Skia the centre in device coordinates and the matrix maps
+/// gradient space → device space, so the composite is
+/// `translate(centre) · L · translate(-centre)` — a linear part of `L` and a
+/// translation of `centre - L·centre`.
+@immutable
+class _WorldGradientTransform extends GradientTransform {
+  const _WorldGradientTransform();
+
+  static const double _a = 7.2573;
+  static const double _b = 2.8214;
+  static const double _c = -9.5762;
+  static const double _d = 1.7987;
+
+  @override
+  Matrix4 transform(Rect bounds, {TextDirection? textDirection}) {
+    final centre = bounds.center;
+    final tx = centre.dx - (_a * centre.dx + _c * centre.dy);
+    final ty = centre.dy - (_b * centre.dx + _d * centre.dy);
+    // Column-major.
+    return Matrix4(
+      _a,
+      _b,
+      0,
+      0, //
+      _c,
+      _d,
+      0,
+      0, //
+      0,
+      0,
+      1,
+      0, //
+      tx,
+      ty,
+      0,
+      1, //
     );
   }
 }
@@ -304,9 +425,9 @@ class _WatchHistoryHeading extends StatelessWidget {
         ),
         // Watch-history list screen (Profile Flow 15).
         GestureDetector(
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const WatchHistoryScreen()),
-          ),
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const WatchHistoryScreen())),
           child: Text(
             'View all',
             style: SkifluxTypography.uiButtonLarge.copyWith(
@@ -319,33 +440,57 @@ class _WatchHistoryHeading extends StatelessWidget {
   }
 }
 
-class _WatchHistoryRail extends StatelessWidget {
+class _WatchHistoryRail extends StatefulWidget {
   const _WatchHistoryRail({required this.episodes});
 
   final List<SubscriptionEpisode> episodes;
 
   @override
+  State<_WatchHistoryRail> createState() => _WatchHistoryRailState();
+}
+
+class _WatchHistoryRailState extends State<_WatchHistoryRail> {
+  /// Episodes dropped via the row menu. The rail is derived from the
+  /// subscriptions feed rather than a watch-history store, so "Remove from
+  /// watch history" only hides the card for the session.
+  // TODO(backend, minor): persist watch-history removals once the rail reads a real watch-history feed instead of the subscriptions feed — expects: DELETE /watch-history/{episodeId}
+  final _removed = <String>{};
+
+  static String _key(SubscriptionEpisode episode) =>
+      '${episode.creatorUsername}#${episode.epNumber}';
+
+  @override
   Widget build(BuildContext context) {
+    final episodes = widget.episodes
+        .where((e) => !_removed.contains(_key(e)))
+        .toList(growable: false);
     return SizedBox(
       // 98 thumb + 8 gap + 2-line H10 title + 4 gap + 16 creator row.
       height: 172,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: episodes.length,
-        separatorBuilder: (_, __) =>
+        separatorBuilder: (_, _) =>
             const SizedBox(width: SkifluxSpacing.spaceL),
-        itemBuilder: (_, i) => _WatchHistoryCard(episode: episodes[i]),
+        itemBuilder: (_, i) => _WatchHistoryCard(
+          episode: episodes[i],
+          onRemove: () => setState(() => _removed.add(_key(episodes[i]))),
+        ),
       ),
     );
   }
 }
 
 /// 128px column: thumbnail (EP chip on brand + duration chip on overlay),
-/// 2-line title, creator name + "more" glyph.
+/// 2-line title, creator name + "more" glyph. The glyph opens the same row
+/// More Menu the Watch History screen uses (**Profile Flow 14** `1256:24327`).
 class _WatchHistoryCard extends ConsumerWidget {
-  const _WatchHistoryCard({required this.episode});
+  const _WatchHistoryCard({required this.episode, required this.onRemove});
 
   final SubscriptionEpisode episode;
+
+  /// Drops this card from the rail after "Remove from watch history".
+  final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -378,16 +523,38 @@ class _WatchHistoryCard extends ConsumerWidget {
                   ),
                 ),
               ),
-              const Icon(
-                RemixIcons.more_2_fill,
-                size: SkifluxIcons.sizeS,
-                color: SkifluxColors.contentTertiary,
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _openRowMenu(context),
+                child: const Icon(
+                  RemixIcons.more_2_fill,
+                  size: SkifluxIcons.sizeS,
+                  color: SkifluxColors.contentTertiary,
+                ),
               ),
             ],
           ),
         ],
       ),
     );
+  }
+
+  /// Same handlers as the Watch History screen's rows, so the sheet behaves
+  /// identically wherever it is opened from.
+  Future<void> _openRowMenu(BuildContext context) async {
+    final action = await showWatchHistoryMenuSheet(context);
+    if (!context.mounted || action == null) return;
+    switch (action) {
+      case WatchHistoryMenuAction.remove:
+        SkifluxToast.info(context, 'Removed from watch history');
+        onRemove();
+      case WatchHistoryMenuAction.download:
+        SkifluxToast.info(context, 'Episode queued for download');
+      case WatchHistoryMenuAction.save:
+        SkifluxToast.success(context, 'Saved to your videos');
+      case WatchHistoryMenuAction.share:
+        await showShareSheet(context);
+    }
   }
 
   Widget _thumbnail() {
@@ -403,7 +570,7 @@ class _WatchHistoryCard extends ConsumerWidget {
             Image.asset(
               'assets/home_video_raw1.png',
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) =>
+              errorBuilder: (_, _, _) =>
                   const ColoredBox(color: SkifluxColors.magenta900),
             ),
             Positioned(
@@ -468,37 +635,37 @@ class _MenuList extends StatelessWidget {
           icon: RemixIcons.trophy_fill,
           label: 'Leaderboard',
           detail: _MyProfileDemo.leaderboardRank,
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const LeaderboardScreen()),
-          ),
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const LeaderboardScreen())),
         ),
         _MenuRow(
           icon: RemixIcons.download_fill,
           label: 'Downloads',
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const DownloadsScreen()),
-          ),
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const DownloadsScreen())),
         ),
         _MenuRow(
           icon: RemixIcons.bookmark_fill,
           label: 'Saved Videos',
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const SavedVideosScreen()),
-          ),
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const SavedVideosScreen())),
         ),
         _MenuRow(
           icon: RemixIcons.heart_3_fill,
           label: 'Liked Videos',
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const LikedVideosScreen()),
-          ),
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const LikedVideosScreen())),
         ),
         _MenuRow(
           icon: RemixIcons.award_fill,
           label: 'Badges',
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const BadgesScreen()),
-          ),
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const BadgesScreen())),
         ),
       ],
     );

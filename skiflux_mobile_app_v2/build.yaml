@@ -1,0 +1,11 @@
+targets:
+  $default:
+    builders:
+      json_serializable:
+        options:
+          # The backend speaks snake_case throughout — renaming globally keeps
+          # the models free of per-field @JsonKey(name:) noise.
+          field_rename: snake
+          # Nested models (WithdrawalRequest.account) must serialize through
+          # their own toJson, not land as raw Dart objects in the map.
+          explicit_to_json: true

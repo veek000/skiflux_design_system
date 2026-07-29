@@ -1,20 +1,21 @@
-/// Demo data for the Tasks tab (Figma **Task Flow** `1256:12977`).
-/// Session-local Riverpod notifier — no persistence, matching other stores.
+/// Tasks tab (Figma **Task Flow** `1256:12977`).
+///
+/// Learning tasks remain demo-seeded until watched-tasks integration.
+/// Missions (platform tasks) load from `GET /me/platform-tasks` when
+/// [refreshMissionsFromBackend] runs after sign-in.
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'models/platform_task.dart';
+import 'platform_tasks_repository.dart';
 
 // ── Enums ────────────────────────────────────────────────────────────
 
 enum TaskCategory { learning, mission, marketplace }
 
 /// Learning-task lifecycle (Figma status chips on TF15).
-enum LearningTaskStatus {
-  completed,
-  pending,
-  inReview,
-  actionNeeded,
-}
+enum LearningTaskStatus { completed, pending, inReview, actionNeeded }
 
 /// How a learning task is completed.
 enum LearningTaskKind { submission, quiz }
@@ -69,19 +70,19 @@ class LearningTask {
   int? quizCorrect;
 
   String get statusLabel => switch (status) {
-        LearningTaskStatus.completed => 'Completed',
-        LearningTaskStatus.pending => 'Pending',
-        LearningTaskStatus.inReview => 'In Review',
-        LearningTaskStatus.actionNeeded => 'Action Needed',
-      };
+    LearningTaskStatus.completed => 'Completed',
+    LearningTaskStatus.pending => 'Pending',
+    LearningTaskStatus.inReview => 'In Review',
+    LearningTaskStatus.actionNeeded => 'Action Needed',
+  };
 
   /// Primary CTA on the list card.
   String get actionLabel => switch (status) {
-        LearningTaskStatus.completed => 'View Result',
-        LearningTaskStatus.pending => 'Start Task',
-        LearningTaskStatus.inReview => 'Awaiting Review',
-        LearningTaskStatus.actionNeeded => 'Fix & Resubmit',
-      };
+    LearningTaskStatus.completed => 'View Result',
+    LearningTaskStatus.pending => 'Start Task',
+    LearningTaskStatus.inReview => 'Awaiting Review',
+    LearningTaskStatus.actionNeeded => 'Fix & Resubmit',
+  };
 
   bool get actionEnabled =>
       status != LearningTaskStatus.inReview &&
@@ -97,7 +98,42 @@ class MissionTask {
     required this.actionLabel,
     required this.iconKey,
     this.completed = false,
+    this.claimable = false,
+    this.status = PlatformTaskStatus.notStarted,
+    this.progressCurrent = 0,
+    this.progressTarget = 1,
+    this.externalUrl,
+    this.fromBackend = false,
   });
+
+  factory MissionTask.fromPlatform(PlatformTask t) {
+    final coins = int.tryParse(t.skillcoinReward.round().toString()) ?? 0;
+    final completed = t.completed || t.status == PlatformTaskStatus.claimed;
+    final actionLabel = completed
+        ? 'Done'
+        : t.claimable || t.status == PlatformTaskStatus.claimable
+        ? 'Claim'
+        : t.status == PlatformTaskStatus.inProgress
+        ? 'Continue'
+        : t.verificationMode == 'manual' || t.triggerType.isEmpty
+        ? 'Start'
+        : 'View';
+    return MissionTask(
+      id: t.id,
+      title: t.title,
+      description: t.description,
+      coins: coins,
+      actionLabel: actionLabel,
+      iconKey: t.icon.isEmpty ? 'star' : t.icon,
+      completed: completed,
+      claimable: t.claimable || t.status == PlatformTaskStatus.claimable,
+      status: t.status,
+      progressCurrent: t.progressCurrent,
+      progressTarget: t.progressTarget,
+      externalUrl: t.externalUrl,
+      fromBackend: true,
+    );
+  }
 
   final String id;
   final String title;
@@ -108,6 +144,12 @@ class MissionTask {
   /// Key resolved to Remix in the UI (instagram, twitter/x, …).
   final String iconKey;
   bool completed;
+  bool claimable;
+  PlatformTaskStatus status;
+  int progressCurrent;
+  int progressTarget;
+  String? externalUrl;
+  bool fromBackend;
 }
 
 class QuizData {
@@ -162,10 +204,7 @@ class UploadedFileInfo {
 
 /// Snapshot of learning + mission demo lists.
 class TasksState {
-  TasksState({
-    required this.learning,
-    required this.missions,
-  });
+  TasksState({required this.learning, required this.missions});
 
   final List<LearningTask> learning;
   final List<MissionTask> missions;
@@ -190,17 +229,28 @@ class TasksState {
 }
 
 /// Riverpod choice: [NotifierProvider] — learning/mission status mutate
-/// via markInReview / markCompleted / recordQuizResult / completeMission
-/// (was ChangeNotifier singleton). Single provider keeps learning +
-/// missions in one session snapshot (list filters stay local UI state).
-// TODO(backend, blocking): replace static seeded learning tasks and missions with real per-user task catalog from backend, including submission persistence and quiz answer recording — expects: {learning: List<{id: String, title: String, description: String, episodeLabel: String, episodeTitle: String, episodeSubtitle: String, status: LearningTaskStatus, kind: LearningTaskKind, coins: int, xp: int, feedback: String?, briefIntro: String?, briefBullets: List<String>, quiz: QuizData?, quizAnswers: List<int?>?, quizCorrect: int?}>, missions: List<{id: String, title: String, description: String, coins: int, actionLabel: String, iconKey: String, completed: bool}>}
+/// via markInReview / markCompleted / recordQuizResult / completeMission.
+/// Learning tasks stay seed until episode-task integration; missions refresh
+/// from `/me/platform-tasks`.
 class TasksNotifier extends Notifier<TasksState> {
   @override
   TasksState build() {
-    return TasksState(
-      learning: _seedLearning(),
-      missions: _seedMissions(),
-    );
+    return TasksState(learning: _seedLearning(), missions: _seedMissions());
+  }
+
+  /// Replaces the missions tab with live platform tasks when available.
+  Future<void> refreshMissionsFromBackend() async {
+    try {
+      final list = await ref.read(platformTasksRepositoryProvider).list();
+      if (list.isEmpty) return;
+      final missions = list
+          .where((t) => t.isActive)
+          .map(MissionTask.fromPlatform)
+          .toList(growable: false);
+      state = TasksState(learning: state.learning, missions: missions);
+    } catch (_) {
+      // Keep demo missions offline.
+    }
   }
 
   void markInReview(String id) {
@@ -242,17 +292,45 @@ class TasksNotifier extends Notifier<TasksState> {
     );
   }
 
-  void completeMission(String id) {
+  /// Mission CTA: claim when claimable, else start/submit, then re-list.
+  Future<void> completeMission(String id) async {
+    MissionTask? mission;
     for (final m in state.missions) {
-      if (m.id == id && !m.completed) {
-        m.completed = true;
-        state = TasksState(
-          learning: state.learning,
-          missions: List<MissionTask>.of(state.missions),
-        );
-        return;
+      if (m.id == id) {
+        mission = m;
+        break;
       }
     }
+    if (mission == null || mission.completed) return;
+
+    if (mission.fromBackend) {
+      final repo = ref.read(platformTasksRepositoryProvider);
+      try {
+        if (mission.claimable) {
+          await repo.claim(id);
+        } else if (mission.status == PlatformTaskStatus.notStarted) {
+          await repo.start(id);
+          // Manual tasks: submit marks claimable (platform-tasks.md).
+          if (mission.actionLabel == 'Start') {
+            await repo.submit(id);
+          }
+        } else if (mission.status == PlatformTaskStatus.inProgress) {
+          await repo.submit(id);
+        } else {
+          await repo.claim(id);
+        }
+        await refreshMissionsFromBackend();
+        return;
+      } catch (_) {
+        // Fall through to local optimistic complete for UX continuity.
+      }
+    }
+
+    mission.completed = true;
+    state = TasksState(
+      learning: state.learning,
+      missions: List<MissionTask>.of(state.missions),
+    );
   }
 
   // ── Seeds ────────────────────────────────────────────────────────
@@ -321,8 +399,7 @@ class TasksNotifier extends Notifier<TasksState> {
     final completedSubmission = LearningTask(
       id: 'learn-1',
       title: 'Design a hero section',
-      description:
-          'Submit a Figma file or screenshot · reviewed within 24hrs',
+      description: 'Submit a Figma file or screenshot · reviewed within 24hrs',
       episodeLabel: 'EP 06 — Design Systems',
       episodeTitle: 'Introduction to UI Design Thinking',
       episodeSubtitle: 'Episode 1',
@@ -335,21 +412,23 @@ class TasksNotifier extends Notifier<TasksState> {
     );
 
     // Completed quiz with a perfect run — View Result → TF01.
-    final completedQuiz = LearningTask(
-      id: 'learn-1b',
-      title: 'Grid & Spacing Quiz',
-      description: '3 multiple-choice questions · must score 100% to pass',
-      episodeLabel: 'EP 05 — Layout Foundations',
-      episodeTitle: 'Introduction to UI Design Thinking',
-      episodeSubtitle: 'Episode 1',
-      status: LearningTaskStatus.completed,
-      kind: LearningTaskKind.quiz,
-      coins: 25,
-      xp: 25,
-      quiz: quiz,
-    )
-      ..quizAnswers = const [1, 0, 2]
-      ..quizCorrect = 3;
+    final completedQuiz =
+        LearningTask(
+            id: 'learn-1b',
+            title: 'Grid & Spacing Quiz',
+            description:
+                '3 multiple-choice questions · must score 100% to pass',
+            episodeLabel: 'EP 05 — Layout Foundations',
+            episodeTitle: 'Introduction to UI Design Thinking',
+            episodeSubtitle: 'Episode 1',
+            status: LearningTaskStatus.completed,
+            kind: LearningTaskKind.quiz,
+            coins: 25,
+            xp: 25,
+            quiz: quiz,
+          )
+          ..quizAnswers = const [1, 0, 2]
+          ..quizCorrect = 3;
 
     return [
       completedSubmission,
@@ -372,8 +451,7 @@ class TasksNotifier extends Notifier<TasksState> {
       LearningTask(
         id: 'learn-3',
         title: 'Grid & Spacing Quiz',
-        description:
-            '3 multiple-choice questions · must score 100% to pass',
+        description: '3 multiple-choice questions · must score 100% to pass',
         episodeLabel: 'EP 05 — Layout Foundations',
         episodeTitle: 'Introduction to UI Design Thinking',
         episodeSubtitle: 'Episode 1',

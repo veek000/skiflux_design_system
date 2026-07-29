@@ -78,7 +78,8 @@ class _MilestoneSheet extends ConsumerWidget {
                 const SizedBox(height: SkifluxSpacing.spaceXs),
                 Text.rich(
                   TextSpan(
-                    text: 'You’ve earned ${streaks.milestoneXp} XP '
+                    text:
+                        'You’ve earned ${streaks.milestoneXp} XP '
                         'for completing a milestone of ',
                     children: [
                       TextSpan(

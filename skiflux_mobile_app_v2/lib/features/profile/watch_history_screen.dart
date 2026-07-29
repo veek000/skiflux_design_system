@@ -3,11 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
-import '../../shared/sheets/skiflux_sheet.dart';
+import '../../shared/error_handling/error_handler.dart';
 import '../../shared/sheets/share_sheet.dart';
+import '../../shared/sheets/skiflux_sheet.dart';
 import '../../shared/toast/skiflux_toast.dart';
-import '../subscriptions/data/subscriptions_store.dart';
-import '../subscriptions/subscriptions_screen.dart';
+import '../../shared/widgets/load_failure.dart';
+import 'data/library_episode.dart';
+import 'data/library_repository.dart';
+import 'data/library_store.dart';
+import 'library_episode_player.dart';
 import 'library_episode_row.dart';
 
 // Figma: **Profile Flow 15** (`1256:24224`) — Watch History. Nav with "Clear
@@ -16,57 +20,25 @@ import 'library_episode_row.dart';
 // with a vertical more glyph → the row More Menu sheet (**Profile Flow 14**
 // `1256:24327`: Remove from watch history / Downloads / Save Video /
 // Share Video).
-
-/// One watch-history entry: an episode + when/how far it was watched.
-class _HistoryEntry {
-  _HistoryEntry(this.episode, {required this.today, required this.progress});
-
-  final SubscriptionEpisode episode;
-  final bool today;
-
-  /// 0–1; 1 renders as "Completed".
-  final double progress;
-
-  String get statusLine {
-    final watched = progress >= 1
-        ? 'Completed'
-        : '${(progress * 100).round()}% watched';
-    final when = today ? 'Today, 9:20 AM' : 'Yesterday, 4:12 PM';
-    return '$watched · $when';
-  }
-}
+//
+// Backed by `GET /me/watch-history`. The Figma only draws Today and Yesterday
+// because its sample data stops there; real history runs back further, so
+// anything older is grouped under its own date heading.
 
 class WatchHistoryScreen extends ConsumerStatefulWidget {
   const WatchHistoryScreen({super.key});
 
   @override
-  ConsumerState<WatchHistoryScreen> createState() =>
-      _WatchHistoryScreenState();
+  ConsumerState<WatchHistoryScreen> createState() => _WatchHistoryScreenState();
 }
 
 class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
   String _query = '';
 
-  /// Session-local demo history (no app-wide history model yet): first four
-  /// feed episodes — two Today (in progress), two Yesterday (completed).
-  // TODO(backend, blocking): replace session-local watch history with real per-user watch history fetched from backend — expects: List<{episode: {epNumber: int, title: String, creatorUsername: String, duration: String, views: String, postedAgo: String}, today: bool, progress: double}>
-  List<_HistoryEntry>? _entries;
-
   @override
   Widget build(BuildContext context) {
-    final subs = ref.watch(subscriptionsProvider);
-    _entries ??= [
-      for (final (i, ep) in subs.feed().take(4).indexed)
-        _HistoryEntry(ep, today: i < 2, progress: i < 2 ? 0.72 : 1),
-    ];
-    final query = _query.trim().toLowerCase();
-    final visible = query.isEmpty
-        ? _entries!
-        : _entries!
-            .where((e) => e.episode.title.toLowerCase().contains(query))
-            .toList();
-    final today = visible.where((e) => e.today).toList();
-    final yesterday = visible.where((e) => !e.today).toList();
+    final history = ref.watch(watchHistoryProvider);
+    final loaded = history.value ?? const <WatchHistoryEntry>[];
 
     return Scaffold(
       backgroundColor: SkifluxColors.backgroundPrimary,
@@ -80,9 +52,9 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
         ),
         // "Clear all" in negative red (1256:24238).
         trailing: TextButton(
-          onPressed: _entries!.isEmpty
+          onPressed: loaded.isEmpty
               ? null
-              : () => setState(() => _entries = []),
+              : () => ref.read(watchHistoryProvider.notifier).clear(),
           child: Text(
             'Clear all',
             style: SkifluxTypography.uiButtonMedium.copyWith(
@@ -103,28 +75,16 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
               ),
             ),
             Expanded(
-              child: visible.isEmpty
-                  ? _empty()
-                  : ListView(
-                      padding: const EdgeInsets.fromLTRB(
-                        SkifluxSpacing.spaceL,
-                        0,
-                        SkifluxSpacing.spaceL,
-                        SkifluxSpacing.spaceL,
-                      ),
-                      children: [
-                        if (today.isNotEmpty) ...[
-                          _sectionLabel('Today'),
-                          const SizedBox(height: SkifluxSpacing.spaceS),
-                          ..._rows(today),
-                        ],
-                        if (yesterday.isNotEmpty) ...[
-                          _sectionLabel('Yesterday'),
-                          const SizedBox(height: SkifluxSpacing.spaceS),
-                          ..._rows(yesterday),
-                        ],
-                      ],
-                    ),
+              child: switch (history) {
+                AsyncLoading() => const LibraryListSkeleton(),
+                AsyncError(:final error) => LoadFailure(
+                  error: error,
+                  title: "We couldn't load your watch history",
+                  onRetry: () =>
+                      ref.read(watchHistoryProvider.notifier).refresh(),
+                ),
+                AsyncData(:final value) => _list(value),
+              },
             ),
           ],
         ),
@@ -132,26 +92,78 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
     );
   }
 
-  List<Widget> _rows(List<_HistoryEntry> entries) {
-    return [
-      for (final entry in entries) ...[
-        LibraryEpisodeRow(
-          episode: entry.episode,
-          statusLine: entry.statusLine,
-          trailing: IconButton(
-            padding: EdgeInsets.zero,
-            onPressed: () => _openRowMenu(entry),
-            icon: const Icon(
-              RemixIcons.more_2_fill,
-              size: SkifluxIcons.sizeM,
-              color: SkifluxColors.contentTertiary,
-            ),
-          ),
-          onTap: () => showEpisodePlayerModal(context, entry.episode),
+  Widget _list(List<WatchHistoryEntry> entries) {
+    final query = _query.trim().toLowerCase();
+    final visible = query.isEmpty
+        ? entries
+        : entries
+              .where((e) => e.episode.title.toLowerCase().contains(query))
+              .toList();
+    if (visible.isEmpty) {
+      return SkifluxEmptyState(
+        icon: const Icon(
+          RemixIcons.history_fill,
+          size: SkifluxEmptyState.iconSize,
+          color: SkifluxColors.contentBrand,
         ),
-        const SizedBox(height: SkifluxSpacing.spaceL),
-      ],
-    ];
+        title: query.isEmpty ? 'No watch history' : 'No matches',
+        message: query.isEmpty
+            ? 'Episodes you watch will show up here.'
+            : 'Nothing you have watched matches “$_query”.',
+      );
+    }
+
+    // Flatten to headings + rows once, so the builder is a plain index lookup
+    // instead of the cursor arithmetic this screen used to do.
+    final today = DateTime.now();
+    final rows = <Widget>[];
+    String? heading;
+    for (final entry in visible) {
+      final label = _dayLabel(entry.viewedAt, today);
+      if (label != heading) {
+        heading = label;
+        if (rows.isNotEmpty) {
+          rows.add(const SizedBox(height: SkifluxSpacing.spaceL));
+        }
+        rows
+          ..add(_sectionLabel(label))
+          ..add(const SizedBox(height: SkifluxSpacing.spaceS));
+      }
+      rows
+        ..add(_rowItem(entry, label))
+        ..add(const SizedBox(height: SkifluxSpacing.spaceL));
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(
+        SkifluxSpacing.spaceL,
+        0,
+        SkifluxSpacing.spaceL,
+        SkifluxSpacing.spaceL,
+      ),
+      itemCount: rows.length,
+      itemBuilder: (_, i) => rows[i],
+    );
+  }
+
+  Widget _rowItem(WatchHistoryEntry entry, String dayLabel) {
+    final watched = entry.completed
+        ? 'Completed'
+        : '${(entry.progress * 100).round()}% watched';
+    return LibraryEpisodeRow(
+      episode: entry.episode,
+      statusLine: '$watched · $dayLabel, ${_clock(entry.viewedAt)}',
+      onTap: () => showLibraryEpisodePlayer(context, entry.episode),
+      trailing: IconButton(
+        padding: EdgeInsets.zero,
+        onPressed: () => _openRowMenu(entry),
+        icon: const Icon(
+          RemixIcons.more_2_fill,
+          size: SkifluxIcons.sizeM,
+          color: SkifluxColors.contentTertiary,
+        ),
+      ),
+    );
   }
 
   Widget _sectionLabel(String label) {
@@ -166,58 +178,60 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
     );
   }
 
-  Widget _empty() {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 98,
-            height: 98,
-            decoration: const BoxDecoration(
-              color: SkifluxColors.brand100,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              RemixIcons.history_fill,
-              size: 48,
-              color: SkifluxColors.contentBrand,
-            ),
-          ),
-          const SizedBox(height: SkifluxSpacing.spaceL),
-          Text(
-            'No watch history',
-            style: SkifluxTypography.headingH7Bold.copyWith(
-              color: SkifluxColors.contentPrimary,
-            ),
-          ),
-          const SizedBox(height: SkifluxSpacing.spaceS),
-          Text(
-            'Episodes you watch will show up here.',
-            style: SkifluxTypography.bodyP8Regular.copyWith(
-              color: SkifluxColors.contentTertiary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _openRowMenu(_HistoryEntry entry) async {
+  Future<void> _openRowMenu(WatchHistoryEntry entry) async {
     final action = await showWatchHistoryMenuSheet(context);
     if (!mounted || action == null) return;
     switch (action) {
       case WatchHistoryMenuAction.remove:
-        setState(() => _entries!.remove(entry));
+        ref.read(watchHistoryProvider.notifier).hide(entry);
         SkifluxToast.info(context, 'Removed from watch history');
       case WatchHistoryMenuAction.download:
+        // TODO(backend, blocking): no offline download pipeline exists — this
+        // only acknowledges the tap — expects: a download URL + local store
         SkifluxToast.info(context, 'Episode queued for download');
       case WatchHistoryMenuAction.save:
-        SkifluxToast.success(context, 'Saved to your videos');
+        await _save(entry.episode);
       case WatchHistoryMenuAction.share:
         await showShareSheet(context);
     }
   }
+
+  /// "Save Video" from the row menu really saves — same toggle the Saved
+  /// Videos screen uses, so the episode shows up there afterwards.
+  Future<void> _save(LibraryEpisode episode) async {
+    try {
+      await ref.read(libraryRepositoryProvider).toggleSave(episode.id);
+      ref.invalidate(savedEpisodesProvider);
+      if (mounted) SkifluxToast.success(context, 'Saved to your videos');
+    } catch (error) {
+      if (!mounted) return;
+      SkifluxToast.error(
+        context,
+        ref.read(errorHandlerProvider).classify(error).message,
+      );
+    }
+  }
+}
+
+/// "Today" / "Yesterday" / "Mar 4, 2026".
+String _dayLabel(DateTime at, DateTime now) {
+  final day = DateTime(at.year, at.month, at.day);
+  final today = DateTime(now.year, now.month, now.day);
+  final diff = today.difference(day).inDays;
+  if (diff == 0) return 'Today';
+  if (diff == 1) return 'Yesterday';
+  const months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+  return '${months[at.month - 1]} ${at.day}, ${at.year}';
+}
+
+/// "9:20 AM".
+String _clock(DateTime at) {
+  final hour12 = at.hour % 12 == 0 ? 12 : at.hour % 12;
+  final meridiem = at.hour < 12 ? 'AM' : 'PM';
+  return '$hour12:${at.minute.toString().padLeft(2, '0')} $meridiem';
 }
 
 /// Row actions from the Watch History More Menu (`1256:24327`).

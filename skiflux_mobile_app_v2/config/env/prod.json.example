@@ -2,5 +2,7 @@
   "ENVIRONMENT": "prod",
   "SENTRY_DSN": "https://examplePublicKey@o0.ingest.sentry.io/0",
   "API_BASE_URL": "https://api.skiflux.com",
-  "ENABLE_ANALYTICS": true
+  "ENABLE_ANALYTICS": true,
+  "GOOGLE_SERVER_CLIENT_ID": "",
+  "GOOGLE_IOS_CLIENT_ID": ""
 }

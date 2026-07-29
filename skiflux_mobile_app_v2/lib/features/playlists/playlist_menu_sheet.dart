@@ -22,9 +22,8 @@ Future<void> showPlaylistMenuSheet(
 }) {
   return showSkifluxSheet(
     context: context,
-    builder: (_) => _PlaylistMenuSheet(
-      playingEpisodeNumber: playingEpisodeNumber,
-    ),
+    builder: (_) =>
+        _PlaylistMenuSheet(playingEpisodeNumber: playingEpisodeNumber),
   );
 }
 
@@ -45,7 +44,7 @@ class _PlaylistMenuSheet extends ConsumerWidget {
         controller: ModalScrollController.of(context),
         padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
         itemCount: pl.episodes.length,
-        separatorBuilder: (_, __) =>
+        separatorBuilder: (_, _) =>
             const SizedBox(height: SkifluxSpacing.spaceL),
         itemBuilder: (context, i) {
           final ep = pl.episodes[i];

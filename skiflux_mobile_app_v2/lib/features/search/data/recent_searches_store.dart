@@ -21,16 +21,17 @@ class RecentSearch {
   /// "Episodes · 2 results" / "Creator · 1 result" / "No results".
   String get subtitle {
     if (resultCount == 0 || topCategory == null) return 'No results';
-    final label =
-        resultCount == 1 ? topCategory!.singularLabel : topCategory!.label;
+    final label = resultCount == 1
+        ? topCategory!.singularLabel
+        : topCategory!.label;
     return '$label · $resultCount ${resultCount == 1 ? 'result' : 'results'}';
   }
 
   Map<String, Object?> toJson() => {
-        'query': query,
-        'topCategory': topCategory?.name,
-        'resultCount': resultCount,
-      };
+    'query': query,
+    'topCategory': topCategory?.name,
+    'resultCount': resultCount,
+  };
 
   static RecentSearch? fromJson(Object? raw) {
     if (raw is! Map<String, Object?>) return null;
@@ -40,9 +41,10 @@ class RecentSearch {
     return RecentSearch(
       query: query,
       topCategory: categoryName is String
-          ? SearchCategory.values
-              .cast<SearchCategory?>()
-              .firstWhere((c) => c!.name == categoryName, orElse: () => null)
+          ? SearchCategory.values.cast<SearchCategory?>().firstWhere(
+              (c) => c!.name == categoryName,
+              orElse: () => null,
+            )
           : null,
       resultCount: (raw['resultCount'] as num?)?.toInt() ?? 0,
     );
@@ -70,8 +72,7 @@ class RecentSearchesNotifier extends AsyncNotifier<List<RecentSearch>> {
       final decoded = jsonDecode(raw);
       if (decoded is! List) return [];
       return decoded
-          .map((e) =>
-              RecentSearch.fromJson((e as Map).cast<String, Object?>()))
+          .map((e) => RecentSearch.fromJson((e as Map).cast<String, Object?>()))
           .whereType<RecentSearch>()
           .toList();
     } on FormatException {
@@ -117,5 +118,5 @@ class RecentSearchesNotifier extends AsyncNotifier<List<RecentSearch>> {
 
 final recentSearchesProvider =
     AsyncNotifierProvider<RecentSearchesNotifier, List<RecentSearch>>(
-  RecentSearchesNotifier.new,
-);
+      RecentSearchesNotifier.new,
+    );

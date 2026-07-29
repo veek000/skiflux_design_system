@@ -13,11 +13,7 @@ import 'data/subscriptions_store.dart';
 /// "View all" tile — brand100 circle + user icon, "View all" label and
 /// "N creators" subtitle beneath.
 class ViewAllStoryTile extends StatelessWidget {
-  const ViewAllStoryTile({
-    super.key,
-    required this.creatorCount,
-    this.onTap,
-  });
+  const ViewAllStoryTile({super.key, required this.creatorCount, this.onTap});
 
   final int creatorCount;
   final VoidCallback? onTap;
@@ -179,11 +175,7 @@ class _NewBadge extends StatelessWidget {
 /// Feed card: photo thumbnail (EP tag + duration chips) beside a text
 /// column — optional purple "New" label, title, creator row, views · age.
 class SubscriptionEpisodeCard extends ConsumerWidget {
-  const SubscriptionEpisodeCard({
-    super.key,
-    required this.episode,
-    this.onTap,
-  });
+  const SubscriptionEpisodeCard({super.key, required this.episode, this.onTap});
 
   final SubscriptionEpisode episode;
   final VoidCallback? onTap;
@@ -272,7 +264,7 @@ class SubscriptionEpisodeCard extends ConsumerWidget {
             Image.asset(
               'assets/home_video_raw1.png',
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) =>
+              errorBuilder: (_, _, _) =>
                   const ColoredBox(color: SkifluxColors.magenta900),
             ),
             Positioned(
@@ -334,9 +326,7 @@ class SubscribedCreatorRow extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(
-          vertical: SkifluxSpacing.spaceS,
-        ),
+        padding: const EdgeInsets.symmetric(vertical: SkifluxSpacing.spaceS),
         child: Row(
           children: [
             Stack(
@@ -386,10 +376,7 @@ class SubscribedCreatorRow extends StatelessWidget {
               ),
             ),
             const SizedBox(width: SkifluxSpacing.spaceM),
-            _BellPill(
-              mode: creator.notificationMode,
-              onTap: onBellTap,
-            ),
+            _BellPill(mode: creator.notificationMode, onTap: onBellTap),
           ],
         ),
       ),
@@ -410,17 +397,17 @@ class _BellPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final (icon, color) = switch (mode) {
       CreatorNotificationMode.all => (
-          RemixIcons.notification_fill,
-          SkifluxColors.contentBrand,
-        ),
+        RemixIcons.notification_fill,
+        SkifluxColors.contentBrand,
+      ),
       CreatorNotificationMode.personalized => (
-          RemixIcons.notification_line,
-          SkifluxColors.contentSecondary,
-        ),
+        RemixIcons.notification_line,
+        SkifluxColors.contentSecondary,
+      ),
       CreatorNotificationMode.none => (
-          RemixIcons.notification_off_line,
-          SkifluxColors.contentSecondary,
-        ),
+        RemixIcons.notification_off_line,
+        SkifluxColors.contentSecondary,
+      ),
     };
     return Material(
       color: SkifluxColors.backgroundHover,

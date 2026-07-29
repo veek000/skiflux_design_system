@@ -35,9 +35,9 @@ class _SubscriptionsBodyState extends ConsumerState<SubscriptionsBody> {
       children: [
         SubscriptionsTopBar(
           title: 'Subscriptions',
-          onSearch: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const SearchScreen()),
-          ),
+          onSearch: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const SearchScreen())),
           onNotification: () => Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const NotificationsScreen()),
           ),
@@ -48,8 +48,7 @@ class _SubscriptionsBodyState extends ConsumerState<SubscriptionsBody> {
               : _SubscriptionsFeed(
                   creators: creators,
                   filter: _filter,
-                  onFilterChanged: (picked) =>
-                      setState(() => _filter = picked),
+                  onFilterChanged: (picked) => setState(() => _filter = picked),
                 ),
         ),
       ],
@@ -75,16 +74,17 @@ class _SubscriptionsEmptyState extends StatelessWidget {
               color: SkifluxColors.contentBrand,
             ),
             title: 'No subscriptions yet',
-            message: 'Follow creators to see their new episodes here. '
+            message:
+                'Follow creators to see their new episodes here. '
                 'Subscribed creators appear as stories at the top so you '
                 'never miss a drop.',
           ),
           const SizedBox(height: SkifluxSpacing.spaceXl),
           SkifluxButton(
             label: 'Find Creators to follow',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const SearchScreen()),
-            ),
+            onPressed: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const SearchScreen())),
           ),
         ],
       ),
@@ -107,39 +107,37 @@ class _SubscriptionsFeed extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final episodes =
-        ref.watch(subscriptionsProvider).feed(filter: filter);
-    return ListView(
-      padding: const EdgeInsets.only(top: SkifluxSpacing.spaceL),
-      children: [
-        SubscriptionStoriesRow(
-          creators: creators,
-        ),
-        const SizedBox(height: SkifluxSpacing.spaceXl),
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Latest from Creators',
-                style: SkifluxTypography.headingH8Bold.copyWith(
-                  color: SkifluxColors.contentPrimary,
+    final episodes = ref.watch(subscriptionsProvider).feed(filter: filter);
+
+    if (episodes.isEmpty) {
+      return ListView(
+        padding: const EdgeInsets.only(top: SkifluxSpacing.spaceL),
+        children: [
+          SubscriptionStoriesRow(creators: creators),
+          const SizedBox(height: SkifluxSpacing.spaceXl),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Latest from Creators',
+                  style: SkifluxTypography.headingH8Bold.copyWith(
+                    color: SkifluxColors.contentPrimary,
+                  ),
                 ),
               ),
-            ),
-            _FilterControl(
-              filter: filter,
-              onTap: () async {
-                final picked = await showSubscriptionFilterSheet(
-                  context,
-                  current: filter,
-                );
-                if (picked != null) onFilterChanged(picked);
-              },
-            ),
-          ],
-        ),
-        const SizedBox(height: SkifluxSpacing.spaceL),
-        if (episodes.isEmpty)
+              _FilterControl(
+                filter: filter,
+                onTap: () async {
+                  final picked = await showSubscriptionFilterSheet(
+                    context,
+                    current: filter,
+                  );
+                  if (picked != null) onFilterChanged(picked);
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: SkifluxSpacing.spaceL),
           Padding(
             padding: const EdgeInsets.only(top: SkifluxSpacing.space4xl),
             child: SkifluxEmptyState(
@@ -152,17 +150,58 @@ class _SubscriptionsFeed extends ConsumerWidget {
               message:
                   'No episodes match "${filter.label}". Try another filter.',
             ),
-          )
-        else
-          for (final (i, episode) in episodes.indexed) ...[
-            if (i > 0) const SizedBox(height: SkifluxSpacing.spaceL),
-            SubscriptionEpisodeCard(
-              episode: episode,
-              onTap: () => showEpisodePlayerModal(context, episode),
+          ),
+          const SizedBox(height: SkifluxSpacing.spaceL),
+        ],
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.only(top: SkifluxSpacing.spaceL),
+      itemCount: episodes.length + 3,
+      itemBuilder: (context, index) {
+        if (index == 0) {
+          return SubscriptionStoriesRow(creators: creators);
+        }
+        if (index == 1) {
+          return Padding(
+            padding: const EdgeInsets.only(top: SkifluxSpacing.spaceXl),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Latest from Creators',
+                    style: SkifluxTypography.headingH8Bold.copyWith(
+                      color: SkifluxColors.contentPrimary,
+                    ),
+                  ),
+                ),
+                _FilterControl(
+                  filter: filter,
+                  onTap: () async {
+                    final picked = await showSubscriptionFilterSheet(
+                      context,
+                      current: filter,
+                    );
+                    if (picked != null) onFilterChanged(picked);
+                  },
+                ),
+              ],
             ),
-          ],
-        const SizedBox(height: SkifluxSpacing.spaceL),
-      ],
+          );
+        }
+        final epIndex = index - 2;
+        if (epIndex < episodes.length) {
+          return Padding(
+            padding: const EdgeInsets.only(top: SkifluxSpacing.spaceL),
+            child: SubscriptionEpisodeCard(
+              episode: episodes[epIndex],
+              onTap: () => showEpisodePlayerModal(context, episodes[epIndex]),
+            ),
+          );
+        }
+        return const SizedBox(height: SkifluxSpacing.spaceL);
+      },
     );
   }
 }
@@ -236,10 +275,7 @@ class SubscriptionsTopBar extends StatelessWidget {
       child: Row(
         children: [
           leading ??
-              CircleTapTarget(
-                icon: RemixIcons.search_fill,
-                onTap: onSearch,
-              ),
+              CircleTapTarget(icon: RemixIcons.search_fill, onTap: onSearch),
           Expanded(
             child: Text(
               title,
@@ -338,25 +374,28 @@ class SubscriptionStoriesRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      // Ring-padded 48px avatar (56) + name + "N new" badge.
       height: 108,
-      child: ListView(
+      child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        children: [
-          ViewAllStoryTile(
-            creatorCount: creators.length,
-            onTap: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const AllSubscriptionsScreen(),
-                ),
-              );
-              onRefresh?.call();
-            },
-          ),
-          for (final creator in creators) ...[
-            const SizedBox(width: SkifluxSpacing.spaceL),
-            CreatorStoryTile(
+        itemCount: creators.length + 1,
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            return ViewAllStoryTile(
+              creatorCount: creators.length,
+              onTap: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const AllSubscriptionsScreen(),
+                  ),
+                );
+                onRefresh?.call();
+              },
+            );
+          }
+          final creator = creators[index - 1];
+          return Padding(
+            padding: const EdgeInsets.only(left: SkifluxSpacing.spaceL),
+            child: CreatorStoryTile(
               creator: creator,
               active: creator.username == activeUsername,
               onTap: creator.username == activeUsername
@@ -371,8 +410,8 @@ class SubscriptionStoriesRow extends StatelessWidget {
                       onRefresh?.call();
                     },
             ),
-          ],
-        ],
+          );
+        },
       ),
     );
   }
@@ -396,8 +435,7 @@ class _CreatorChannelScreenState extends ConsumerState<CreatorChannelScreen> {
   @override
   Widget build(BuildContext context) {
     final subs = ref.watch(subscriptionsProvider);
-    final episodes =
-        subs.feed(creatorUsername: widget.creator.username);
+    final episodes = subs.feed(creatorUsername: widget.creator.username);
     return Scaffold(
       backgroundColor: SkifluxColors.backgroundPrimary,
       body: SafeArea(
@@ -418,25 +456,40 @@ class _CreatorChannelScreenState extends ConsumerState<CreatorChannelScreen> {
               ),
               const SizedBox(height: SkifluxSpacing.spaceL),
               Expanded(
-                child: ListView(
-                  children: [
-                    SubscriptionStoriesRow(
-                      creators: subs.creators,
-                      activeUsername: widget.creator.username,
-                    ),
-                    const SizedBox(height: SkifluxSpacing.spaceXl),
-                    _CreatorChannelHeader(creator: widget.creator),
-                    const SizedBox(height: SkifluxSpacing.spaceL),
-                    for (final (i, episode) in episodes.indexed) ...[
-                      if (i > 0)
-                        const SizedBox(height: SkifluxSpacing.spaceL),
-                      SubscriptionEpisodeCard(
-                        episode: episode,
-                        onTap: () => showEpisodePlayerModal(context, episode),
-                      ),
-                    ],
-                    const SizedBox(height: SkifluxSpacing.spaceL),
-                  ],
+                child: ListView.builder(
+                  itemCount: episodes.length + 3,
+                  itemBuilder: (context, index) {
+                    if (index == 0) {
+                      return SubscriptionStoriesRow(
+                        creators: subs.creators,
+                        activeUsername: widget.creator.username,
+                      );
+                    }
+                    if (index == 1) {
+                      return Padding(
+                        padding: const EdgeInsets.only(
+                          top: SkifluxSpacing.spaceXl,
+                        ),
+                        child: _CreatorChannelHeader(creator: widget.creator),
+                      );
+                    }
+                    final epIndex = index - 2;
+                    if (epIndex < episodes.length) {
+                      return Padding(
+                        padding: const EdgeInsets.only(
+                          top: SkifluxSpacing.spaceL,
+                        ),
+                        child: SubscriptionEpisodeCard(
+                          episode: episodes[epIndex],
+                          onTap: () => showEpisodePlayerModal(
+                            context,
+                            episodes[epIndex],
+                          ),
+                        ),
+                      );
+                    }
+                    return const SizedBox(height: SkifluxSpacing.spaceL);
+                  },
                 ),
               ),
             ],
@@ -490,9 +543,9 @@ class _CreatorChannelHeader extends StatelessWidget {
           borderRadius: SkifluxRadii.borderPill,
           child: InkWell(
             borderRadius: SkifluxRadii.borderPill,
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const ProfileScreen()),
-            ),
+            onTap: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const ProfileScreen())),
             child: Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: SkifluxSpacing.spaceS,
@@ -571,8 +624,10 @@ class EpisodePlayerSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final media = MediaQuery.of(context);
-    final creatorName =
-        ref.watch(subscriptionsProvider).creatorOf(episode).name;
+    final creatorName = ref
+        .watch(subscriptionsProvider)
+        .creatorOf(episode)
+        .name;
     return Material(
       color: SkifluxColors.backgroundPrimary,
       borderRadius: const BorderRadius.vertical(

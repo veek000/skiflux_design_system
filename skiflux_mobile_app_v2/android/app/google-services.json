@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "829997105528",
+    "project_id": "skiflux-fcm-test",
+    "storage_bucket": "skiflux-fcm-test.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:829997105528:android:de1834a1995601e4e7088d",
+        "android_client_info": {
+          "package_name": "com.skiflux.skiflux_mobile_app_v2"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA3PdV7Pfd5cO_y7sr6sBLklwLvnqXAuNw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

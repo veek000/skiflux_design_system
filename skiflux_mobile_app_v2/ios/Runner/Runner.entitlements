@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Required by sign_in_with_apple. Without it the authorization sheet
+	     fails immediately with AuthorizationErrorCode.unknown, which the app
+	     surfaces as a generic sign-in failure.
+
+	     This file only declares the capability; it still has to be enabled on
+	     the App ID in the Apple Developer portal and carried by the
+	     provisioning profile, neither of which can be done from Windows. -->
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
+</dict>
+</plist>

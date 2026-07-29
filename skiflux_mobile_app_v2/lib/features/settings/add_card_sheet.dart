@@ -77,7 +77,7 @@ class _AddCardSheetState extends ConsumerState<_AddCardSheet> {
               keyboardType: TextInputType.number,
               trailingIcon: const Icon(
                 RemixIcons.bank_card_fill,
-                size: SkifluxIcons.sizeM,
+                size: SkifluxIcons.sizeS,
                 color: SkifluxColors.contentTertiary,
               ),
               onChanged: (_) => setState(() {}),
@@ -101,7 +101,7 @@ class _AddCardSheetState extends ConsumerState<_AddCardSheet> {
                     ],
                   ),
                 ),
-                const SizedBox(width: SkifluxSpacing.spaceL),
+                const SizedBox(width: SkifluxSpacing.spaceS),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -137,7 +137,7 @@ class _AddCardSheetState extends ConsumerState<_AddCardSheet> {
   Widget _label(String text) {
     return Text(
       text,
-      style: SkifluxTypography.headingH9Bold.copyWith(
+      style: SkifluxTypography.uiInputLabel.copyWith(
         color: SkifluxColors.contentPrimary,
       ),
     );
@@ -146,7 +146,7 @@ class _AddCardSheetState extends ConsumerState<_AddCardSheet> {
   /// Green "your details are encrypted" reassurance banner.
   Widget _encryptedBanner() {
     return Container(
-      padding: const EdgeInsets.all(SkifluxSpacing.spaceS),
+      padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
       decoration: BoxDecoration(
         color: SkifluxColors.backgroundPositiveSubtle,
         borderRadius: SkifluxRadii.borderL,
@@ -154,16 +154,16 @@ class _AddCardSheetState extends ConsumerState<_AddCardSheet> {
       child: Row(
         children: [
           const Icon(
-            RemixIcons.lock_fill,
+            RemixIcons.lock_2_fill,
             size: SkifluxUnit.u20,
-            color: SkifluxColors.contentPositive,
+            color: SkifluxColors.contentPositiveBold,
           ),
           const SizedBox(width: SkifluxSpacing.spaceS),
           Expanded(
             child: Text(
               'Your payment details are encrypted and secure.',
-              style: SkifluxTypography.bodyP11Regular.copyWith(
-                color: SkifluxColors.contentPositive,
+              style: SkifluxTypography.bodyP10Regular.copyWith(
+                color: SkifluxColors.contentSecondary,
               ),
             ),
           ),

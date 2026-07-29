@@ -40,8 +40,8 @@ class DownloadQualityScreen extends ConsumerWidget {
             Text(
               'Choose the video quality for downloaded episodes. Higher '
               'quality uses more storage on your device.',
-              style: SkifluxTypography.bodyP10Regular.copyWith(
-                color: SkifluxColors.contentTertiary,
+              style: SkifluxTypography.bodyP8Regular.copyWith(
+                color: SkifluxColors.contentDisabled,
               ),
             ),
             const SizedBox(height: SkifluxSpacing.spaceL),
@@ -74,7 +74,7 @@ class DownloadQualityScreen extends ConsumerWidget {
                 SettingsTile(
                   icon: RemixIcons.wifi_fill,
                   iconBackground: SkifluxColors.backgroundPositiveSubtle,
-                  iconColor: SkifluxColors.contentPositive,
+                  iconColor: SkifluxColors.contentPositiveBold,
                   title: 'Download on Wi-Fi only',
                   trailing: SkifluxSwitch(
                     value: settings.downloadOnWifiOnly,
@@ -101,7 +101,8 @@ class DownloadQualityScreen extends ConsumerWidget {
     final confirmed = await showConfirmSheet(
       context,
       title: 'Clear All Downloads?',
-      message: 'Are you sure you want to delete 1.2 GB of downloaded '
+      message:
+          'Are you sure you want to delete 1.2 GB of downloaded '
           'episodes? You will need to download them again to watch offline.',
       confirmLabel: 'Clear download',
       icon: RemixIcons.delete_bin_fill,
@@ -135,6 +136,9 @@ class _QualityRow extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
         child: Row(
+          // Figma top-aligns the radio with the title, not the whole two-line
+          // block.
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               child: Column(
@@ -142,21 +146,21 @@ class _QualityRow extends StatelessWidget {
                 children: [
                   Text(
                     quality.label,
-                    style: SkifluxTypography.uiButtonMedium.copyWith(
-                      color: SkifluxColors.contentPrimary,
+                    style: SkifluxTypography.headingH10Bold.copyWith(
+                      color: SkifluxColors.contentSecondary,
                     ),
                   ),
-                  const SizedBox(height: SkifluxSpacing.space2xs),
+                  const SizedBox(height: SkifluxSpacing.spaceXs),
                   Text(
                     quality.caption,
-                    style: SkifluxTypography.bodyP11Regular.copyWith(
+                    style: SkifluxTypography.bodyP10Regular.copyWith(
                       color: SkifluxColors.contentTertiary,
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(width: SkifluxSpacing.spaceS),
+            const SizedBox(width: SkifluxSpacing.spaceL),
             SkifluxRadio<DownloadQuality>(
               value: quality,
               groupValue: groupValue,

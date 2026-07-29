@@ -72,23 +72,23 @@ class SettingsScreen extends ConsumerWidget {
                 SettingsTile(
                   icon: RemixIcons.copper_coin_fill,
                   iconBackground: SkifluxColors.backgroundNoticeSubtle,
-                  iconColor: SkifluxColors.contentNoticeBold,
+                  iconColor: SkifluxColors.contentNotice,
                   title: 'SkillCoin wallet',
                   subtitle: 'Top up and view balance',
                   onTap: () => _push(context, const WalletScreen()),
                 ),
                 SettingsTile(
                   icon: RemixIcons.bank_card_fill,
-                  iconBackground: SkifluxColors.brand100,
-                  iconColor: SkifluxColors.contentBrand,
+                  iconBackground: SkifluxColors.backgroundPositiveSubtle,
+                  iconColor: SkifluxColors.contentPositive,
                   title: 'Payment methods',
                   subtitle: 'Manage cards for coin purchases',
                   onTap: () => _push(context, const PaymentMethodsScreen()),
                 ),
                 SettingsTile(
                   icon: RemixIcons.bank_fill,
-                  iconBackground: SkifluxColors.brand100,
-                  iconColor: SkifluxColors.contentBrand,
+                  iconBackground: SkifluxColors.backgroundInfoSubtle,
+                  iconColor: SkifluxColors.contentInfo,
                   title: 'Withdrawal accounts',
                   subtitle: 'Where you receive your funds',
                   onTap: () => _push(context, const BankAccountsScreen()),
@@ -101,8 +101,8 @@ class SettingsScreen extends ConsumerWidget {
               children: [
                 SettingsTile(
                   icon: RemixIcons.notification_3_fill,
-                  iconBackground: SkifluxColors.brand100,
-                  iconColor: SkifluxColors.contentBrand,
+                  iconBackground: SkifluxColors.backgroundInfoSubtle,
+                  iconColor: SkifluxColors.contentInfo,
                   title: 'Notifications',
                   onTap: () =>
                       _push(context, const NotificationSettingsScreen()),
@@ -117,8 +117,8 @@ class SettingsScreen extends ConsumerWidget {
                 ),
                 SettingsTile(
                   icon: RemixIcons.play_circle_fill,
-                  iconBackground: SkifluxColors.backgroundInfoSubtle,
-                  iconColor: SkifluxColors.contentInfoBold,
+                  iconBackground: SkifluxColors.backgroundNoticeSubtle,
+                  iconColor: SkifluxColors.contentNotice,
                   title: 'Auto-play next episode',
                   trailing: SkifluxSwitch(
                     value: settings.autoPlayNext,
@@ -128,8 +128,8 @@ class SettingsScreen extends ConsumerWidget {
                 ),
                 SettingsTile(
                   icon: RemixIcons.globe_fill,
-                  iconBackground: SkifluxColors.backgroundInfoSubtle,
-                  iconColor: SkifluxColors.contentInfoBold,
+                  iconBackground: SkifluxColors.backgroundDisabled,
+                  iconColor: SkifluxColors.contentTertiary,
                   title: 'App language',
                   trailing: SettingsValueTrailing(settings.appLanguage.label),
                   onTap: () => _push(context, const AppLanguageScreen()),
@@ -149,21 +149,19 @@ class SettingsScreen extends ConsumerWidget {
                 ),
                 SettingsTile(
                   icon: RemixIcons.question_fill,
-                  iconBackground: SkifluxColors.brand100,
-                  iconColor: SkifluxColors.contentBrand,
+                  iconBackground: SkifluxColors.backgroundNoticeSubtle,
+                  iconColor: SkifluxColors.contentNotice,
                   title: 'Help centre',
                   onTap: () => _push(context, const HelpCentreScreen()),
                 ),
                 SettingsTile(
                   icon: RemixIcons.star_s_fill,
-                  iconBackground: SkifluxColors.backgroundNoticeSubtle,
-                  iconColor: SkifluxColors.contentNoticeBold,
+                  iconBackground: SkifluxColors.brand100,
+                  iconColor: SkifluxColors.contentBrand,
                   title: 'Rate us on the App Store',
                   trailing: const SettingsExternalTrailing(),
-                  onTap: () => SkifluxToast.info(
-                    context,
-                    'Opening the App Store…',
-                  ),
+                  onTap: () =>
+                      SkifluxToast.info(context, 'Opening the App Store…'),
                 ),
               ],
             ),
@@ -180,7 +178,7 @@ class SettingsScreen extends ConsumerWidget {
                 ),
               ],
             ),
-            const SizedBox(height: SkifluxSpacing.spaceXl),
+            const SizedBox(height: SkifluxSpacing.spaceL),
             _Footer(),
             const SizedBox(height: SkifluxSpacing.spaceL),
           ],
@@ -197,7 +195,8 @@ class SettingsScreen extends ConsumerWidget {
     final confirmed = await showConfirmSheet(
       context,
       title: 'Log out?',
-      message: "You'll need to sign in again to access your profile, "
+      message:
+          "You'll need to sign in again to access your profile, "
           'wallet, and downloads.',
       confirmLabel: 'Log out',
       icon: RemixIcons.logout_box_fill,
@@ -215,14 +214,14 @@ class _Footer extends StatelessWidget {
       children: [
         Text(
           'Skiflux',
-          style: SkifluxTypography.headingH8Bold.copyWith(
+          style: SkifluxTypography.headingH9Bold.copyWith(
             color: SkifluxColors.contentPrimary,
           ),
         ),
         const SizedBox(height: SkifluxSpacing.spaceXs),
         Text(
           'Version 1.0.0 · Build 100',
-          style: SkifluxTypography.bodyP11Regular.copyWith(
+          style: SkifluxTypography.bodyP10Regular.copyWith(
             color: SkifluxColors.contentTertiary,
           ),
         ),

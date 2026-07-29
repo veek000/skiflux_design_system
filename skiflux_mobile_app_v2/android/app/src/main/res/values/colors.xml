@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#FFFFFF</color>
+
+    <!--
+      The opening frame of assets/animations/logo_splash.json, which the app
+      draws the instant Flutter has a surface. The OS launch window uses the
+      same value in light *and* dark mode so there is no visible seam — and, more
+      to the point, no black window before the animation. Change both together.
+    -->
+    <color name="splash_background">#FFFFFFFF</color>
+</resources>

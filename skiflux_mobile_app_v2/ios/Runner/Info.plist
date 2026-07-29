@@ -20,14 +20,37 @@
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(FLUTTER_BUILD_NAME)</string>
+	<!-- Google Sign-In returns to the app on this scheme. The value is the
+	     REVERSED_CLIENT_ID from GoogleService-Info.plist (i.e.
+	     com.googleusercontent.apps.<id>) — NOT the bundle id, and NOT the
+	     GOOGLE_SERVER_CLIENT_ID, which is the backend's Web client.
+	     TODO(ios): fill this in once the iOS OAuth client exists in the
+	     backend's Google Cloud project; Google's sheet cannot dismiss
+	     without it. Left as an empty placeholder rather than a wrong value
+	     so a broken redirect fails loudly at setup, not at runtime. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array/>
+		</dict>
+	</array>
 	<key>CFBundleSignature</key>
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Skiflux uses your camera so you can take a new profile picture.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Verify it's you with Face ID instead of typing your password.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Record voice notes to post in comments.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Skiflux needs access to your photos so you can choose a profile picture.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -51,6 +74,12 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- FCM background delivery. APNs auth key + Push capability still
+	     required on a paid Apple Developer account before iOS delivers. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

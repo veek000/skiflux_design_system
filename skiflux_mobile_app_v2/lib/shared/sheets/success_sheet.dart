@@ -9,6 +9,11 @@ import 'skiflux_sheet.dart';
 // idiom as the wallet's purchase/withdrawal success sheets, minus the summary
 // card. Resolves when dismissed.
 
+/// Figma's confirm/success dialog avatar: a 98px circle around a 48px glyph
+/// (29.4px padding). Neither size exists on the token scale.
+const double _avatarSize = 98;
+const double _glyphSize = 48;
+
 Future<void> showSuccessSheet(
   BuildContext context, {
   required String title,
@@ -17,11 +22,8 @@ Future<void> showSuccessSheet(
 }) {
   return showSkifluxSheet<void>(
     context: context,
-    builder: (_) => _SuccessSheet(
-      title: title,
-      message: message,
-      buttonLabel: buttonLabel,
-    ),
+    builder: (_) =>
+        _SuccessSheet(title: title, message: message, buttonLabel: buttonLabel),
   );
 }
 
@@ -41,57 +43,67 @@ class _SuccessSheet extends StatelessWidget {
     return SkifluxSheetShell(
       title: '',
       showHeader: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          SkifluxSpacing.spaceL,
-          // Headerless card — clear the grabber pill (top 8px + 4px tall).
-          SkifluxSpacing.space2xl,
-          SkifluxSpacing.spaceL,
-          0,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Container(
-                width: 98,
-                height: 98,
-                decoration: const BoxDecoration(
-                  color: SkifluxColors.backgroundPositiveSubtle,
-                  shape: BoxShape.circle,
+      child: Stack(
+        children: [
+          Padding(
+            // Figma `1256:20233`: 16 at the top of the card, label block inset
+            // a further 16 either side; the sticky button area carries 16/8.
+            padding: const EdgeInsets.fromLTRB(
+              SkifluxSpacing.space2xl,
+              SkifluxSpacing.spaceL,
+              SkifluxSpacing.space2xl,
+              0,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: _avatarSize,
+                    height: _avatarSize,
+                    decoration: const BoxDecoration(
+                      color: SkifluxColors.backgroundPositiveSubtle,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      RemixIcons.check_fill,
+                      size: _glyphSize,
+                      color: SkifluxColors.contentPositiveBold,
+                    ),
+                  ),
                 ),
-                child: const Icon(
-                  RemixIcons.check_fill,
-                  size: 48,
-                  color: SkifluxColors.contentPositive,
+                const SizedBox(height: SkifluxSpacing.spaceS),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: SkifluxTypography.headingH7Bold.copyWith(
+                    color: SkifluxColors.contentPrimary,
+                  ),
                 ),
-              ),
+                const SizedBox(height: SkifluxSpacing.spaceXs),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: SkifluxTypography.bodyP8Regular.copyWith(
+                    color: SkifluxColors.contentTertiary,
+                  ),
+                ),
+                const SizedBox(height: SkifluxSpacing.spaceL),
+                SkifluxButton(
+                  label: buttonLabel,
+                  expanded: true,
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ],
             ),
-            const SizedBox(height: SkifluxSpacing.spaceL),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: SkifluxTypography.headingH7Bold.copyWith(
-                color: SkifluxColors.contentPrimary,
-              ),
-            ),
-            const SizedBox(height: SkifluxSpacing.spaceS),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: SkifluxTypography.bodyP8Regular.copyWith(
-                color: SkifluxColors.contentTertiary,
-              ),
-            ),
-            const SizedBox(height: SkifluxSpacing.spaceXl),
-            SkifluxButton(
-              label: buttonLabel,
-              expanded: true,
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-          ],
-        ),
+          ),
+          const Positioned(
+            top: SkifluxSpacing.spaceL,
+            right: SkifluxSpacing.spaceL,
+            child: SkifluxSheetCloseButton(),
+          ),
+        ],
       ),
     );
   }

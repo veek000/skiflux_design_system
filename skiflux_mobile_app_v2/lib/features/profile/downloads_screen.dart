@@ -4,13 +4,18 @@ import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/sheets/confirm_sheet.dart';
 import '../../shared/toast/skiflux_toast.dart';
-import '../subscriptions/data/subscriptions_store.dart';
-import '../subscriptions/subscriptions_screen.dart';
+import 'data/library_episode.dart';
+import 'library_episode_player.dart';
 import 'library_episode_row.dart';
 
 // Figma: **Profile Flow 13** (`1256:24465`) — Downloads. Nav with "Clear
 // all" (negative), search field, "8 videos · 1.2 GB used" storage line,
 // download rows ("112 MB · SD 480p") with a red trash trailing control.
+//
+// There is no offline download pipeline and no download endpoint, so this
+// screen starts empty and shows its empty state. It is wired end to end
+// against [LibraryEpisode] so that the day downloads exist, only the source
+// of `_downloads` has to change.
 
 class DownloadsScreen extends ConsumerStatefulWidget {
   const DownloadsScreen({super.key});
@@ -22,24 +27,21 @@ class DownloadsScreen extends ConsumerStatefulWidget {
 class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
   String _query = '';
 
-  /// Session-local demo downloads (no real download pipeline): first five
-  /// feed episodes at 112 MB each.
-  // TODO(backend, blocking): replace session-local downloads list with real offline download storage and download state from backend — expects: List<{epNumber: int, title: String, creatorUsername: String, duration: String, views: String, postedAgo: String, fileSizeMb: int, qualityLabel: String}>
-  List<SubscriptionEpisode>? _downloads;
+  // TODO(backend, blocking): no offline download pipeline or endpoint exists, so this list is always empty — expects: local download store fed by a per-episode download URL + file size + quality label
+  final List<LibraryEpisode> _downloads = [];
 
+  /// Until files are really on disk there is nothing to measure, so the
+  /// storage line is derived from what the rows claim rather than invented.
   static const int _mbPerVideo = 112;
 
   @override
   Widget build(BuildContext context) {
-    final subs = ref.watch(subscriptionsProvider);
-    _downloads ??= subs.feed().take(5).toList();
     final query = _query.trim().toLowerCase();
     final visible = query.isEmpty
-        ? _downloads!
-        : _downloads!
-            .where((e) => e.title.toLowerCase().contains(query))
-            .toList();
-    final totalMb = _downloads!.length * _mbPerVideo;
+        ? _downloads
+        : _downloads.where((e) => e.title.toLowerCase().contains(query))
+              .toList();
+    final totalMb = _downloads.length * _mbPerVideo;
     final usedLabel = totalMb >= 1000
         ? '${(totalMb / 1000).toStringAsFixed(1)} GB'
         : '$totalMb MB';
@@ -55,7 +57,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
           onPressed: () => Navigator.of(context).pop(),
         ),
         trailing: TextButton(
-          onPressed: _downloads!.isEmpty ? null : _confirmClearAll,
+          onPressed: _downloads.isEmpty ? null : _confirmClearAll,
           child: Text(
             'Clear all',
             style: SkifluxTypography.uiButtonMedium.copyWith(
@@ -76,7 +78,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                 onCleared: () => setState(() => _query = ''),
               ),
             ),
-            if (_downloads!.isNotEmpty)
+            if (_downloads.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.fromLTRB(
                   SkifluxSpacing.spaceL,
@@ -85,7 +87,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                   SkifluxSpacing.spaceL,
                 ),
                 child: Text(
-                  '${_downloads!.length} videos · $usedLabel used',
+                  '${_downloads.length} videos · $usedLabel used',
                   style: SkifluxTypography.bodyP10Regular.copyWith(
                     color: SkifluxColors.contentTertiary,
                   ),
@@ -93,7 +95,17 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
               ),
             Expanded(
               child: visible.isEmpty
-                  ? _empty()
+                  ? SkifluxEmptyState(
+                      icon: const Icon(
+                        RemixIcons.download_fill,
+                        size: SkifluxEmptyState.iconSize,
+                        color: SkifluxColors.contentBrand,
+                      ),
+                      title: query.isEmpty ? 'No downloads' : 'No matches',
+                      message: query.isEmpty
+                          ? 'Downloaded episodes will show up here.'
+                          : 'No download matches “$_query”.',
+                    )
                   : ListView.separated(
                       padding: const EdgeInsets.fromLTRB(
                         SkifluxSpacing.spaceL,
@@ -102,7 +114,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                         SkifluxSpacing.spaceL,
                       ),
                       itemCount: visible.length,
-                      separatorBuilder: (_, __) =>
+                      separatorBuilder: (_, _) =>
                           const SizedBox(height: SkifluxSpacing.spaceL),
                       itemBuilder: (_, i) => LibraryEpisodeRow(
                         episode: visible[i],
@@ -117,7 +129,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                           ),
                         ),
                         onTap: () =>
-                            showEpisodePlayerModal(context, visible[i]),
+                            showLibraryEpisodePlayer(context, visible[i]),
                       ),
                     ),
             ),
@@ -128,70 +140,35 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
   }
 
   /// Confirm → delete one download → success toast.
-  Future<void> _confirmDelete(SubscriptionEpisode episode) async {
+  Future<void> _confirmDelete(LibraryEpisode episode) async {
     final confirmed = await showConfirmSheet(
       context,
       title: 'Delete this download?',
-      message: '${episode.epTag} · ${episode.title} will be removed from '
+      message:
+          '${episode.epTag} · ${episode.title} will be removed from '
           'your device. You can download it again anytime.',
       confirmLabel: 'Delete Download',
       icon: RemixIcons.delete_bin_fill,
     );
     if (confirmed != true || !mounted) return;
-    setState(() => _downloads!.remove(episode));
+    setState(() => _downloads.remove(episode));
     SkifluxToast.success(context, 'Download deleted');
   }
 
   /// Confirm → clear every download → success toast.
   Future<void> _confirmClearAll() async {
-    final count = _downloads!.length;
+    final count = _downloads.length;
     final confirmed = await showConfirmSheet(
       context,
       title: 'Clear all downloads?',
-      message: 'All $count downloaded videos will be removed from your '
+      message:
+          'All $count downloaded videos will be removed from your '
           'device. You can download them again anytime.',
       confirmLabel: 'Clear All Downloads',
       icon: RemixIcons.delete_bin_fill,
     );
     if (confirmed != true || !mounted) return;
-    setState(() => _downloads = []);
+    setState(_downloads.clear);
     SkifluxToast.success(context, 'All downloads cleared');
-  }
-
-  Widget _empty() {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 98,
-            height: 98,
-            decoration: const BoxDecoration(
-              color: SkifluxColors.brand100,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              RemixIcons.download_fill,
-              size: 48,
-              color: SkifluxColors.contentBrand,
-            ),
-          ),
-          const SizedBox(height: SkifluxSpacing.spaceL),
-          Text(
-            'No downloads',
-            style: SkifluxTypography.headingH7Bold.copyWith(
-              color: SkifluxColors.contentPrimary,
-            ),
-          ),
-          const SizedBox(height: SkifluxSpacing.spaceS),
-          Text(
-            'Downloaded episodes will show up here.',
-            style: SkifluxTypography.bodyP8Regular.copyWith(
-              color: SkifluxColors.contentTertiary,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }

@@ -112,12 +112,12 @@ Future<BellAction?> showBellSheet(
                 CreatorNotificationMode.all => RemixIcons.notification_fill,
                 CreatorNotificationMode.personalized =>
                   RemixIcons.notification_line,
-                CreatorNotificationMode.none => RemixIcons.notification_off_line,
+                CreatorNotificationMode.none =>
+                  RemixIcons.notification_off_line,
               },
               label: mode.label,
               selected: mode == creator.notificationMode,
-              onTap: () =>
-                  Navigator.of(context).pop(SetNotificationMode(mode)),
+              onTap: () => Navigator.of(context).pop(SetNotificationMode(mode)),
             ),
           _SheetOptionRow(
             icon: RemixIcons.user_unfollow_line,
@@ -152,15 +152,13 @@ class _SheetOptionRow extends StatelessWidget {
     final Color color = destructive
         ? SkifluxColors.contentNegative
         : selected
-            ? SkifluxColors.contentBrand
-            : SkifluxColors.contentPrimary;
+        ? SkifluxColors.contentBrand
+        : SkifluxColors.contentPrimary;
     return InkWell(
       borderRadius: SkifluxRadii.borderL,
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(
-          vertical: SkifluxSpacing.spaceM,
-        ),
+        padding: const EdgeInsets.symmetric(vertical: SkifluxSpacing.spaceM),
         child: Row(
           children: [
             Icon(
@@ -169,8 +167,8 @@ class _SheetOptionRow extends StatelessWidget {
               color: destructive
                   ? SkifluxColors.contentNegative
                   : selected
-                      ? SkifluxColors.contentBrand
-                      : SkifluxColors.contentSecondary,
+                  ? SkifluxColors.contentBrand
+                  : SkifluxColors.contentSecondary,
             ),
             const SizedBox(width: SkifluxSpacing.spaceM),
             Expanded(
@@ -204,11 +202,11 @@ class _FilterOptionRow extends StatelessWidget {
   final VoidCallback onTap;
 
   IconData get _icon => switch (option) {
-        SubscriptionFeedFilter.recent => RemixIcons.time_fill,
-        SubscriptionFeedFilter.today => RemixIcons.calendar_fill,
-        SubscriptionFeedFilter.continueWatching => RemixIcons.play_circle_fill,
-        SubscriptionFeedFilter.unwatched => RemixIcons.eye_off_fill,
-      };
+    SubscriptionFeedFilter.recent => RemixIcons.time_fill,
+    SubscriptionFeedFilter.today => RemixIcons.calendar_fill,
+    SubscriptionFeedFilter.continueWatching => RemixIcons.play_circle_fill,
+    SubscriptionFeedFilter.unwatched => RemixIcons.eye_off_fill,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -216,9 +214,7 @@ class _FilterOptionRow extends StatelessWidget {
       borderRadius: SkifluxRadii.borderL,
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(
-          vertical: SkifluxSpacing.spaceM,
-        ),
+        padding: const EdgeInsets.symmetric(vertical: SkifluxSpacing.spaceM),
         child: Row(
           children: [
             Icon(

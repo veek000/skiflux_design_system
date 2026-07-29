@@ -1,0 +1,301 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+// coverage:ignore-file
+// ignore_for_file: type=lint
+// ignore_for_file: unused_element, deprecated_member_use, deprecated_member_use_from_same_package, use_function_type_syntax_for_parameters, unnecessary_const, avoid_init_to_null, invalid_override_different_default_values_named, prefer_expression_function_bodies, annotate_overrides, invalid_annotation_target, unnecessary_question_mark
+
+part of 'leaderboard_row.dart';
+
+// **************************************************************************
+// FreezedGenerator
+// **************************************************************************
+
+// dart format off
+T _$identity<T>(T value) => value;
+
+/// @nodoc
+mixin _$LeaderboardRow {
+
+ int get rank; String get firstName; String get lastName; String get username; String? get avatarUrl; int get xp;/// Set only when the backend marks the signed-in learner's own row. It is
+/// not in the asked-for body, so it defaults false and the store falls
+/// back to a username match — see `LeaderboardNotifier.resolve`.
+ bool get isCurrentUser;
+/// Create a copy of LeaderboardRow
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$LeaderboardRowCopyWith<LeaderboardRow> get copyWith => _$LeaderboardRowCopyWithImpl<LeaderboardRow>(this as LeaderboardRow, _$identity);
+
+  /// Serializes this LeaderboardRow to a JSON map.
+  Map<String, dynamic> toJson();
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is LeaderboardRow&&(identical(other.rank, rank) || other.rank == rank)&&(identical(other.firstName, firstName) || other.firstName == firstName)&&(identical(other.lastName, lastName) || other.lastName == lastName)&&(identical(other.username, username) || other.username == username)&&(identical(other.avatarUrl, avatarUrl) || other.avatarUrl == avatarUrl)&&(identical(other.xp, xp) || other.xp == xp)&&(identical(other.isCurrentUser, isCurrentUser) || other.isCurrentUser == isCurrentUser));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,rank,firstName,lastName,username,avatarUrl,xp,isCurrentUser);
+
+@override
+String toString() {
+  return 'LeaderboardRow(rank: $rank, firstName: $firstName, lastName: $lastName, username: $username, avatarUrl: $avatarUrl, xp: $xp, isCurrentUser: $isCurrentUser)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $LeaderboardRowCopyWith<$Res>  {
+  factory $LeaderboardRowCopyWith(LeaderboardRow value, $Res Function(LeaderboardRow) _then) = _$LeaderboardRowCopyWithImpl;
+@useResult
+$Res call({
+ int rank, String firstName, String lastName, String username, String? avatarUrl, int xp, bool isCurrentUser
+});
+
+
+
+
+}
+/// @nodoc
+class _$LeaderboardRowCopyWithImpl<$Res>
+    implements $LeaderboardRowCopyWith<$Res> {
+  _$LeaderboardRowCopyWithImpl(this._self, this._then);
+
+  final LeaderboardRow _self;
+  final $Res Function(LeaderboardRow) _then;
+
+/// Create a copy of LeaderboardRow
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? rank = null,Object? firstName = null,Object? lastName = null,Object? username = null,Object? avatarUrl = freezed,Object? xp = null,Object? isCurrentUser = null,}) {
+  return _then(_self.copyWith(
+rank: null == rank ? _self.rank : rank // ignore: cast_nullable_to_non_nullable
+as int,firstName: null == firstName ? _self.firstName : firstName // ignore: cast_nullable_to_non_nullable
+as String,lastName: null == lastName ? _self.lastName : lastName // ignore: cast_nullable_to_non_nullable
+as String,username: null == username ? _self.username : username // ignore: cast_nullable_to_non_nullable
+as String,avatarUrl: freezed == avatarUrl ? _self.avatarUrl : avatarUrl // ignore: cast_nullable_to_non_nullable
+as String?,xp: null == xp ? _self.xp : xp // ignore: cast_nullable_to_non_nullable
+as int,isCurrentUser: null == isCurrentUser ? _self.isCurrentUser : isCurrentUser // ignore: cast_nullable_to_non_nullable
+as bool,
+  ));
+}
+
+}
+
+
+/// Adds pattern-matching-related methods to [LeaderboardRow].
+extension LeaderboardRowPatterns on LeaderboardRow {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _LeaderboardRow value)?  $default,{required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case _LeaderboardRow() when $default != null:
+return $default(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _LeaderboardRow value)  $default,){
+final _that = this;
+switch (_that) {
+case _LeaderboardRow():
+return $default(_that);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _LeaderboardRow value)?  $default,){
+final _that = this;
+switch (_that) {
+case _LeaderboardRow() when $default != null:
+return $default(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int rank,  String firstName,  String lastName,  String username,  String? avatarUrl,  int xp,  bool isCurrentUser)?  $default,{required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case _LeaderboardRow() when $default != null:
+return $default(_that.rank,_that.firstName,_that.lastName,_that.username,_that.avatarUrl,_that.xp,_that.isCurrentUser);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int rank,  String firstName,  String lastName,  String username,  String? avatarUrl,  int xp,  bool isCurrentUser)  $default,) {final _that = this;
+switch (_that) {
+case _LeaderboardRow():
+return $default(_that.rank,_that.firstName,_that.lastName,_that.username,_that.avatarUrl,_that.xp,_that.isCurrentUser);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int rank,  String firstName,  String lastName,  String username,  String? avatarUrl,  int xp,  bool isCurrentUser)?  $default,) {final _that = this;
+switch (_that) {
+case _LeaderboardRow() when $default != null:
+return $default(_that.rank,_that.firstName,_that.lastName,_that.username,_that.avatarUrl,_that.xp,_that.isCurrentUser);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+@JsonSerializable()
+
+class _LeaderboardRow extends LeaderboardRow {
+  const _LeaderboardRow({this.rank = 0, this.firstName = '', this.lastName = '', this.username = '', this.avatarUrl, this.xp = 0, this.isCurrentUser = false}): super._();
+  factory _LeaderboardRow.fromJson(Map<String, dynamic> json) => _$LeaderboardRowFromJson(json);
+
+@override@JsonKey() final  int rank;
+@override@JsonKey() final  String firstName;
+@override@JsonKey() final  String lastName;
+@override@JsonKey() final  String username;
+@override final  String? avatarUrl;
+@override@JsonKey() final  int xp;
+/// Set only when the backend marks the signed-in learner's own row. It is
+/// not in the asked-for body, so it defaults false and the store falls
+/// back to a username match — see `LeaderboardNotifier.resolve`.
+@override@JsonKey() final  bool isCurrentUser;
+
+/// Create a copy of LeaderboardRow
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+_$LeaderboardRowCopyWith<_LeaderboardRow> get copyWith => __$LeaderboardRowCopyWithImpl<_LeaderboardRow>(this, _$identity);
+
+@override
+Map<String, dynamic> toJson() {
+  return _$LeaderboardRowToJson(this, );
+}
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _LeaderboardRow&&(identical(other.rank, rank) || other.rank == rank)&&(identical(other.firstName, firstName) || other.firstName == firstName)&&(identical(other.lastName, lastName) || other.lastName == lastName)&&(identical(other.username, username) || other.username == username)&&(identical(other.avatarUrl, avatarUrl) || other.avatarUrl == avatarUrl)&&(identical(other.xp, xp) || other.xp == xp)&&(identical(other.isCurrentUser, isCurrentUser) || other.isCurrentUser == isCurrentUser));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,rank,firstName,lastName,username,avatarUrl,xp,isCurrentUser);
+
+@override
+String toString() {
+  return 'LeaderboardRow(rank: $rank, firstName: $firstName, lastName: $lastName, username: $username, avatarUrl: $avatarUrl, xp: $xp, isCurrentUser: $isCurrentUser)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class _$LeaderboardRowCopyWith<$Res> implements $LeaderboardRowCopyWith<$Res> {
+  factory _$LeaderboardRowCopyWith(_LeaderboardRow value, $Res Function(_LeaderboardRow) _then) = __$LeaderboardRowCopyWithImpl;
+@override @useResult
+$Res call({
+ int rank, String firstName, String lastName, String username, String? avatarUrl, int xp, bool isCurrentUser
+});
+
+
+
+
+}
+/// @nodoc
+class __$LeaderboardRowCopyWithImpl<$Res>
+    implements _$LeaderboardRowCopyWith<$Res> {
+  __$LeaderboardRowCopyWithImpl(this._self, this._then);
+
+  final _LeaderboardRow _self;
+  final $Res Function(_LeaderboardRow) _then;
+
+/// Create a copy of LeaderboardRow
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? rank = null,Object? firstName = null,Object? lastName = null,Object? username = null,Object? avatarUrl = freezed,Object? xp = null,Object? isCurrentUser = null,}) {
+  return _then(_LeaderboardRow(
+rank: null == rank ? _self.rank : rank // ignore: cast_nullable_to_non_nullable
+as int,firstName: null == firstName ? _self.firstName : firstName // ignore: cast_nullable_to_non_nullable
+as String,lastName: null == lastName ? _self.lastName : lastName // ignore: cast_nullable_to_non_nullable
+as String,username: null == username ? _self.username : username // ignore: cast_nullable_to_non_nullable
+as String,avatarUrl: freezed == avatarUrl ? _self.avatarUrl : avatarUrl // ignore: cast_nullable_to_non_nullable
+as String?,xp: null == xp ? _self.xp : xp // ignore: cast_nullable_to_non_nullable
+as int,isCurrentUser: null == isCurrentUser ? _self.isCurrentUser : isCurrentUser // ignore: cast_nullable_to_non_nullable
+as bool,
+  ));
+}
+
+
+}
+
+// dart format on

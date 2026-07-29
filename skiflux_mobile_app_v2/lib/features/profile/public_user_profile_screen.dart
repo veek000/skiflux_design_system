@@ -20,24 +20,14 @@ class PublicUserProfile {
     this.leaderboardRank = 12,
     this.tasksDone = 8,
     this.email = 'hello@skiflux.app',
-    this.skills = const [
-      'Web Design',
-      'Mobile App Development',
-      'Marketing',
-    ],
+    this.skills = const ['Web Design', 'Mobile App Development', 'Marketing'],
     this.badges = const [
       ProfileBadgeItem(
         'First Task',
         'assets/badges/badge_first_task_completed.svg',
       ),
-      ProfileBadgeItem(
-        '3 Day Streak',
-        'assets/badges/badge_3_days_streak.svg',
-      ),
-      ProfileBadgeItem(
-        'Top Learner',
-        'assets/badges/badge_top_learner.svg',
-      ),
+      ProfileBadgeItem('3 Day Streak', 'assets/badges/badge_3_days_streak.svg'),
+      ProfileBadgeItem('Top Learner', 'assets/badges/badge_top_learner.svg'),
     ],
     this.completedTasks = const [
       CompletedTaskItem(
@@ -208,13 +198,19 @@ class PublicUserProfileScreen extends StatelessWidget {
             title: 'Completed Task',
             // Figma pill reads "8 Badges" — copy slip; real task count used.
             countLabel: '${profile.tasksDone} Tasks',
-            child: Column(
-              children: [
-                for (final (i, task) in profile.completedTasks.indexed) ...[
-                  if (i > 0) const SizedBox(height: SkifluxSpacing.spaceL),
-                  _CompletedTaskCard(item: task),
-                ],
-              ],
+            child: ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: profile.completedTasks.length,
+              itemBuilder: (context, i) {
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (i > 0) const SizedBox(height: SkifluxSpacing.spaceL),
+                    _CompletedTaskCard(item: profile.completedTasks[i]),
+                  ],
+                );
+              },
             ),
           ),
         ],
@@ -306,10 +302,7 @@ class _Header extends StatelessWidget {
                     label: 'Leaderboard',
                   ),
                   _vDivider(),
-                  _StatCell(
-                    value: '${profile.tasksDone}',
-                    label: 'Task Done',
-                  ),
+                  _StatCell(value: '${profile.tasksDone}', label: 'Task Done'),
                 ],
               ),
               const SizedBox(height: SkifluxSpacing.spaceS),
@@ -350,10 +343,8 @@ class _Header extends StatelessWidget {
                       SkifluxButton(
                         label: 'Contact',
                         size: SkifluxButtonSize.s,
-                        onPressed: () => SkifluxToast.info(
-                          context,
-                          'Messaging coming soon',
-                        ),
+                        onPressed: () =>
+                            SkifluxToast.info(context, 'Messaging coming soon'),
                       ),
                     ],
                   ),

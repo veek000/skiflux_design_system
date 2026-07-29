@@ -9,24 +9,24 @@ enum NotifyPreference { all, personalized, none }
 
 extension NotifyPreferenceLabel on NotifyPreference {
   String get label => switch (this) {
-        NotifyPreference.all => 'All',
-        NotifyPreference.personalized => 'Personalized',
-        NotifyPreference.none => 'None',
-      };
+    NotifyPreference.all => 'All',
+    NotifyPreference.personalized => 'Personalized',
+    NotifyPreference.none => 'None',
+  };
 
   String get toastTitle => switch (this) {
-        NotifyPreference.none => 'Notifications Off',
-        _ => 'Notify Activated',
-      };
+    NotifyPreference.none => 'Notifications Off',
+    _ => 'Notify Activated',
+  };
 
   String get toastBody => switch (this) {
-        NotifyPreference.all =>
-          'You\'ll get notified for every new episode and update.',
-        NotifyPreference.personalized =>
-          'You\'ll only get highlights matching your interests.',
-        NotifyPreference.none =>
-          'You won\'t receive notifications from this creator.',
-      };
+    NotifyPreference.all =>
+      'You\'ll get notified for every new episode and update.',
+    NotifyPreference.personalized =>
+      'You\'ll only get highlights matching your interests.',
+    NotifyPreference.none =>
+      'You won\'t receive notifications from this creator.',
+  };
 }
 
 Future<NotifyPreference?> showNotifySettingsSheet(
@@ -62,11 +62,7 @@ class _NotifySettingsSheetState extends State<_NotifySettingsSheet> {
       'Personalized',
       'Only highlights and episodes matching your interests.',
     ),
-    (
-      NotifyPreference.none,
-      'None',
-      'Mute notifications from this creator.',
-    ),
+    (NotifyPreference.none, 'None', 'Mute notifications from this creator.'),
   ];
 
   @override

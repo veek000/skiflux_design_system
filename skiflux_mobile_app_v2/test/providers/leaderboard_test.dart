@@ -1,61 +1,449 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:skiflux_mobile_app_v2/features/leaderboard/data/leaderboard_repository.dart';
 import 'package:skiflux_mobile_app_v2/features/leaderboard/data/leaderboard_store.dart';
+import 'package:skiflux_mobile_app_v2/features/leaderboard/data/models/leaderboard_row.dart';
+import 'package:skiflux_mobile_app_v2/features/profile/data/models/user_profile.dart';
+import 'package:skiflux_mobile_app_v2/features/profile/data/profile_repository.dart';
+import 'package:skiflux_mobile_app_v2/shared/network/token_store.dart';
 
 void main() {
   group('leaderboardProvider', () {
-    test('returns static data with correct shape', () {
-      final container = ProviderContainer();
-      addTearDown(container.dispose);
+    ProviderContainer withRepo(
+      _FakeLeaderboardRepository repo, {
+      bool signedIn = true,
+      UserProfile? me,
+    }) {
+      final c = ProviderContainer(
+        // Riverpod 3 retries a failed build with backoff by default, which
+        // would leave `.future` pending for the whole test.
+        retry: (_, _) => null,
+        overrides: [
+          leaderboardRepositoryProvider.overrideWithValue(repo),
+          tokenStoreProvider.overrideWithValue(_FakeTokenStore(signedIn)),
+          profileRepositoryProvider.overrideWithValue(_FakeProfileRepository(me)),
+        ],
+      );
+      addTearDown(c.dispose);
+      return c;
+    }
 
-      final data = container.read(leaderboardProvider);
-      expect(data.leagues, hasLength(6));
-      expect(data.currentRank, 12);
-      expect(data.betterThanPercent, 60);
-      expect(data.entries, hasLength(15));
+    LeaderboardRow row(int rank, {String? username, bool isCurrentUser = false}) =>
+        LeaderboardRow(
+          rank: rank,
+          firstName: 'User',
+          lastName: '$rank',
+          username: username ?? 'user$rank',
+          xp: 1000 - rank,
+          isCurrentUser: isCurrentUser,
+        );
+
+    test('signed out resolves empty without calling the API', () async {
+      final repo = _FakeLeaderboardRepository(const LeaderboardPage(rows: []));
+      final c = withRepo(repo, signedIn: false);
+
+      final data = await c.read(leaderboardProvider.future);
+      expect(data.isEmpty, isTrue);
+      expect(repo.levels, isEmpty);
     });
 
-    test('podium returns top 3 entries', () {
-      final container = ProviderContainer();
-      addTearDown(container.dispose);
+    test('exposes what the API returned — nothing is seeded', () async {
+      final c = withRepo(
+        _FakeLeaderboardRepository(
+          LeaderboardPage(
+            rows: [row(1), row(2)],
+            currentRank: 7,
+            betterThanPercent: 42,
+          ),
+        ),
+      );
 
-      final data = container.read(leaderboardProvider);
-      expect(data.podium, hasLength(3));
-      expect(data.podium[0].rank, 1);
-      expect(data.podium[0].name, 'Lola Motion');
-      expect(data.podium[1].rank, 2);
-      expect(data.podium[2].rank, 3);
+      final data = await c.read(leaderboardProvider.future);
+      expect(data.entries, hasLength(2));
+      expect(data.entries.first.name, 'User 1');
+      expect(data.entries.first.initials, 'U1');
+      expect(data.entries.first.handle, '@user1');
+      expect(data.currentRank, 7);
+      expect(data.betterThanPercent, 42);
     });
 
-    test('ranked returns entries 4-15', () {
-      final container = ProviderContainer();
-      addTearDown(container.dispose);
+    test('a failed request surfaces as an error, not a sample cast', () async {
+      final c = withRepo(_FakeLeaderboardRepository(null));
 
-      final data = container.read(leaderboardProvider);
-      expect(data.ranked, hasLength(12));
-      expect(data.ranked[0].rank, 4);
-      expect(data.ranked[11].rank, 15);
+      await expectLater(
+        c.read(leaderboardProvider.future),
+        throwsA(isA<Exception>()),
+      );
     });
 
-    test('entries have correct fields populated', () {
-      final container = ProviderContainer();
-      addTearDown(container.dispose);
+    test('the standing is null when nothing establishes it', () async {
+      final c = withRepo(
+        _FakeLeaderboardRepository(LeaderboardPage(rows: [row(1)])),
+      );
 
-      final first = container.read(leaderboardProvider).entries[0];
-      expect(first.name, isNotEmpty);
-      expect(first.username, isNotEmpty);
-      expect(first.initials, isNotEmpty);
-      expect(first.xp, greaterThan(0));
-      expect(first.handle, startsWith('@'));
+      final data = await c.read(leaderboardProvider.future);
+      // Not 0, and not a leftover constant: the payload omitted the standing,
+      // no row is the user, and the profile carries no rank.
+      expect(data.currentRank, isNull);
+      expect(data.betterThanPercent, isNull);
+    });
+
+    test('an empty league clears the rankings', () async {
+      final c = withRepo(
+        _FakeLeaderboardRepository(const LeaderboardPage(rows: [])),
+      );
+      c.read(leaderboardLeagueProvider.notifier).select(1);
+
+      final data = await c.read(leaderboardProvider.future);
+      expect(data.entries, isEmpty);
+      expect(data.podium, isEmpty);
+      expect(data.ranked, isEmpty);
+    });
+
+    test('lowercases the league before sending it as level', () async {
+      final repo = _FakeLeaderboardRepository(const LeaderboardPage(rows: []));
+      final c = withRepo(repo);
+      // Index 5 is "Professional".
+      c.read(leaderboardLeagueProvider.notifier).select(5);
+
+      await c.read(leaderboardProvider.future);
+      expect(repo.levels, ['professional']);
+      expect(repo.pageSizes, [50]);
+    });
+
+    test('the All pill sends no level filter', () async {
+      final repo = _FakeLeaderboardRepository(const LeaderboardPage(rows: []));
+      final c = withRepo(repo);
+
+      await c.read(leaderboardProvider.future);
+      expect(repo.levels, [null]);
+    });
+
+    test('podium tolerates a league with fewer than three learners', () async {
+      final c = withRepo(
+        _FakeLeaderboardRepository(LeaderboardPage(rows: [row(1), row(2)])),
+      );
+
+      final data = await c.read(leaderboardProvider.future);
+      expect(data.podium, hasLength(2));
+      expect(data.ranked, isEmpty);
+    });
+  });
+
+  group('LeaderboardNotifier.resolve', () {
+    LeaderboardRow row(
+      int rank, {
+      String? username,
+      bool isCurrentUser = false,
+    }) => LeaderboardRow(
+      rank: rank,
+      firstName: 'User',
+      lastName: '$rank',
+      username: username ?? 'user$rank',
+      xp: 1000 - rank,
+      isCurrentUser: isCurrentUser,
+    );
+
+    UserProfile profile({String username = 'me', int? rank}) =>
+        UserProfile(id: 'me', username: username, rank: rank);
+
+    test("marks the row the backend flagged as the user's", () {
+      final data = LeaderboardNotifier.resolve(
+        LeaderboardPage(rows: [row(1), row(2, isCurrentUser: true), row(3)]),
+        null,
+      );
+
+      expect(data.entries[1].isCurrentUser, isTrue);
+      expect(data.entries.where((e) => e.isCurrentUser), hasLength(1));
+      // The flagged row's rank becomes the standing the pill shows.
+      expect(data.currentRank, 2);
+    });
+
+    test('falls back to matching the profile username', () {
+      final data = LeaderboardNotifier.resolve(
+        LeaderboardPage(rows: [row(1), row(2, username: 'Me'), row(3)]),
+        profile(username: '@me'),
+      );
+
+      // Case and a leading "@" are normalised off both sides.
+      expect(data.entries[1].isCurrentUser, isTrue);
+      expect(data.currentRank, 2);
+    });
+
+    test('marks the row holding the payload rank when nothing else does', () {
+      final data = LeaderboardNotifier.resolve(
+        LeaderboardPage(rows: [row(1), row(2), row(3)], currentRank: 3),
+        profile(username: 'nobody'),
+      );
+
+      expect(data.entries[2].isCurrentUser, isTrue);
+      expect(data.currentRank, 3);
+    });
+
+    test('a rank outside the page highlights nothing but still shows', () {
+      final data = LeaderboardNotifier.resolve(
+        LeaderboardPage(rows: [row(1), row(2)], currentRank: 88),
+        null,
+      );
+
+      expect(data.entries.any((e) => e.isCurrentUser), isFalse);
+      expect(data.currentRank, 88);
+    });
+
+    test("uses the profile's cached rank when the payload omits one", () {
+      final data = LeaderboardNotifier.resolve(
+        LeaderboardPage(rows: [row(1)]),
+        profile(username: 'nobody', rank: 31),
+      );
+
+      expect(data.currentRank, 31);
+    });
+
+    test('derives better-than-percent from the rank when unsent', () {
+      // Rank 3 of 5 beats 2 of the other 4 → 50%.
+      final data = LeaderboardNotifier.resolve(
+        LeaderboardPage(
+          rows: [row(1), row(2), row(3), row(4), row(5)],
+          currentRank: 3,
+        ),
+        null,
+      );
+
+      expect(data.betterThanPercent, 50);
+    });
+
+    test('never invents a percentage from an unusable rank', () {
+      // Rank past the page: the page is not the population it was ranked in.
+      expect(
+        LeaderboardNotifier
+            .resolve(LeaderboardPage(rows: [row(1)], currentRank: 40), null)
+            .betterThanPercent,
+        isNull,
+      );
+      // Nobody to be better than.
+      expect(
+        LeaderboardNotifier
+            .resolve(LeaderboardPage(rows: [row(1)], currentRank: 1), null)
+            .betterThanPercent,
+        isNull,
+      );
+    });
+
+    test('currentIndexInRanked is relative to the rows below the podium', () {
+      final data = LeaderboardNotifier.resolve(
+        LeaderboardPage(
+          rows: [row(1), row(2), row(3), row(4), row(5, isCurrentUser: true)],
+        ),
+        null,
+      );
+
+      // Rank 5 is the 2nd row of the rank card, the podium holding 1–3.
+      expect(data.currentIndexInRanked, 1);
+    });
+
+    test('currentIndexInRanked is -1 when the user is on the podium', () {
+      final data = LeaderboardNotifier.resolve(
+        LeaderboardPage(rows: [row(1, isCurrentUser: true), row(2), row(3)]),
+        null,
+      );
+
+      expect(data.currentIndexInRanked, -1);
     });
 
     test('xpLabel formats thousands', () {
-      final container = ProviderContainer();
-      addTearDown(container.dispose);
+      final data = LeaderboardNotifier.resolve(
+        const LeaderboardPage(
+          rows: [LeaderboardRow(rank: 1, username: 'lola', xp: 4820)],
+        ),
+        null,
+      );
 
-      // Entry with 4820 XP should format as "4,820".
-      final first = container.read(leaderboardProvider).entries[0];
-      expect(first.xpLabel, '4,820');
+      expect(data.entries.single.xpLabel, '4,820');
     });
   });
+
+  group('LeaderboardRepository.parseBody', () {
+    test('reads the documented envelope', () {
+      final page = LeaderboardRepository.parseBody({
+        'current_user_rank': 12,
+        'better_than_percent': 60,
+        'results': [
+          {
+            'rank': 1,
+            'first_name': 'Lola',
+            'last_name': 'Motion',
+            'username': 'lolamotion',
+            'avatar_url': 'https://cdn/lola.png',
+            'xp': 4820,
+          },
+        ],
+      });
+
+      expect(page.currentRank, 12);
+      expect(page.betterThanPercent, 60);
+      expect(page.rows.single.displayName, 'Lola Motion');
+      expect(page.rows.single.initials, 'LM');
+      expect(page.rows.single.avatarUrl, 'https://cdn/lola.png');
+      expect(page.rows.single.xp, 4820);
+    });
+
+    test('reads a bare array, with no standing', () {
+      final page = LeaderboardRepository.parseBody([
+        {'rank': 1, 'username': 'solo', 'xp': 10},
+      ]);
+
+      expect(page.rows, hasLength(1));
+      expect(page.currentRank, isNull);
+      expect(page.betterThanPercent, isNull);
+    });
+
+    test('unwraps a data envelope', () {
+      final page = LeaderboardRepository.parseBody({
+        'data': {
+          'my_rank': 4,
+          'results': [
+            {'rank': 1, 'username': 'a', 'xp': 1},
+          ],
+        },
+      });
+
+      expect(page.rows, hasLength(1));
+      expect(page.currentRank, 4);
+    });
+
+    test('finds rows under an alias key', () {
+      final page = LeaderboardRepository.parseBody({
+        'current_rank': 3,
+        'leaderboard': [
+          {'rank': 1, 'username': 'a', 'xp': 1},
+        ],
+      });
+
+      expect(page.rows, hasLength(1));
+      expect(page.currentRank, 3);
+    });
+
+    test('an unreadable body yields no rows rather than throwing', () {
+      final page = LeaderboardRepository.parseBody({'unexpected': true});
+      expect(page.rows, isEmpty);
+    });
+
+    test('a percentage sent as a double is rounded', () {
+      final page = LeaderboardRepository.parseBody({
+        'better_than_percent': 59.6,
+        'results': const [],
+      });
+      expect(page.betterThanPercent, 60);
+    });
+  });
+
+  group('LeaderboardRepository.parseRow', () {
+    test('splits a single name field on the first space', () {
+      final row = LeaderboardRepository.parseRow({
+        'rank': 2,
+        'full_name': 'Kojo Adjei Sketches',
+        'username': '@kojosketch',
+      });
+
+      expect(row.firstName, 'Kojo');
+      expect(row.lastName, 'Adjei Sketches');
+      expect(row.displayName, 'Kojo Adjei Sketches');
+      // The handle's "@" is added by the entry, not carried in the field.
+      expect(row.username, 'kojosketch');
+    });
+
+    test('merges a nested user object with flat rank and xp', () {
+      final row = LeaderboardRepository.parseRow({
+        'rank': 5,
+        'total_xp': 3760,
+        'user': {'first_name': 'Uche', 'last_name': 'Draws', 'username': 'uche'},
+      });
+
+      expect(row.rank, 5);
+      expect(row.xp, 3760);
+      expect(row.displayName, 'Uche Draws');
+    });
+
+    test('falls back to the username for name and initials', () {
+      final row = LeaderboardRepository.parseRow({'username': 'solo'});
+      expect(row.displayName, 'solo');
+      expect(row.initials, 'S');
+    });
+
+    test('a row with nothing usable still parses', () {
+      final row = LeaderboardRepository.parseRow(const {});
+      expect(row.rank, 0);
+      expect(row.xp, 0);
+      expect(row.initials, '?');
+    });
+
+    test('reads the "this is you" flag under any of its likely names', () {
+      for (final key in const ['is_current_user', 'is_me', 'is_self', 'is_you']) {
+        expect(
+          LeaderboardRepository.parseRow({'username': 'a', key: true}).isCurrentUser,
+          isTrue,
+          reason: key,
+        );
+      }
+      // A truthy string or number counts; an absent flag does not.
+      expect(
+        LeaderboardRepository.parseRow({'is_me': 'true'}).isCurrentUser,
+        isTrue,
+      );
+      expect(LeaderboardRepository.parseRow({'is_me': 1}).isCurrentUser, isTrue);
+      expect(
+        LeaderboardRepository.parseRow({'username': 'a'}).isCurrentUser,
+        isFalse,
+      );
+    });
+  });
+}
+
+/// Returns [page], or throws when it is null (the offline path). Records the
+/// query values so the league filter can be asserted.
+class _FakeLeaderboardRepository extends LeaderboardRepository {
+  _FakeLeaderboardRepository(this.page) : super(Dio());
+
+  final LeaderboardPage? page;
+  final List<String?> levels = [];
+  final List<int?> pageSizes = [];
+
+  @override
+  Future<LeaderboardPage> getLeaderboard({
+    String? level,
+    int? pageSize,
+    String? search,
+  }) async {
+    levels.add(level);
+    pageSizes.add(pageSize);
+    final value = page;
+    if (value == null) throw Exception('offline');
+    return value;
+  }
+}
+
+class _FakeTokenStore extends TokenStore {
+  _FakeTokenStore(this.signedIn) : super(const FlutterSecureStorage());
+
+  final bool signedIn;
+
+  @override
+  Future<bool> hasSession() async => signedIn;
+}
+
+/// Backs `meProfileProvider`, which the store consults to work out which row is
+/// the signed-in learner's.
+class _FakeProfileRepository extends ProfileRepository {
+  _FakeProfileRepository(this.profile) : super(Dio());
+
+  final UserProfile? profile;
+
+  @override
+  Future<UserProfile> getProfile() async {
+    final value = profile;
+    if (value == null) throw Exception('no profile');
+    return value;
+  }
 }

@@ -64,9 +64,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 // visual uses Background/Positive + check icon.
                 SkifluxToast.success(
                   context,
-                  _subscribed
-                      ? 'Subscribed to Amara Design'
-                      : 'Unsubscribed',
+                  _subscribed ? 'Subscribed to Amara Design' : 'Unsubscribed',
                 );
               },
               onNotify: () async {
@@ -105,8 +103,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   List<Widget> _recentEpisodes(BuildContext context) {
-    final eps =
-        ref.watch(playlistsProvider).defaultPlaylist.episodes.take(4);
+    final eps = ref.watch(playlistsProvider).defaultPlaylist.episodes.take(4);
     final widgets = <Widget>[];
     for (final ep in eps) {
       widgets.add(
@@ -141,8 +138,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               duration: ep.duration,
               views: '22k',
               postedAgo: '5 hrs ago',
-              watchProgress:
-                  ep.state == PlaylistEpisodeState.completed ? 1 : 0.2,
+              watchProgress: ep.state == PlaylistEpisodeState.completed
+                  ? 1
+                  : 0.2,
             );
             if (!context.mounted) return;
             await showEpisodePlayerModal(context, sub);
@@ -159,20 +157,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Widget _playlistTile(BuildContext context) {
     final pl = ref.watch(playlistsProvider).defaultPlaylist;
     return GestureDetector(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const PlaylistScreen()),
-      ),
+      onTap: () => Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const PlaylistScreen())),
       behavior: HitTestBehavior.opaque,
       child: SizedBox(
         height: 98,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            PlaylistDeck(
-              width: 126,
-              height: 98,
-              episodeCount: pl.episodeCount,
-            ),
+            PlaylistDeck(width: 126, height: 98, episodeCount: pl.episodeCount),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(
@@ -384,40 +378,40 @@ class _EpisodeCard extends StatelessWidget {
       onTap: onTap,
       borderRadius: SkifluxRadii.borderL,
       child: Row(
-      children: [
-        _thumbnail(),
-        const SizedBox(width: SkifluxSpacing.spaceS),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                status,
-                style: SkifluxTypography.uiBadgeTagSmall.copyWith(
-                  color: statusColor,
+        children: [
+          _thumbnail(),
+          const SizedBox(width: SkifluxSpacing.spaceS),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  status,
+                  style: SkifluxTypography.uiBadgeTagSmall.copyWith(
+                    color: statusColor,
+                  ),
                 ),
-              ),
-              const SizedBox(height: SkifluxSpacing.spaceXs),
-              Text(
-                title,
-                style: SkifluxTypography.headingH10Bold.copyWith(
-                  color: SkifluxColors.contentPrimary,
+                const SizedBox(height: SkifluxSpacing.spaceXs),
+                Text(
+                  title,
+                  style: SkifluxTypography.headingH10Bold.copyWith(
+                    color: SkifluxColors.contentPrimary,
+                  ),
                 ),
-              ),
-              const SizedBox(height: SkifluxSpacing.spaceXs),
-              Text(
-                '22k views · 5 hrs ago',
-                style: SkifluxTypography.bodyP11Regular.copyWith(
-                  color: SkifluxColors.contentTertiary,
+                const SizedBox(height: SkifluxSpacing.spaceXs),
+                Text(
+                  '22k views · 5 hrs ago',
+                  style: SkifluxTypography.bodyP11Regular.copyWith(
+                    color: SkifluxColors.contentTertiary,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-        const SizedBox(width: SkifluxSpacing.spaceS),
-        if (locked && coinPrice != null) _coinBadge() else _playButton(),
-      ],
-    ),
+          const SizedBox(width: SkifluxSpacing.spaceS),
+          if (locked && coinPrice != null) _coinBadge() else _playButton(),
+        ],
+      ),
     );
   }
 
@@ -446,10 +440,7 @@ class _EpisodeCard extends StatelessWidget {
             Positioned(
               top: SkifluxSpacing.spaceS,
               left: SkifluxSpacing.spaceS,
-              child: _pill(
-                episode,
-                background: SkifluxColors.contentBrand,
-              ),
+              child: _pill(episode, background: SkifluxColors.contentBrand),
             ),
             if (showDuration)
               Positioned(
@@ -466,9 +457,7 @@ class _EpisodeCard extends StatelessWidget {
                   height: SkifluxSpacing.spaceXs,
                   child: Stack(
                     children: [
-                      const ColoredBox(
-                        color: SkifluxColors.backgroundSelected,
-                      ),
+                      const ColoredBox(color: SkifluxColors.backgroundSelected),
                       FractionallySizedBox(
                         widthFactor: progress!.clamp(0, 1),
                         child: const ColoredBox(

@@ -4,14 +4,16 @@ import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/sheets/confirm_sheet.dart';
 import '../../shared/sheets/success_sheet.dart';
-import '../../shared/toast/skiflux_toast.dart';
+import '../auth/data/legal_documents.dart';
+import '../auth/screens/legal_screen.dart';
 import 'data/settings_store.dart';
 import 'widgets/settings_tile.dart';
 
 // Figma: **Settings → Privacy & Data** (`1256:20874`) — data/activity toggles
 // plus data-management links: Request my data → "Data Export Requested"
-// (`1256:20935`), legal links, and Delete Account → "Delete Account?"
-// (`1256:21069`) → "Account Deleted" (`1256:21002`).
+// (`1256:20935`), the two legal documents (`1277:32411` / `1277:32341`), and
+// Delete Account → "Delete Account?" (`1256:21069`) → "Account Deleted"
+// (`1256:21002`).
 
 class PrivacyDataScreen extends ConsumerWidget {
   const PrivacyDataScreen({super.key});
@@ -70,35 +72,32 @@ class PrivacyDataScreen extends ConsumerWidget {
                 SettingsTile(
                   icon: RemixIcons.download_cloud_2_fill,
                   iconBackground: SkifluxColors.backgroundPositiveSubtle,
-                  iconColor: SkifluxColors.contentPositive,
+                  iconColor: SkifluxColors.contentPositiveBold,
                   title: 'Request my data',
                   onTap: () => showSuccessSheet(
                     context,
                     title: 'Data Export Requested',
-                    message: 'Your data export is being processed. We will '
+                    message:
+                        'Your data export is being processed. We will '
                         'email you a secure download link shortly.',
                   ),
                 ),
                 SettingsTile(
-                  icon: RemixIcons.file_list_2_fill,
+                  icon: RemixIcons.todo_fill,
                   iconBackground: SkifluxColors.backgroundHover,
                   iconColor: SkifluxColors.contentSecondary,
                   title: 'Terms of service',
-                  trailing: const SettingsExternalTrailing(),
-                  onTap: () =>
-                      SkifluxToast.info(context, 'Opening Terms of Service…'),
+                  onTap: () => _openLegal(context, termsOfUse),
                 ),
                 SettingsTile(
-                  icon: RemixIcons.lock_fill,
+                  icon: RemixIcons.lock_2_fill,
                   iconBackground: SkifluxColors.backgroundInfoSubtle,
-                  iconColor: SkifluxColors.contentInfoBold,
+                  iconColor: SkifluxColors.contentInfo,
                   title: 'Privacy Policy',
-                  trailing: const SettingsExternalTrailing(),
-                  onTap: () =>
-                      SkifluxToast.info(context, 'Opening Privacy Policy…'),
+                  onTap: () => _openLegal(context, privacyPolicy),
                 ),
                 SettingsTile(
-                  icon: RemixIcons.delete_bin_fill,
+                  icon: RemixIcons.user_unfollow_fill,
                   iconBackground: SkifluxColors.backgroundNegativeSubtle,
                   iconColor: SkifluxColors.contentNegative,
                   title: 'Delete Account',
@@ -113,11 +112,26 @@ class PrivacyDataScreen extends ConsumerWidget {
     );
   }
 
+  /// Pushes one of the two legal documents. They are the same screens the auth
+  /// flow shows (Figma `1277:32411` / `1277:32341`), reached here by route
+  /// rather than by auth stage — so the back chevron just pops.
+  void _openLegal(BuildContext context, LegalDocument document) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (context) => LegalScreen(
+          document: document,
+          onBack: () => Navigator.of(context).pop(),
+        ),
+      ),
+    );
+  }
+
   Future<void> _deleteAccount(BuildContext context) async {
     final confirmed = await showConfirmSheet(
       context,
       title: 'Delete Account?',
-      message: 'This action is completely irreversible. All your progress, '
+      message:
+          'This action is completely irreversible. All your progress, '
           'badges, and SkillCoins will be permanently wiped.',
       confirmLabel: 'Delete Account',
       icon: RemixIcons.delete_bin_fill,
@@ -126,7 +140,8 @@ class PrivacyDataScreen extends ConsumerWidget {
     await showSuccessSheet(
       context,
       title: 'Account Deleted',
-      message: 'Your account has been deleted. You will be logged out '
+      message:
+          'Your account has been deleted. You will be logged out '
           'shortly.',
     );
   }
