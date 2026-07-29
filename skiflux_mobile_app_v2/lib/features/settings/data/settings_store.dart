@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // App-wide preference state for the Settings flow — notification toggles,
 // security switches, download quality, app language, and privacy toggles.
@@ -101,8 +102,18 @@ final settingsProvider = NotifierProvider<SettingsNotifier, SettingsState>(
 );
 
 class SettingsNotifier extends Notifier<SettingsState> {
+  static const _biometricKey = 'skiflux.biometric_login';
+
   @override
   SettingsState build() {
+    // Load persisted biometric preference silently
+    SharedPreferences.getInstance().then((prefs) {
+      final persistedBiometric = prefs.getBool(_biometricKey);
+      if (persistedBiometric != null && persistedBiometric != state.biometricLogin) {
+        state = state.copyWith(biometricLogin: persistedBiometric);
+      }
+    }).catchError((_) {});
+
     return const SettingsState(
       // Defaults per the Notifications frame: New episodes, Coin earnings and
       // Platform announcements on; the rest off.
@@ -133,8 +144,12 @@ class SettingsNotifier extends Notifier<SettingsState> {
     );
   }
 
-  void setBiometricLogin(bool value) =>
-      state = state.copyWith(biometricLogin: value);
+  void setBiometricLogin(bool value) {
+    state = state.copyWith(biometricLogin: value);
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setBool(_biometricKey, value);
+    }).catchError((_) {});
+  }
 
   void setTwoFactorAuth(bool value) =>
       state = state.copyWith(twoFactorAuth: value);

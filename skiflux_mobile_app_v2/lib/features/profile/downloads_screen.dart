@@ -95,16 +95,18 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
               ),
             Expanded(
               child: visible.isEmpty
-                  ? SkifluxEmptyState(
-                      icon: const Icon(
-                        RemixIcons.download_fill,
-                        size: SkifluxEmptyState.iconSize,
-                        color: SkifluxColors.contentBrand,
+                  ? Center(
+                      child: SkifluxEmptyState(
+                        icon: const Icon(
+                          RemixIcons.download_fill,
+                          size: SkifluxEmptyState.iconSize,
+                          color: SkifluxColors.contentBrand,
+                        ),
+                        title: query.isEmpty ? 'No downloads' : 'No matches',
+                        message: query.isEmpty
+                            ? 'Downloaded episodes will show up here.'
+                            : 'No download matches “$_query”.',
                       ),
-                      title: query.isEmpty ? 'No downloads' : 'No matches',
-                      message: query.isEmpty
-                          ? 'Downloaded episodes will show up here.'
-                          : 'No download matches “$_query”.',
                     )
                   : ListView.separated(
                       padding: const EdgeInsets.fromLTRB(
