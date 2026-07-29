@@ -112,7 +112,7 @@ class _VideoFeedCardState extends State<VideoFeedCard> {
         return;
       }
       await controller.setLooping(true);
-      await controller.setVolume(0); // feed autoplay is muted
+      // await controller.setVolume(0); // Removed: feed autoplay muted without a toggle
       setState(() => _ready = true);
       _syncPlayPause();
     } catch (e) {
