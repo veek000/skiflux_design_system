@@ -44,6 +44,17 @@ jobs:
             echo "$FIREBASE_OPTIONS" > skiflux_mobile_app_v2/lib/firebase_options.dart
           fi
 
+      - name: Inject Dart environment variables
+        env:
+          PROD_ENV_JSON: ${{ secrets.PROD_ENV_JSON }}
+        run: |
+          if [ -z "$PROD_ENV_JSON" ]; then
+            echo "Error: PROD_ENV_JSON secret is missing! The app requires an API_BASE_URL to function."
+            exit 1
+          fi
+          mkdir -p skiflux_mobile_app_v2/config/env
+          echo "$PROD_ENV_JSON" > skiflux_mobile_app_v2/config/env/prod.json
+
       - name: pub get (design system)
         working-directory: skiflux_design_system
         run: flutter pub get
@@ -54,7 +65,7 @@ jobs:
 
       - name: Build Release APK
         working-directory: skiflux_mobile_app_v2
-        run: flutter build apk --release
+        run: flutter build apk --release --dart-define-from-file=config/env/prod.json
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
