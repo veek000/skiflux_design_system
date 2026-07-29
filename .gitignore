@@ -61,4 +61,4 @@ config/env/*.json
 !**/config/env/ci.json
 
 # Firebase
-lib/firebase_options.dart
+**/lib/firebase_options.dart
