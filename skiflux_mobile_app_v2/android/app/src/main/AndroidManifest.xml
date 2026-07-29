@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required for network access in release mode (injected automatically in debug) -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Voice-note recording in the comments compose bar (audio_waveforms). -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <!-- Biometric sign-in gate (local_auth). -->
