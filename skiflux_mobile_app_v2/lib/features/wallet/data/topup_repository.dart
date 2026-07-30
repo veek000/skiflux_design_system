@@ -42,7 +42,9 @@ class TopupRepository extends ApiRepository {
           'amount_fiat': amountFiat,
           'currency': currency,
           'gateway_name': gatewayName,
+          // ignore: use_null_aware_elements
           if (idempotencyKey != null) 'idempotency_key': idempotencyKey,
+          // ignore: use_null_aware_elements
           if (redirectUrl != null) 'redirect_url': redirectUrl,
         },
         parse: (json) => json,
