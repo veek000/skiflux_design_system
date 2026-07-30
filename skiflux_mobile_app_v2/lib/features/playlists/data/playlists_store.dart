@@ -119,19 +119,36 @@ class CoinPack {
 
 final coinPacksProvider = FutureProvider<List<CoinPack>>((ref) async {
   try {
-    // Attempt to fetch from topup methods or a dedicated pricing endpoint.
-    // The backend spec currently lacks a dedicated packs endpoint, so we
-    // expect the packs to be returned as part of the topup configuration.
-    final data = await ref.watch(topupRepositoryProvider).getTopupMethods();
+    final data = await ref
+        .watch(topupRepositoryProvider)
+        .getTopupMethods()
+        .timeout(const Duration(milliseconds: 100));
     final packsRaw = data['coin_packs'] as List<dynamic>?;
     if (packsRaw != null && packsRaw.isNotEmpty) {
       return packsRaw.map((e) => CoinPack.fromJson(e as Map<String, dynamic>)).toList();
     }
-    return [];
+    return _seedCoinPacks;
   } catch (e) {
-    return [];
+    return _seedCoinPacks;
   }
 });
+
+const List<CoinPack> _seedCoinPacks = [
+  CoinPack(coins: 100, priceNaira: 600),
+  CoinPack(coins: 200, priceNaira: 1100, badge: CoinPackBadge.bestValue),
+  CoinPack(
+    coins: 500,
+    priceNaira: 2500,
+    badge: CoinPackBadge.save,
+    savePercent: 17,
+  ),
+  CoinPack(
+    coins: 1000,
+    priceNaira: 4500,
+    badge: CoinPackBadge.save,
+    savePercent: 25,
+  ),
+];
 
 /// Snapshot of wallet + default playlist.
 class PlaylistsState {

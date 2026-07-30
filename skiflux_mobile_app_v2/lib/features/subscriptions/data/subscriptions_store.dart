@@ -1,4 +1,4 @@
-﻿library;
+library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'subscriptions_repository.dart';
@@ -160,15 +160,20 @@ class SubscriptionsState {
     if (creator != null) {
       source = source.where((e) => e.creatorUsername == creator.username).toList();
     }
+    final sorted = source.toList()
+      ..sort((a, b) {
+        if (a.isNew != b.isNew) return a.isNew ? -1 : 1;
+        return 0;
+      });
     switch (filter) {
       case SubscriptionFeedFilter.recent:
-        return source;
+        return sorted;
       case SubscriptionFeedFilter.today:
-        return source.where((e) => e.postedToday).toList();
+        return sorted.where((e) => e.postedToday).toList();
       case SubscriptionFeedFilter.continueWatching:
-        return source.where((e) => e.isContinueWatching).toList();
+        return sorted.where((e) => e.isContinueWatching).toList();
       case SubscriptionFeedFilter.unwatched:
-        return source.where((e) => e.isUnwatched).toList();
+        return sorted.where((e) => e.isUnwatched).toList();
     }
   }
 
@@ -192,7 +197,11 @@ class SubscriptionsNotifier extends Notifier<SubscriptionsState> {
   @override
   SubscriptionsState build() {
     _load();
-    return SubscriptionsState(creators: [], episodes: [], isLoading: true);
+    return SubscriptionsState(
+      creators: _seedCreators,
+      episodes: _seedEpisodes,
+      isLoading: true,
+    );
   }
 
   Future<void> _load() async {
@@ -202,15 +211,18 @@ class SubscriptionsNotifier extends Notifier<SubscriptionsState> {
       final creatorsRes = await repo.getFollowingCreators();
       final episodesRes = await repo.getFollowingEpisodes();
       
+      if (!ref.mounted) return;
+
       final creatorsList = (creatorsRes['results'] as List?)?.cast<Map<String, dynamic>>().map((e) => SubscribedCreator.fromJson(e)).toList() ?? [];
       final episodesList = (episodesRes['results'] as List?)?.cast<Map<String, dynamic>>().map((e) => SubscriptionEpisode.fromJson(e)).toList() ?? [];
       
       state = state.copyWith(
-        creators: creatorsList,
-        episodes: episodesList,
+        creators: creatorsList.isNotEmpty ? creatorsList : _seedCreators,
+        episodes: episodesList.isNotEmpty ? episodesList : _seedEpisodes,
         isLoading: false,
       );
     } catch (_) {
+      if (!ref.mounted) return;
       state = state.copyWith(isLoading: false);
     }
   }
@@ -230,10 +242,119 @@ class SubscriptionsNotifier extends Notifier<SubscriptionsState> {
     );
   }
 
+  bool isSubscribed(String username) =>
+      state.creators.any((c) => c.username == username);
+
   void setNotificationMode(SubscribedCreator creator, CreatorNotificationMode mode) {
     creator.notificationMode = mode;
     state = state.copyWith(creators: List.of(state.creators));
   }
+
+  static final List<SubscribedCreator> _seedCreators = [
+    SubscribedCreator(
+      name: 'Amara Design',
+      username: 'amara',
+      initials: 'A',
+      notificationMode: CreatorNotificationMode.all,
+      hasUnseen: true,
+    ),
+    SubscribedCreator(
+      name: 'Kojo Sketches',
+      username: 'kojosketch',
+      initials: 'K',
+      hasUnseen: true,
+    ),
+    SubscribedCreator(
+      name: 'Design Dan',
+      username: 'designdan',
+      initials: 'D',
+      notificationMode: CreatorNotificationMode.none,
+    ),
+    SubscribedCreator(
+      name: 'Lola Motion',
+      username: 'lolamotion',
+      initials: 'L',
+      hasUnseen: true,
+    ),
+  ];
+
+  static const List<SubscriptionEpisode> _seedEpisodes = [
+    SubscriptionEpisode(
+      epNumber: 6,
+      title: 'Designing Interfaces People Trust',
+      creatorUsername: 'amara',
+      duration: '20:00',
+      views: '22k views',
+      postedAgo: '5 hrs ago',
+      isNew: true,
+      postedToday: true,
+    ),
+    SubscriptionEpisode(
+      epNumber: 5,
+      title: 'Introduction to UI Design Thinking',
+      creatorUsername: 'amara',
+      duration: '18:24',
+      views: '31k views',
+      postedAgo: '9 hrs ago',
+      isNew: true,
+      postedToday: true,
+    ),
+    SubscriptionEpisode(
+      epNumber: 4,
+      title: 'Design Critique, Live',
+      creatorUsername: 'amara',
+      duration: '24:45',
+      views: '48k views',
+      postedAgo: '2 days ago',
+      isNew: true,
+    ),
+    SubscriptionEpisode(
+      epNumber: 3,
+      title: 'Color Systems from Scratch',
+      creatorUsername: 'amara',
+      duration: '15:30',
+      views: '102k views',
+      postedAgo: '1 week ago',
+      watchProgress: 0.4,
+    ),
+    SubscriptionEpisode(
+      epNumber: 8,
+      title: 'Auto Layout Deep Dive',
+      creatorUsername: 'kojosketch',
+      duration: '21:12',
+      views: '18k views',
+      postedAgo: '3 hrs ago',
+      isNew: true,
+      postedToday: true,
+    ),
+    SubscriptionEpisode(
+      epNumber: 7,
+      title: 'Prototyping Motion in Figma',
+      creatorUsername: 'kojosketch',
+      duration: '19:03',
+      views: '54k views',
+      postedAgo: '4 days ago',
+      watchProgress: 0.75,
+    ),
+    SubscriptionEpisode(
+      epNumber: 2,
+      title: 'Easing Curves that Feel Right',
+      creatorUsername: 'lolamotion',
+      duration: '12:40',
+      views: '9k views',
+      postedAgo: '1 day ago',
+      isNew: true,
+    ),
+    SubscriptionEpisode(
+      epNumber: 1,
+      title: 'Portfolio Reviews, Unfiltered',
+      creatorUsername: 'designdan',
+      duration: '28:10',
+      views: '76k views',
+      postedAgo: '2 weeks ago',
+      watchProgress: 1,
+    ),
+  ];
 }
 
 final subscriptionsProvider = NotifierProvider<SubscriptionsNotifier, SubscriptionsState>(

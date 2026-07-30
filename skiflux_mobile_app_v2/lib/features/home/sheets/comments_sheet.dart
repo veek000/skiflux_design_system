@@ -74,7 +74,7 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
     try {
       final text = _controller.text.trim();
       if (text.isEmpty) return;
-      ref.read(commentsProvider.notifier).addMessage(text);
+      await ref.read(commentsProvider.notifier).addMessage(text);
       _controller.clear();
     } catch (e, st) {
       if (!mounted) return;

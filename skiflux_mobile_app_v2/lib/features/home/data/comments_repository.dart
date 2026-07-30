@@ -1,4 +1,4 @@
-﻿library;
+library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -14,7 +14,7 @@ class CommentsRepository extends ApiRepository {
 
   Future<Map<String, dynamic>> getComments(String episodeId, {int limit = 20, int offset = 0}) async {
     return getObject(
-      '/episodes/\/comments',
+      '/episodes/$episodeId/comments',
       query: {'limit': limit, 'offset': offset},
       parse: (json) => json,
     );

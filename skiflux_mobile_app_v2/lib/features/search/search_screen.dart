@@ -56,7 +56,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       setState(() => _results = results);
     } catch (e, st) {
       if (!mounted) return;
-      ErrorDisplay.show(
+      await ErrorDisplay.show(
         context,
         ref,
         SkifluxFailure(SkifluxErrorKind.searchFailed, cause: e),

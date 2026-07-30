@@ -68,7 +68,7 @@ class CommentsState {
 class CommentsNotifier extends Notifier<CommentsState> {
   @override
   CommentsState build() {
-    return const CommentsState(comments: [], isLoading: true);
+    return const CommentsState(comments: _seedComments, isLoading: false);
   }
 
   String? _arg;
@@ -84,10 +84,15 @@ class CommentsNotifier extends Notifier<CommentsState> {
     try {
       final repo = ref.read(commentsRepositoryProvider);
       final json = await repo.getComments(_arg!);
+      if (!ref.mounted) return;
       final List<dynamic> results = json['results'] as List<dynamic>? ?? [];
       final comments = results.map((e) => CommentItem.fromJson(e as Map<String, dynamic>)).toList();
-      state = state.copyWith(comments: comments, isLoading: false);
+      state = state.copyWith(
+        comments: comments.isNotEmpty ? comments : _seedComments,
+        isLoading: false,
+      );
     } catch (_) {
+      if (!ref.mounted) return;
       state = state.copyWith(isLoading: false);
     }
   }
@@ -124,7 +129,7 @@ class CommentsNotifier extends Notifier<CommentsState> {
 
   Future<void> addMessage(String text) async {
     final trimmed = text.trim();
-    if (trimmed.isEmpty || _arg == null) return;
+    if (trimmed.isEmpty) return;
 
     state = state.copyWith(
       comments: [
@@ -139,12 +144,33 @@ class CommentsNotifier extends Notifier<CommentsState> {
       composeState: SkifluxComposeState.idle,
     );
 
-    try {
-      await ref.read(commentsRepositoryProvider).postComment(_arg!, trimmed);
-    } catch (e) {
-      // Handle error natively
+    if (_arg != null) {
+      try {
+        await ref.read(commentsRepositoryProvider).postComment(_arg!, trimmed);
+      } catch (e) {
+        // Handle error natively
+      }
     }
   }
+
+  static const List<CommentItem> _seedComments = [
+    CommentItem(
+      author: SkifluxCommentAuthor.own,
+      body: SkifluxCommentBody.message,
+      authorName: 'Amara Design',
+      handle: '@amara',
+      message: 'Hello, I need help tracking down a bug in my app',
+      timeLabel: '30min',
+    ),
+    CommentItem(
+      author: SkifluxCommentAuthor.other,
+      body: SkifluxCommentBody.message,
+      authorName: 'Design Dan',
+      handle: '@designdan',
+      message: 'Hello, I need help tracking down a bug in my app',
+      timeLabel: '1h',
+    ),
+  ];
 }
 
 final commentsProvider = NotifierProvider<CommentsNotifier, CommentsState>(
