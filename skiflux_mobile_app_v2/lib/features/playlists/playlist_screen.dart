@@ -184,7 +184,7 @@ class _CreatorPillRow extends StatelessWidget {
         borderRadius: SkifluxRadii.borderX,
         onTap: () => Navigator.of(
           context,
-        ).push(MaterialPageRoute(builder: (_) => const ProfileScreen())),
+        ).push(MaterialPageRoute(builder: (_) => ProfileScreen(creatorId: playlist.creatorUsername))),
         child: Row(
           children: [
             SkifluxAvatar(

@@ -17,6 +17,8 @@ import 'library_episode_row.dart';
 // against [LibraryEpisode] so that the day downloads exist, only the source
 // of `_downloads` has to change.
 
+import 'data/downloads_store.dart';
+
 class DownloadsScreen extends ConsumerStatefulWidget {
   const DownloadsScreen({super.key});
 
@@ -27,21 +29,17 @@ class DownloadsScreen extends ConsumerStatefulWidget {
 class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
   String _query = '';
 
-  // TODO(backend, blocking): no offline download pipeline or endpoint exists, so this list is always empty — expects: local download store fed by a per-episode download URL + file size + quality label
-  final List<LibraryEpisode> _downloads = [];
-
-  /// Until files are really on disk there is nothing to measure, so the
-  /// storage line is derived from what the rows claim rather than invented.
   static const int _mbPerVideo = 112;
 
   @override
   Widget build(BuildContext context) {
+    final downloads = ref.watch(downloadsProvider);
     final query = _query.trim().toLowerCase();
     final visible = query.isEmpty
-        ? _downloads
-        : _downloads.where((e) => e.title.toLowerCase().contains(query))
+        ? downloads
+        : downloads.where((e) => e.title.toLowerCase().contains(query))
               .toList();
-    final totalMb = _downloads.length * _mbPerVideo;
+    final totalMb = downloads.length * _mbPerVideo;
     final usedLabel = totalMb >= 1000
         ? '${(totalMb / 1000).toStringAsFixed(1)} GB'
         : '$totalMb MB';
@@ -57,7 +55,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
           onPressed: () => Navigator.of(context).pop(),
         ),
         trailing: TextButton(
-          onPressed: _downloads.isEmpty ? null : _confirmClearAll,
+          onPressed: downloads.isEmpty ? null : _confirmClearAll,
           child: Text(
             'Clear all',
             style: SkifluxTypography.uiButtonMedium.copyWith(
@@ -78,7 +76,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                 onCleared: () => setState(() => _query = ''),
               ),
             ),
-            if (_downloads.isNotEmpty)
+            if (downloads.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.fromLTRB(
                   SkifluxSpacing.spaceL,
@@ -87,7 +85,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                   SkifluxSpacing.spaceL,
                 ),
                 child: Text(
-                  '${_downloads.length} videos · $usedLabel used',
+                  '${downloads.length} videos · $usedLabel used',
                   style: SkifluxTypography.bodyP10Regular.copyWith(
                     color: SkifluxColors.contentTertiary,
                   ),
@@ -141,7 +139,6 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
     );
   }
 
-  /// Confirm → delete one download → success toast.
   Future<void> _confirmDelete(LibraryEpisode episode) async {
     final confirmed = await showConfirmSheet(
       context,
@@ -153,13 +150,12 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
       icon: RemixIcons.delete_bin_fill,
     );
     if (confirmed != true || !mounted) return;
-    setState(() => _downloads.remove(episode));
+    ref.read(downloadsProvider.notifier).removeDownload(episode.id);
     SkifluxToast.success(context, 'Download deleted');
   }
 
-  /// Confirm → clear every download → success toast.
   Future<void> _confirmClearAll() async {
-    final count = _downloads.length;
+    final count = ref.read(downloadsProvider).length;
     final confirmed = await showConfirmSheet(
       context,
       title: 'Clear all downloads?',
@@ -170,7 +166,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
       icon: RemixIcons.delete_bin_fill,
     );
     if (confirmed != true || !mounted) return;
-    setState(_downloads.clear);
+    ref.read(downloadsProvider.notifier).clearAll();
     SkifluxToast.success(context, 'All downloads cleared');
   }
 }

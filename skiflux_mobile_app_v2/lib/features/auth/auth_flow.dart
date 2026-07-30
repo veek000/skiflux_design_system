@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lottie/lottie.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/network/token_store.dart';
@@ -105,7 +106,9 @@ class _AuthFlowState extends ConsumerState<AuthFlow> {
   /// Onboarding "Login" — branch on settings + capability **before** any
   /// screen. Never password → biometric.
   Future<void> _onLogin() async {
-    final biometricOn = ref.read(settingsProvider).biometricLogin;
+    final prefs = await SharedPreferences.getInstance();
+    final biometricOn = prefs.getBool('skiflux.biometric_login') ??
+        ref.read(settingsProvider).biometricLogin;
     await ref.read(authFlowProvider.notifier).enterReturningSignIn(
       biometricLoginEnabled: biometricOn,
       availableMode: () =>

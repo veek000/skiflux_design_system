@@ -103,20 +103,56 @@ final settingsProvider = NotifierProvider<SettingsNotifier, SettingsState>(
 
 class SettingsNotifier extends Notifier<SettingsState> {
   static const _biometricKey = 'skiflux.biometric_login';
+  static const _twoFactorKey = 'skiflux.two_factor_auth';
+  static const _autoPlayKey = 'skiflux.auto_play_next';
+  static const _downloadQualityKey = 'skiflux.download_quality';
+  static const _wifiOnlyKey = 'skiflux.download_on_wifi_only';
+  static const _languageKey = 'skiflux.app_language';
+  static const _saveHistoryKey = 'skiflux.save_watch_history';
+  static const _recommendationsKey = 'skiflux.personalised_recommendations';
 
   @override
   SettingsState build() {
-    // Load persisted biometric preference silently
+    // Load persisted settings
     SharedPreferences.getInstance().then((prefs) {
-      final persistedBiometric = prefs.getBool(_biometricKey);
-      if (persistedBiometric != null && persistedBiometric != state.biometricLogin) {
-        state = state.copyWith(biometricLogin: persistedBiometric);
+      final bio = prefs.getBool(_biometricKey);
+      final twoFa = prefs.getBool(_twoFactorKey);
+      final autoPlay = prefs.getBool(_autoPlayKey);
+      final qualName = prefs.getString(_downloadQualityKey);
+      final wifiOnly = prefs.getBool(_wifiOnlyKey);
+      final langName = prefs.getString(_languageKey);
+      final saveHist = prefs.getBool(_saveHistoryKey);
+      final recs = prefs.getBool(_recommendationsKey);
+
+      DownloadQuality? qual;
+      if (qualName != null) {
+        qual = DownloadQuality.values.firstWhere(
+          (e) => e.name == qualName,
+          orElse: () => DownloadQuality.hd720,
+        );
       }
-    }).catchError((_) {});
+
+      AppLanguage? lang;
+      if (langName != null) {
+        lang = AppLanguage.values.firstWhere(
+          (e) => e.name == langName,
+          orElse: () => AppLanguage.enUk,
+        );
+      }
+
+      state = state.copyWith(
+        biometricLogin: bio ?? state.biometricLogin,
+        twoFactorAuth: twoFa ?? state.twoFactorAuth,
+        autoPlayNext: autoPlay ?? state.autoPlayNext,
+        downloadQuality: qual ?? state.downloadQuality,
+        downloadOnWifiOnly: wifiOnly ?? state.downloadOnWifiOnly,
+        appLanguage: lang ?? state.appLanguage,
+        saveWatchHistory: saveHist ?? state.saveWatchHistory,
+        personalisedRecommendations: recs ?? state.personalisedRecommendations,
+      );
+    }).catchError((_) => null);
 
     return const SettingsState(
-      // Defaults per the Notifications frame: New episodes, Coin earnings and
-      // Platform announcements on; the rest off.
       notifications: {
         NotificationPref.newEpisodes: true,
         NotificationPref.taskUpdates: false,
@@ -126,7 +162,6 @@ class SettingsNotifier extends Notifier<SettingsState> {
         NotificationPref.badges: false,
         NotificationPref.platformAnnouncements: true,
       },
-      // Opt-in: biometric is an alternative login path, not on by default.
       biometricLogin: false,
       twoFactorAuth: false,
       autoPlayNext: true,
@@ -146,29 +181,45 @@ class SettingsNotifier extends Notifier<SettingsState> {
 
   void setBiometricLogin(bool value) {
     state = state.copyWith(biometricLogin: value);
-    SharedPreferences.getInstance().then((prefs) {
-      prefs.setBool(_biometricKey, value);
-    }).catchError((_) {});
+    _saveBool(_biometricKey, value);
   }
 
-  void setTwoFactorAuth(bool value) =>
-      state = state.copyWith(twoFactorAuth: value);
+  void setTwoFactorAuth(bool value) {
+    state = state.copyWith(twoFactorAuth: value);
+    _saveBool(_twoFactorKey, value);
+  }
 
-  void setAutoPlayNext(bool value) =>
-      state = state.copyWith(autoPlayNext: value);
+  void setAutoPlayNext(bool value) {
+    state = state.copyWith(autoPlayNext: value);
+    _saveBool(_autoPlayKey, value);
+  }
 
-  void setDownloadQuality(DownloadQuality quality) =>
-      state = state.copyWith(downloadQuality: quality);
+  void setDownloadQuality(DownloadQuality quality) {
+    state = state.copyWith(downloadQuality: quality);
+    SharedPreferences.getInstance().then((p) => p.setString(_downloadQualityKey, quality.name)).catchError((_) => false);
+  }
 
-  void setDownloadOnWifiOnly(bool value) =>
-      state = state.copyWith(downloadOnWifiOnly: value);
+  void setDownloadOnWifiOnly(bool value) {
+    state = state.copyWith(downloadOnWifiOnly: value);
+    _saveBool(_wifiOnlyKey, value);
+  }
 
-  void setAppLanguage(AppLanguage language) =>
-      state = state.copyWith(appLanguage: language);
+  void setAppLanguage(AppLanguage language) {
+    state = state.copyWith(appLanguage: language);
+    SharedPreferences.getInstance().then((p) => p.setString(_languageKey, language.name)).catchError((_) => false);
+  }
 
-  void setSaveWatchHistory(bool value) =>
-      state = state.copyWith(saveWatchHistory: value);
+  void setSaveWatchHistory(bool value) {
+    state = state.copyWith(saveWatchHistory: value);
+    _saveBool(_saveHistoryKey, value);
+  }
 
-  void setPersonalisedRecommendations(bool value) =>
-      state = state.copyWith(personalisedRecommendations: value);
+  void setPersonalisedRecommendations(bool value) {
+    state = state.copyWith(personalisedRecommendations: value);
+    _saveBool(_recommendationsKey, value);
+  }
+
+  void _saveBool(String key, bool value) {
+    SharedPreferences.getInstance().then((p) => p.setBool(key, value)).catchError((_) => false);
+  }
 }

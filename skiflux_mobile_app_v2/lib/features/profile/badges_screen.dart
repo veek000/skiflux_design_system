@@ -1,49 +1,84 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
+
+import 'data/badges_repository.dart';
 
 // Figma: **Profile Flow 05** (`1256:25179`) — Badges screen. "3 of 8 badges
 // earned" + brand progress track + "40% Earned" label, then Earned and
 // Locked 3-column grids. Badge art = the user-provided SVGs already staged
 // in `assets/badges/` (same set the public profile uses).
 
-/// One achievement badge: asset + earned state + locked-state requirement.
-class _Badge {
-  const _Badge(this.asset, this.caption, {this.earned = false});
+/// Static catalogue mapping badge names to local SVG asset paths.
+/// Every badge in the app is listed here — all start **inactive**.
+/// Only badges returned by the backend are marked as earned.
+const _kBadgeAssets = <String, String>{
+  'First Task Completed': 'assets/badges/badge_first_task_completed.svg',
+  '3 Days Streak': 'assets/badges/badge_3_days_streak.svg',
+  'Top Learner': 'assets/badges/badge_top_learner.svg',
+  '10 Days Streak': 'assets/badges/badge_10_days_streak.svg',
+  'Big Earner': 'assets/badges/badge_big_earner.svg',
+  'Super Fan': 'assets/badges/badge_super_fan.svg',
+  'Referral Pro': 'assets/badges/badge_referral_pro.svg',
+  'Speed Learner': 'assets/badges/badge_speed_learner.svg',
+};
 
-  final String asset;
+/// Locked-state captions for each badge (the requirement text).
+const _kLockedCaptions = <String, String>{
+  'First Task Completed': 'Complete first task',
+  '3 Days Streak': 'Complete 3 days',
+  'Top Learner': 'Top learner rank',
+  '10 Days Streak': 'Complete 10 days',
+  'Big Earner': 'Earn 500 coins',
+  'Super Fan': 'Like 50 videos',
+  'Referral Pro': 'Refer 3 friends',
+  'Speed Learner': '5 episodes in a day',
+};
 
-  /// Locked tiles show the requirement; earned tiles show "Earned".
+/// One display badge derived purely from the backend response.
+class _DisplayBadge {
+  const _DisplayBadge({
+    required this.name,
+    required this.caption,
+    required this.earned,
+    this.localAsset,
+    this.networkUrl,
+  });
+
+  final String name;
   final String caption;
   final bool earned;
+  final String? localAsset;
+  final String? networkUrl;
 }
 
-/// Demo badge set (3 of 8 earned, matching the Figma frame).
-// TODO(backend, blocking): replace static badge list with real per-user badge progress fetched from backend — expects: List<{assetUrl: String, caption: String, earned: bool}>
-const List<_Badge> _kBadges = [
-  _Badge(
-    'assets/badges/badge_first_task_completed.svg',
-    'Earned',
-    earned: true,
-  ),
-  _Badge('assets/badges/badge_3_days_streak.svg', 'Earned', earned: true),
-  _Badge('assets/badges/badge_top_learner.svg', 'Earned', earned: true),
-  _Badge('assets/badges/badge_10_days_streak.svg', 'Complete 10 days'),
-  _Badge('assets/badges/badge_big_earner.svg', 'Earn 500 coins'),
-  _Badge('assets/badges/badge_super_fan.svg', 'Like 50 videos'),
-  _Badge('assets/badges/badge_referral_pro.svg', 'Refer 3 friends'),
-  _Badge('assets/badges/badge_speed_learner.svg', '5 episodes in a day'),
-];
+/// Builds the complete badge list: all badges start inactive, then any
+/// badge the backend says the user earned gets marked as active.
+List<_DisplayBadge> _buildDisplayBadges(List<UserBadge> earnedBadges) {
+  final earnedByName = <String, UserBadge>{
+    for (final ub in earnedBadges) ub.badge.name: ub,
+  };
 
-class BadgesScreen extends StatelessWidget {
+  return _kBadgeAssets.entries.map((entry) {
+    final earned = earnedByName[entry.key];
+    return _DisplayBadge(
+      name: entry.key,
+      caption: earned != null
+          ? 'Earned'
+          : _kLockedCaptions[entry.key] ?? entry.key,
+      earned: earned != null,
+      localAsset: entry.value,
+      networkUrl: earned?.badge.iconUrl,
+    );
+  }).toList();
+}
+
+class BadgesScreen extends ConsumerWidget {
   const BadgesScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final earned = _kBadges.where((b) => b.earned).toList();
-    final locked = _kBadges.where((b) => !b.earned).toList();
-    final percent = (earned.length / _kBadges.length * 100).round();
-
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       backgroundColor: SkifluxColors.backgroundPrimary,
       appBar: SkifluxTopNavBar(
@@ -58,29 +93,59 @@ class BadgesScreen extends StatelessWidget {
       ),
       body: SafeArea(
         top: false,
-        child: ListView(
-          padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
-          children: [
-            _progressHeader(earned.length, percent),
-            const SizedBox(height: SkifluxSpacing.spaceL),
-            _sectionLabel('Earned'),
-            const SizedBox(height: SkifluxSpacing.spaceS),
-            _grid(earned),
-            const SizedBox(height: SkifluxSpacing.spaceL),
-            _sectionLabel('Locked'),
-            const SizedBox(height: SkifluxSpacing.spaceS),
-            _grid(locked),
-          ],
-        ),
+        child: ref.watch(userBadgesProvider).when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, st) => Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(RemixIcons.error_warning_line,
+                        size: 48, color: SkifluxColors.contentTertiary),
+                    const SizedBox(height: SkifluxSpacing.spaceS),
+                    Text('Couldn\'t load badges',
+                        style: SkifluxTypography.bodyP9Regular
+                            .copyWith(color: SkifluxColors.contentTertiary)),
+                    const SizedBox(height: SkifluxSpacing.spaceM),
+                    SkifluxButton(
+                      label: 'Retry',
+                      size: SkifluxButtonSize.s,
+                      onPressed: () => ref.invalidate(userBadgesProvider),
+                    ),
+                  ],
+                ),
+              ),
+              data: (earnedBadges) {
+                final badges = _buildDisplayBadges(earnedBadges);
+                final earned = badges.where((b) => b.earned).toList();
+                final locked = badges.where((b) => !b.earned).toList();
+                final total = badges.length;
+                final percent =
+                    total > 0 ? (earned.length / total * 100).round() : 0;
+
+                return ListView(
+                  padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
+                  children: [
+                    _progressHeader(earned.length, total, percent),
+                    const SizedBox(height: SkifluxSpacing.spaceL),
+                    if (earned.isNotEmpty) ...[
+                      _sectionLabel('Earned'),
+                      const SizedBox(height: SkifluxSpacing.spaceS),
+                      _grid(earned),
+                      const SizedBox(height: SkifluxSpacing.spaceL),
+                    ],
+                    _sectionLabel('Locked'),
+                    const SizedBox(height: SkifluxSpacing.spaceS),
+                    _grid(locked),
+                  ],
+                );
+              },
+            ),
       ),
     );
   }
 
-  /// "3 of 8 badges earned" · "40% Earned" over the brand progress track
-  /// (`1256:25551`): labels in `UI Style/Input Content` (Creato Bold 12) —
-  /// left tertiary, right brand; 8px gap; 4px `Background/Selected` pill
-  /// track with the `Content/Brand` fill.
-  Widget _progressHeader(int earnedCount, int percent) {
+  /// "3 of 8 badges earned" · "40% Earned" over the brand progress track.
+  Widget _progressHeader(int earnedCount, int total, int percent) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -88,7 +153,7 @@ class BadgesScreen extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                '$earnedCount of ${_kBadges.length} badges earned',
+                '$earnedCount of $total badges earned',
                 style: SkifluxTypography.uiInputContent.copyWith(
                   color: SkifluxColors.contentTertiary,
                 ),
@@ -108,7 +173,6 @@ class BadgesScreen extends StatelessWidget {
           height: SkifluxSpacing.spaceXs,
           child: Stack(
             children: [
-              // Track — full-width Background/Selected pill.
               Positioned.fill(
                 child: DecoratedBox(
                   decoration: BoxDecoration(
@@ -117,13 +181,11 @@ class BadgesScreen extends StatelessWidget {
                   ),
                 ),
               ),
-              // Fill — brand pill with its own rounded ends (Figma's
-              // Rectangle 2730 is an independent rounded bar, not a clip).
               Positioned.fill(
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: FractionallySizedBox(
-                    widthFactor: earnedCount / _kBadges.length,
+                    widthFactor: total > 0 ? earnedCount / total : 0,
                     heightFactor: 1,
                     child: DecoratedBox(
                       decoration: BoxDecoration(
@@ -151,7 +213,7 @@ class BadgesScreen extends StatelessWidget {
   }
 
   /// 3-column badge grid; rows wrap as needed.
-  Widget _grid(List<_Badge> badges) {
+  Widget _grid(List<_DisplayBadge> badges) {
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -159,7 +221,6 @@ class BadgesScreen extends StatelessWidget {
         crossAxisCount: 3,
         mainAxisSpacing: SkifluxSpacing.spaceL,
         crossAxisSpacing: SkifluxSpacing.spaceL,
-        // Tile ≈ 113×113 art region + caption row (Figma 1256:25199).
         childAspectRatio: 113 / 130,
       ),
       itemCount: badges.length,
@@ -168,12 +229,12 @@ class BadgesScreen extends StatelessWidget {
   }
 }
 
-/// One badge tile — earned: brand gradient card, full-color SVG, "Earned"
-/// caption; locked: grey card, desaturated SVG, requirement caption.
+/// One badge tile — earned: brand gradient card, full-color icon, "Earned"
+/// caption; locked: grey card, desaturated icon, requirement caption.
 class _BadgeTile extends StatelessWidget {
   const _BadgeTile({required this.badge});
 
-  final _Badge badge;
+  final _DisplayBadge badge;
 
   /// Luminance-preserving desaturation matrix for locked badge art.
   static const List<double> _greyMatrix = [
@@ -185,13 +246,22 @@ class _BadgeTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final art = SvgPicture.asset(badge.asset, fit: BoxFit.contain);
+    // Prefer network icon (from backend) when available,
+    // fall back to local SVG asset.
+    final Widget art;
+    if (badge.networkUrl != null && badge.networkUrl!.isNotEmpty) {
+      art = SvgPicture.network(badge.networkUrl!, fit: BoxFit.contain);
+    } else if (badge.localAsset != null) {
+      art = SvgPicture.asset(badge.localAsset!, fit: BoxFit.contain);
+    } else {
+      art = const Icon(RemixIcons.award_fill,
+          color: SkifluxColors.contentTertiary);
+    }
+
     return Container(
       padding: const EdgeInsets.all(SkifluxSpacing.spaceM),
       decoration: BoxDecoration(
         gradient: badge.earned
-            // Same brand50→brand200 vertical gradient as the public
-            // profile's badge tiles.
             ? const LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,

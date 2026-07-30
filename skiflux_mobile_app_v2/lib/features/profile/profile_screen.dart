@@ -11,13 +11,19 @@ import '../playlists/data/playlists_store.dart';
 import '../playlists/playlist_screen.dart';
 import '../subscriptions/data/subscriptions_store.dart';
 import '../subscriptions/subscriptions_screen.dart';
+import 'data/creator_profile_provider.dart';
 
 /// Figma: **Home & In-app Flow 07** (`198:14048`) — Profile screen.
 ///
 /// Top nav, creator header (Subscribe / Notify), Recent | Playlists tabs,
 /// pill filter group, and episode cards (Completed / Unlocked / Locked).
 class ProfileScreen extends ConsumerStatefulWidget {
-  const ProfileScreen({super.key});
+  const ProfileScreen({
+    super.key,
+    required this.creatorId,
+  });
+
+  final String creatorId;
 
   @override
   ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
@@ -53,36 +59,38 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ),
       body: SafeArea(
         top: false,
-        child: ListView(
-          padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
-          children: [
-            _ProfileHeader(
-              subscribed: _subscribed,
-              onSubscribe: () {
-                setState(() => _subscribed = !_subscribed);
-                // Generalized typed toast (success) — same copy as before;
-                // visual uses Background/Positive + check icon.
-                SkifluxToast.success(
-                  context,
-                  _subscribed ? 'Subscribed to Amara Design' : 'Unsubscribed',
-                );
-              },
-              onNotify: () async {
-                final next = await showNotifySettingsSheet(
-                  context,
-                  current: _notify,
-                );
-                if (next == null || !context.mounted) return;
-                setState(() => _notify = next);
-                final message = '${next.toastTitle}\n${next.toastBody}';
-                // Off → info; activated prefs → success confirmation.
-                if (next == NotifyPreference.none) {
-                  SkifluxToast.info(context, message);
-                } else {
-                  SkifluxToast.success(context, message);
-                }
-              },
-            ),
+        child: ref.watch(creatorProfileProvider(widget.creatorId)).when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, st) => const Center(child: Text('Failed to load')),
+          data: (profile) => ListView(
+            padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
+            children: [
+              _ProfileHeader(
+                profile: profile,
+                subscribed: _subscribed,
+                onSubscribe: () {
+                  setState(() => _subscribed = !_subscribed);
+                  SkifluxToast.success(
+                    context,
+                    _subscribed ? 'Subscribed to ${profile.name}' : 'Unsubscribed',
+                  );
+                },
+                onNotify: () async {
+                  final next = await showNotifySettingsSheet(
+                    context,
+                    current: _notify,
+                  );
+                  if (next == null || !context.mounted) return;
+                  setState(() => _notify = next);
+                  final message = '${next.toastTitle}\n${next.toastBody}';
+                  // Off → info; activated prefs → success confirmation.
+                  if (next == NotifyPreference.none) {
+                    SkifluxToast.info(context, message);
+                  } else {
+                    SkifluxToast.success(context, message);
+                  }
+                },
+              ),
             const SizedBox(height: SkifluxSpacing.spaceL),
             _Tabs(
               index: _tabIndex,
@@ -97,6 +105,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               _playlistTile(context),
             ],
           ],
+        ),
         ),
       ),
     );
@@ -225,11 +234,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
 class _ProfileHeader extends StatelessWidget {
   const _ProfileHeader({
+    required this.profile,
     required this.subscribed,
     required this.onSubscribe,
     required this.onNotify,
   });
 
+  final CreatorProfile profile;
   final bool subscribed;
   final VoidCallback onSubscribe;
   final VoidCallback onNotify;
@@ -238,21 +249,21 @@ class _ProfileHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        const SkifluxAvatar(
+        SkifluxAvatar(
           style: SkifluxAvatarStyle.initial,
           size: SkifluxUnit.u64,
-          initials: 'A',
+          initials: profile.initials,
         ),
         const SizedBox(height: SkifluxSpacing.spaceS),
         Text(
-          'Amara Design',
-          style: SkifluxTypography.headingH8Bold.copyWith(
+          profile.name,
+          style: SkifluxTypography.headingH5Bold.copyWith(
             color: SkifluxColors.contentPrimary,
           ),
         ),
         const SizedBox(height: SkifluxSpacing.spaceXs),
         Text(
-          '@amara',
+          profile.handle,
           style: SkifluxTypography.bodyP11Regular.copyWith(
             color: SkifluxColors.contentPrimary,
           ),

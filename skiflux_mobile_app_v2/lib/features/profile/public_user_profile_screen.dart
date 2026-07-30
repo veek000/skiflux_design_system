@@ -1,3 +1,5 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'data/public_user_profile_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
@@ -115,13 +117,31 @@ class CompletedTaskItem {
   final bool passed;
 }
 
-class PublicUserProfileScreen extends StatelessWidget {
+
+
+class PublicUserProfileScreen extends ConsumerWidget {
   const PublicUserProfileScreen({
     super.key,
-    this.profile = const PublicUserProfile(
-      name: 'Amara Design',
-      username: 'amara',
-    ),
+    required this.username,
+  });
+
+  final String username;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final asyncProfile = ref.watch(publicUserProfileProvider(username));
+    
+    return asyncProfile.when(
+      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+      error: (e, st) => const Scaffold(body: Center(child: Text('Failed to load profile'))),
+      data: (profile) => _PublicUserProfileView(profile: profile),
+    );
+  }
+}
+
+class _PublicUserProfileView extends StatelessWidget {
+  const _PublicUserProfileView({
+    required this.profile,
   });
 
   final PublicUserProfile profile;

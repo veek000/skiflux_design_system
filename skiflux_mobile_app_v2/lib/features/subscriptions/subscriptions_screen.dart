@@ -545,7 +545,7 @@ class _CreatorChannelHeader extends StatelessWidget {
             borderRadius: SkifluxRadii.borderPill,
             onTap: () => Navigator.of(
               context,
-            ).push(MaterialPageRoute(builder: (_) => const ProfileScreen())),
+            ).push(MaterialPageRoute(builder: (_) => ProfileScreen(creatorId: creator.username))),
             child: Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: SkifluxSpacing.spaceS,

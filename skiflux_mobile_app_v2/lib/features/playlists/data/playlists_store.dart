@@ -4,6 +4,8 @@ library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../wallet/data/topup_repository.dart';
+
 enum PlaylistEpisodeState { unlocked, locked, completed }
 
 class PlaylistEpisode {
@@ -99,7 +101,37 @@ class CoinPack {
     }
     return buf.toString();
   }
+  factory CoinPack.fromJson(Map<String, dynamic> json) {
+    return CoinPack(
+      coins: json['coins'] as int,
+      priceNaira: json['price_naira'] as int? ?? json['price'] as int? ?? 0,
+      badge: _parseBadge(json['badge'] as String?),
+      savePercent: json['save_percent'] as int?,
+    );
+  }
+
+  static CoinPackBadge _parseBadge(String? val) {
+    if (val == 'best_value') return CoinPackBadge.bestValue;
+    if (val == 'save') return CoinPackBadge.save;
+    return CoinPackBadge.none;
+  }
 }
+
+final coinPacksProvider = FutureProvider<List<CoinPack>>((ref) async {
+  try {
+    // Attempt to fetch from topup methods or a dedicated pricing endpoint.
+    // The backend spec currently lacks a dedicated packs endpoint, so we
+    // expect the packs to be returned as part of the topup configuration.
+    final data = await ref.watch(topupRepositoryProvider).getTopupMethods();
+    final packsRaw = data['coin_packs'] as List<dynamic>?;
+    if (packsRaw != null && packsRaw.isNotEmpty) {
+      return packsRaw.map((e) => CoinPack.fromJson(e as Map<String, dynamic>)).toList();
+    }
+    return [];
+  } catch (e) {
+    return [];
+  }
+});
 
 /// Snapshot of wallet + default playlist.
 class PlaylistsState {
@@ -280,22 +312,7 @@ final playlistsProvider = NotifierProvider<PlaylistsNotifier, PlaylistsState>(
 /// Rate: 1 coin = ₦6 (Flow 03 `1256:27795`).
 const int kCoinRateNaira = 6;
 
-const List<CoinPack> kCoinPacks = [
-  CoinPack(coins: 100, priceNaira: 600),
-  CoinPack(coins: 200, priceNaira: 1100, badge: CoinPackBadge.bestValue),
-  CoinPack(
-    coins: 500,
-    priceNaira: 2500,
-    badge: CoinPackBadge.save,
-    savePercent: 17,
-  ),
-  CoinPack(
-    coins: 1000,
-    priceNaira: 4500,
-    badge: CoinPackBadge.save,
-    savePercent: 25,
-  ),
-];
+// Removed static kCoinPacks; use coinPacksProvider instead.
 
 /// Playback prefs for More Menu chips (session-local).
 class PlayerPrefsState {

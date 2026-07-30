@@ -40,21 +40,16 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
     super.dispose();
   }
 
-  void _openCreatorProfile() {
+  void _openCreatorProfile(PersonResult person) {
     Navigator.of(
       context,
-    ).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
+    ).push(MaterialPageRoute(builder: (_) => ProfileScreen(creatorId: person.username)));
   }
 
   void _openUserProfile(PersonResult person) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => PublicUserProfileScreen(
-          profile: PublicUserProfile.demo(
-            name: person.name,
-            username: person.username,
-          ),
-        ),
+        builder: (_) => PublicUserProfileScreen(username: person.username),
       ),
     );
   }
@@ -153,7 +148,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
             person: c,
             actionLabel: 'Follow',
             onAction: () {},
-            onTap: _openCreatorProfile,
+            onTap: () => _openCreatorProfile(c),
           ),
       ],
       SearchCategory.users => [

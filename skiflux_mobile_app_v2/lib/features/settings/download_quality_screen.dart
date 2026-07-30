@@ -4,6 +4,7 @@ import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/sheets/confirm_sheet.dart';
 import '../../shared/sheets/success_sheet.dart';
+import '../profile/data/downloads_store.dart';
 import 'data/settings_store.dart';
 import 'widgets/settings_tile.dart';
 
@@ -65,7 +66,7 @@ class DownloadQualityScreen extends ConsumerWidget {
                   iconColor: SkifluxColors.contentBrand,
                   title: 'Used storage',
                   trailing: Text(
-                    '1.2 GB',
+                    _formatStorage(ref.watch(downloadsProvider).length),
                     style: SkifluxTypography.bodyP10Regular.copyWith(
                       color: SkifluxColors.contentTertiary,
                     ),
@@ -87,7 +88,7 @@ class DownloadQualityScreen extends ConsumerWidget {
                   iconColor: SkifluxColors.contentNegative,
                   title: 'Clear all downloads',
                   titleColor: SkifluxColors.contentNegative,
-                  onTap: () => _clearAll(context),
+                  onTap: () => _clearAll(context, ref),
                 ),
               ],
             ),
@@ -97,17 +98,30 @@ class DownloadQualityScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _clearAll(BuildContext context) async {
+  String _formatStorage(int count) {
+    final mb = count * 112;
+    if (mb == 0) return '0 B';
+    if (mb >= 1000) return '${(mb / 1000).toStringAsFixed(1)} GB';
+    return '$mb MB';
+  }
+
+  Future<void> _clearAll(BuildContext context, WidgetRef ref) async {
+    final count = ref.read(downloadsProvider).length;
+    final mb = count * 112;
+    final sizeStr = mb >= 1000 ? '${(mb / 1000).toStringAsFixed(1)} GB' : '$mb MB';
+
     final confirmed = await showConfirmSheet(
       context,
       title: 'Clear All Downloads?',
-      message:
-          'Are you sure you want to delete 1.2 GB of downloaded '
-          'episodes? You will need to download them again to watch offline.',
+      message: count == 0
+          ? 'You have no downloaded episodes to clear.'
+          : 'Are you sure you want to delete $sizeStr of downloaded '
+            'episodes? You will need to download them again to watch offline.',
       confirmLabel: 'Clear download',
       icon: RemixIcons.delete_bin_fill,
     );
     if (confirmed != true || !context.mounted) return;
+    ref.read(downloadsProvider.notifier).clearAll();
     await showSuccessSheet(
       context,
       title: 'Downloads Cleared',

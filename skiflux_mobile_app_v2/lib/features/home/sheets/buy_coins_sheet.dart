@@ -72,28 +72,43 @@ class _BuyCoinsSheetState extends ConsumerState<_BuyCoinsSheet> {
               ),
             ),
             const SizedBox(height: SkifluxSpacing.spaceL),
-            for (var i = 0; i < kCoinPacks.length; i += 2)
-              Padding(
-                padding: EdgeInsets.only(
-                  bottom: i + 2 < kCoinPacks.length ? SkifluxSpacing.spaceL : 0,
-                ),
-                // IntrinsicHeight bounds the stretch — a bare stretch Row
-                // inside a scrollable forces infinite height and blanks the
-                // whole sheet.
-                child: IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(child: _packCard(kCoinPacks[i])),
-                      const SizedBox(width: SkifluxSpacing.spaceL),
-                      if (i + 1 < kCoinPacks.length)
-                        Expanded(child: _packCard(kCoinPacks[i + 1]))
-                      else
-                        const Expanded(child: SizedBox.shrink()),
-                    ],
-                  ),
-                ),
-              ),
+            ref.watch(coinPacksProvider).when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, st) => Center(child: Text('Failed to load packs: $e')),
+              data: (packs) {
+                if (packs.isEmpty) {
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(SkifluxSpacing.spaceL),
+                      child: Text('No coin packs available right now.'),
+                    ),
+                  );
+                }
+                return Column(
+                  children: [
+                    for (var i = 0; i < packs.length; i += 2)
+                      Padding(
+                        padding: EdgeInsets.only(
+                          bottom: i + 2 < packs.length ? SkifluxSpacing.spaceL : 0,
+                        ),
+                        child: IntrinsicHeight(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(child: _packCard(packs[i])),
+                              const SizedBox(width: SkifluxSpacing.spaceL),
+                              if (i + 1 < packs.length)
+                                Expanded(child: _packCard(packs[i + 1]))
+                              else
+                                const Expanded(child: SizedBox.shrink()),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
             const SizedBox(height: SkifluxSpacing.spaceL),
             SkifluxButton(
               label: _selected == null ? 'Choose a coin pack' : 'Continue',

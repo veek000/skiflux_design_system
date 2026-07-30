@@ -17,15 +17,16 @@ import '../data/comments_store.dart';
 ///
 /// Feature state: [commentsProvider] (autoDispose). Local only:
 /// [TextEditingController].
-Future<void> showCommentsSheet(BuildContext context) {
+Future<void> showCommentsSheet(BuildContext context, String episodeId) {
   return showSkifluxSheet(
     context: context,
-    builder: (_) => const _CommentsSheet(),
+    builder: (_) => _CommentsSheet(episodeId),
   );
 }
 
 class _CommentsSheet extends ConsumerStatefulWidget {
-  const _CommentsSheet();
+  const _CommentsSheet(this.episodeId);
+  final String episodeId;
 
   @override
   ConsumerState<_CommentsSheet> createState() => _CommentsSheetState();
@@ -33,6 +34,14 @@ class _CommentsSheet extends ConsumerStatefulWidget {
 
 class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
   final TextEditingController _controller = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(commentsProvider.notifier).init(widget.episodeId);
+    });
+  }
 
   @override
   void dispose() {
@@ -150,10 +159,7 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
         Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => PublicUserProfileScreen(
-              profile: PublicUserProfile.demo(
-                name: data.authorName,
-                username: data.handle.replaceFirst('@', ''),
-              ),
+              username: data.handle.replaceAll('@', ''),
             ),
           ),
         );

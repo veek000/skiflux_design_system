@@ -438,7 +438,7 @@ class _CreatorChipState extends State<_CreatorChip>
             filled: false,
             onTap: () => Navigator.of(
               context,
-            ).push(MaterialPageRoute(builder: (_) => const ProfileScreen())),
+            ).push(MaterialPageRoute(builder: (_) => ProfileScreen(creatorId: _displayed.creatorUsername))),
           ),
         ],
       ),

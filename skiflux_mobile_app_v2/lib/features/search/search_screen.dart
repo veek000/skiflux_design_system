@@ -48,10 +48,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     super.dispose();
   }
 
-  void _onQueryChanged(String query) {
+  void _onQueryChanged(String query) async {
     try {
       final index = ref.read(searchIndexProvider);
-      setState(() => _results = index.search(query));
+      final results = await index.search(query);
+      if (!mounted) return;
+      setState(() => _results = results);
     } catch (e, st) {
       if (!mounted) return;
       ErrorDisplay.show(
@@ -131,21 +133,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     }
   }
 
-  void _openCreatorProfile() {
+  void _openCreatorProfile(PersonResult person) {
     Navigator.of(
       context,
-    ).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
+    ).push(MaterialPageRoute(builder: (_) => ProfileScreen(creatorId: person.username)));
   }
 
   void _openUserProfile(PersonResult person) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => PublicUserProfileScreen(
-          profile: PublicUserProfile.demo(
-            name: person.name,
-            username: person.username,
-          ),
-        ),
+        builder: (_) => PublicUserProfileScreen(username: person.username),
       ),
     );
   }
@@ -323,7 +320,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   person: c,
                   actionLabel: 'Follow',
                   onAction: () {},
-                  onTap: _openCreatorProfile,
+                  onTap: () => _openCreatorProfile(c),
                 ),
             ],
           ),

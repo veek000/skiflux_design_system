@@ -8,6 +8,7 @@
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'search_repository.dart';
 
 enum SearchCategory { episodes, creators, users, playlists }
 
@@ -38,6 +39,17 @@ class EpisodeResult {
     required this.creator,
   });
 
+  factory EpisodeResult.fromJson(Map<String, dynamic> json) {
+    final creator = json['creator'] ?? {};
+    return EpisodeResult(
+      epNumber: (json['episode_number'] as int?) ?? 0,
+      title: (json['title'] as String?) ?? '',
+      duration: (json['duration_formatted'] as String?) ?? '0:00',
+      views: '${json['view_count'] ?? 0} views',
+      creator: (creator['username'] as String?) ?? '',
+    );
+  }
+
   final int epNumber;
   final String title;
   final String duration;
@@ -54,6 +66,15 @@ class PersonResult {
     required this.subscribers,
   });
 
+  factory PersonResult.fromJson(Map<String, dynamic> json) {
+    final name = (json['display_name'] as String?) ?? (json['username'] as String?) ?? '';
+    return PersonResult(
+      name: name,
+      username: (json['username'] as String?) ?? '',
+      subscribers: '...',
+    );
+  }
+
   final String name;
   final String username;
   final String subscribers;
@@ -68,6 +89,16 @@ class PlaylistResult {
     required this.episodeCount,
     required this.duration,
   });
+
+  factory PlaylistResult.fromJson(Map<String, dynamic> json) {
+    final creator = json['creator'] ?? {};
+    return PlaylistResult(
+      title: (json['title'] as String?) ?? '',
+      creator: (creator['username'] as String?) ?? '',
+      episodeCount: (json['episode_count'] as int?) ?? 0,
+      duration: (json['duration_formatted'] as String?) ?? '0:00',
+    );
+  }
 
   final String title;
   final String creator;
@@ -121,113 +152,42 @@ class SearchResults {
 /// Riverpod choice: plain [Provider] — pure read-only index, no session
 /// mutations (like leaderboard Pass 1). Live query results stay in the
 /// screen; this provider only exposes [search].
-// TODO(backend, blocking): replace local demo search dataset with backend search API — expects: search(query: String) → {episodes: List<{epNumber: int, title: String, duration: String, views: String, creator: String}>, creators: List<{name: String, username: String, subscribers: String}>, users: List<{name: String, username: String, subscribers: String}>, playlists: List<{title: String, creator: String, episodeCount: int, duration: String}>}
 class SearchIndex {
-  const SearchIndex();
+  const SearchIndex(this.ref);
+  final Ref ref;
 
-  static const List<EpisodeResult> _episodes = [
-    EpisodeResult(
-      epNumber: 1,
-      title: 'Introduction to UI Design Thinking',
-      duration: '20:00',
-      views: '550.7k views',
-      creator: 'Amara Design',
-    ),
-    EpisodeResult(
-      epNumber: 2,
-      title: 'UI Design Systems that Scale',
-      duration: '18:24',
-      views: '412.3k views',
-      creator: 'Amara Design',
-    ),
-    EpisodeResult(
-      epNumber: 3,
-      title: 'Mastering Figma Components',
-      duration: '24:45',
-      views: '389.9k views',
-      creator: 'Amara Design',
-    ),
-    EpisodeResult(
-      epNumber: 4,
-      title: 'Auto Layout Deep Dive',
-      duration: '15:30',
-      views: '298.1k views',
-      creator: 'Kojo Sketches',
-    ),
-    EpisodeResult(
-      epNumber: 5,
-      title: 'Prototyping Motion in Figma',
-      duration: '21:12',
-      views: '176.4k views',
-      creator: 'Kojo Sketches',
-    ),
-  ];
-
-  static const List<PersonResult> _creators = [
-    PersonResult(name: 'Amara Design', username: 'amara', subscribers: '12.4k'),
-    PersonResult(
-      name: 'Kojo Sketches',
-      username: 'kojosketch',
-      subscribers: '8.1k',
-    ),
-  ];
-
-  static const List<PersonResult> _users = [
-    PersonResult(name: 'Amara Design', username: 'amara', subscribers: '12.4k'),
-    PersonResult(
-      name: 'Design Dan',
-      username: 'designdan',
-      subscribers: '1.2k',
-    ),
-  ];
-
-  static const List<PlaylistResult> _playlists = [
-    PlaylistResult(
-      title: 'Introduction to UI Design Thinking',
-      creator: 'Amara Design',
-      episodeCount: 20,
-      duration: '20:00',
-    ),
-    PlaylistResult(
-      title: 'Figma from Zero to Hero',
-      creator: 'Kojo Sketches',
-      episodeCount: 12,
-      duration: '14:00',
-    ),
-  ];
-
-  bool _matches(String haystack, String query) =>
-      haystack.toLowerCase().contains(query.toLowerCase());
-
-  SearchResults search(String query) {
+  Future<SearchResults> search(String query) async {
     final q = query.trim();
     if (q.isEmpty) {
-      return SearchResults(
-        query: q,
-        episodes: const [],
-        creators: const [],
-        users: const [],
-        playlists: const [],
+      return const SearchResults(
+        query: '',
+        episodes: [],
+        creators: [],
+        users: [],
+        playlists: [],
       );
     }
+    
+    final repo = ref.read(searchRepositoryProvider);
+    final json = await repo.search(q);
+    
+    final results = json['results'] as Map<String, dynamic>? ?? {};
+    
+    final creatorsJson = (results['creators'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final usersJson = (results['users'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final episodesJson = (results['episodes'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final playlistsJson = (results['playlists'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    
     return SearchResults(
       query: q,
-      episodes: _episodes
-          .where((e) => _matches(e.title, q) || _matches(e.creator, q))
-          .toList(),
-      creators: _creators
-          .where((c) => _matches(c.name, q) || _matches(c.username, q))
-          .toList(),
-      users: _users
-          .where((u) => _matches(u.name, q) || _matches(u.username, q))
-          .toList(),
-      playlists: _playlists
-          .where((p) => _matches(p.title, q) || _matches(p.creator, q))
-          .toList(),
+      creators: creatorsJson.map((e) => PersonResult.fromJson(e)).toList(),
+      users: usersJson.map((e) => PersonResult.fromJson(e)).toList(),
+      episodes: episodesJson.map((e) => EpisodeResult.fromJson(e)).toList(),
+      playlists: playlistsJson.map((e) => PlaylistResult.fromJson(e)).toList(),
     );
   }
 }
 
 final searchIndexProvider = Provider<SearchIndex>((ref) {
-  return const SearchIndex();
+  return SearchIndex(ref);
 });

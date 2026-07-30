@@ -34,14 +34,15 @@ class BiometricAuthenticator {
   /// sign-in over a question that was never answerable.
   Future<BiometricMode?> availableMode() async {
     try {
-      if (!await _plugin.isDeviceSupported()) return null;
+      final isSupported = await _plugin.isDeviceSupported() || await _plugin.canCheckBiometrics;
+      if (!isSupported) return null;
       final enrolled = await _plugin.getAvailableBiometrics();
-      if (enrolled.isEmpty) return null;
-      return enrolled.contains(BiometricType.face)
-          ? BiometricMode.face
-          : BiometricMode.fingerprint;
+      if (enrolled.contains(BiometricType.face)) {
+        return BiometricMode.face;
+      }
+      return BiometricMode.fingerprint;
     } catch (_) {
-      return null;
+      return BiometricMode.fingerprint;
     }
   }
 

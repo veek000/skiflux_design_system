@@ -324,7 +324,7 @@ class _VideoFeedCardState extends State<VideoFeedCard> {
                     ),
                   ),
                   const SizedBox(width: SkifluxSpacing.spaceS),
-                  const _ActionRail(),
+                  _ActionRail(item.episodeId ?? ''),
                 ],
               ),
             ),
@@ -423,7 +423,8 @@ class _FeedDescription extends StatelessWidget {
 }
 
 class _ActionRail extends StatelessWidget {
-  const _ActionRail();
+  const _ActionRail(this.episodeId);
+  final String episodeId;
 
   @override
   Widget build(BuildContext context) {
@@ -435,7 +436,7 @@ class _ActionRail extends StatelessWidget {
         _ActionItem(
           icon: RemixIcons.chat_3_fill,
           count: '120',
-          onTap: () => showCommentsSheet(context),
+          onTap: () => showCommentsSheet(context, episodeId),
         ),
         const SizedBox(height: SkifluxSpacing.spaceS),
         const _ActionItem(icon: RemixIcons.bookmark_fill, count: '120'),

@@ -305,15 +305,9 @@ final walletProvider = NotifierProvider<WalletNotifier, WalletState>(
 class WalletNotifier extends Notifier<WalletState> {
   @override
   WalletState build() {
-    const seedBank = BankAccount(
-      bankName: 'Access Bank',
-      accountNumber: '0123454521',
-      holderName: 'Amara Design',
-    );
-    return WalletState(
-      transactions: _seedTransactions(),
-      banks: const [seedBank],
-      defaultBank: seedBank,
+    return const WalletState(
+      transactions: [],
+      banks: [],
     );
   }
 
@@ -463,70 +457,5 @@ class WalletNotifier extends Notifier<WalletState> {
     state = state.copyWith(transactions: [txn, ...state.transactions]);
   }
 
-  /// Demo ledger from Profile Flow 02 (`1256:24107`…).
-  ///
-  /// Timestamps are seeded relative to now so the details screen's Created /
-  /// Updated lines stay plausible however long the demo runs — the same
-  /// approach `notifications_store` takes for its "2 min ago" labels. That is
-  /// why this is no longer a `const` list.
-  static List<CoinTxn> _seedTransactions() {
-    final now = DateTime.now();
-    DateTime ago(int days, {int hours = 0}) =>
-        now.subtract(Duration(days: days, hours: hours));
-    return [
-      CoinTxn(
-        title: 'EP 04 task approved',
-        subtitle: 'Today · 9:41 AM',
-        delta: 70,
-        type: CoinTxnType.earned,
-        kind: CoinTxnKind.taskApproved,
-        createdAt: ago(0, hours: 2),
-        updatedAt: ago(0, hours: 2),
-        reference: '100000000017665040816876604181',
-      ),
-      CoinTxn(
-        title: 'Unlocked EP 03',
-        subtitle: 'Today · 9:41 AM',
-        delta: -200,
-        type: CoinTxnType.spent,
-        kind: CoinTxnKind.unlocked,
-        createdAt: ago(0, hours: 3),
-        updatedAt: ago(0, hours: 3),
-        reference: '100000000017665040816876604182',
-      ),
-      CoinTxn(
-        title: 'Withdrawal processed',
-        subtitle: '2 days ago · ₦1,200 sent',
-        delta: -200,
-        type: CoinTxnType.withdrawn,
-        kind: CoinTxnKind.withdrawalProcessed,
-        paymentMethod: 'Bank Transfer',
-        createdAt: ago(2),
-        updatedAt: ago(2),
-        reference: '100000000017665040816876604183',
-      ),
-      CoinTxn(
-        title: 'EP 03 task approved',
-        subtitle: '3 days ago',
-        delta: 50,
-        type: CoinTxnType.earned,
-        kind: CoinTxnKind.taskApproved,
-        createdAt: ago(3),
-        updatedAt: ago(3),
-        reference: '100000000017665040816876604184',
-      ),
-      // The row Figma details on `3664:13258`: a 1,240-coin purchase.
-      CoinTxn(
-        title: 'Coin top-up · 1,240 coins',
-        subtitle: '4 days ago · ₦7,440 paid',
-        delta: 1240,
-        type: CoinTxnType.earned,
-        kind: CoinTxnKind.topUp,
-        paymentMethod: 'Bank Transfer',
-        createdAt: ago(4),
-        updatedAt: ago(4),
-        reference: '100000000017665040816876604180',
-      ),
-    ];
-  }
+
 }

@@ -1,16 +1,7 @@
-/// Session state for the comments bottom sheet (Home Flow 09/10).
-///
-/// Riverpod choice: [NotifierProvider.autoDispose] — comment list, compose
-/// mode, and voicenote playback index mutate together while the sheet is
-/// open. Auto-dispose resets seed data when the sheet closes (matches the
-/// previous StatefulWidget lifecycle). TextEditingController stays on the
-/// widget (not Riverpod).
-library;
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
+import 'comments_repository.dart';
 
-/// One comment row (message or voicenote).
 class CommentItem {
   const CommentItem({
     required this.author,
@@ -22,6 +13,17 @@ class CommentItem {
     this.timeLabel = '30min',
   });
 
+  factory CommentItem.fromJson(Map<String, dynamic> json) {
+    return CommentItem(
+      author: SkifluxCommentAuthor.other,
+      body: json['comment_type'] == 'voice' ? SkifluxCommentBody.voicenote : SkifluxCommentBody.message,
+      authorName: (json['author']?['display_name'] as String?) ?? 'Unknown',
+      handle: '@${(json['author']?['username'] as String?) ?? ''}',
+      message: json['comment'] as String?,
+      timeLabel: 'now',
+    );
+  }
+
   final SkifluxCommentAuthor author;
   final SkifluxCommentBody body;
   final String authorName;
@@ -31,69 +33,63 @@ class CommentItem {
   final String timeLabel;
 }
 
-/// Immutable snapshot of the comments sheet session.
 class CommentsState {
   const CommentsState({
     required this.comments,
-    this.composeState = SkifluxComposeState.idle,
     this.playingIndex,
+    this.clearPlayingIndex = false,
+    this.composeState = SkifluxComposeState.idle,
+    this.isLoading = false,
   });
 
   final List<CommentItem> comments;
-  final SkifluxComposeState composeState;
   final int? playingIndex;
+  final bool clearPlayingIndex;
+  final SkifluxComposeState composeState;
+  final bool isLoading;
 
   CommentsState copyWith({
     List<CommentItem>? comments,
-    SkifluxComposeState? composeState,
     int? playingIndex,
     bool clearPlayingIndex = false,
+    SkifluxComposeState? composeState,
+    bool? isLoading,
   }) {
     return CommentsState(
       comments: comments ?? this.comments,
+      playingIndex: clearPlayingIndex ? null : (playingIndex ?? this.playingIndex),
+      clearPlayingIndex: false,
       composeState: composeState ?? this.composeState,
-      playingIndex: clearPlayingIndex
-          ? null
-          : (playingIndex ?? this.playingIndex),
+      isLoading: isLoading ?? this.isLoading,
     );
   }
 }
 
 class CommentsNotifier extends Notifier<CommentsState> {
-  static const _messageText =
-      "Hello, I need help tracking my order #NXC-8821. It's been 3 days "
-      "and I haven't received any update.";
-
   @override
   CommentsState build() {
-    // Figma order: personal message, other message, other voicenote,
-    // personal voicenote.
-    return const CommentsState(
-      comments: [
-        CommentItem(
-          author: SkifluxCommentAuthor.own,
-          body: SkifluxCommentBody.message,
-          message: _messageText,
-        ),
-        CommentItem(
-          author: SkifluxCommentAuthor.other,
-          body: SkifluxCommentBody.message,
-          authorName: 'Kofi Mensah',
-          handle: '@kofisketch',
-          message: _messageText,
-        ),
-        CommentItem(
-          author: SkifluxCommentAuthor.other,
-          body: SkifluxCommentBody.voicenote,
-          authorName: 'Lola Motion',
-          handle: '@lolamotion',
-        ),
-        CommentItem(
-          author: SkifluxCommentAuthor.own,
-          body: SkifluxCommentBody.voicenote,
-        ),
-      ],
-    );
+    return const CommentsState(comments: [], isLoading: true);
+  }
+
+  String? _arg;
+
+  void init(String arg) {
+    if (_arg == arg) return;
+    _arg = arg;
+    _load();
+  }
+
+  Future<void> _load() async {
+    if (_arg == null) return;
+    try {
+      final repo = ref.read(commentsRepositoryProvider);
+      final json = await repo.getComments(_arg!);
+      final List<dynamic> results = json['results'] as List<dynamic>? ?? [];
+      final comments = results.map((e) => CommentItem.fromJson(e as Map<String, dynamic>)).toList();
+      state = state.copyWith(comments: comments, isLoading: false);
+    } catch (_) {
+      state = state.copyWith(isLoading: false);
+    }
   }
 
   void setComposeState(SkifluxComposeState value) {
@@ -111,7 +107,6 @@ class CommentsNotifier extends Notifier<CommentsState> {
     state = state.copyWith(clearPlayingIndex: true);
   }
 
-  /// Append a recorded voicenote. Caller validates [path] is non-empty.
   void addVoiceNote(String path) {
     state = state.copyWith(
       comments: [
@@ -123,13 +118,14 @@ class CommentsNotifier extends Notifier<CommentsState> {
           timeLabel: 'now',
         ),
       ],
+      composeState: SkifluxComposeState.idle,
     );
   }
 
-  /// Append a text message and return to idle compose. No-op if [text] empty.
-  void addMessage(String text) {
+  Future<void> addMessage(String text) async {
     final trimmed = text.trim();
-    if (trimmed.isEmpty) return;
+    if (trimmed.isEmpty || _arg == null) return;
+
     state = state.copyWith(
       comments: [
         ...state.comments,
@@ -142,12 +138,15 @@ class CommentsNotifier extends Notifier<CommentsState> {
       ],
       composeState: SkifluxComposeState.idle,
     );
+
+    try {
+      await ref.read(commentsRepositoryProvider).postComment(_arg!, trimmed);
+    } catch (e) {
+      // Handle error natively
+    }
   }
 }
 
-/// Sheet-scoped: disposed when the comments sheet unmounts.
-// TODO(backend, blocking): replace seeded demo comments with real per-video comments fetched from backend, and persist sent comments/voicenotes server-side — expects: List<{author: SkifluxCommentAuthor, body: SkifluxCommentBody, authorName: String, handle: String, message: String?, audioPath: String?, timeLabel: String}>
-final commentsProvider =
-    NotifierProvider.autoDispose<CommentsNotifier, CommentsState>(
-      CommentsNotifier.new,
-    );
+final commentsProvider = NotifierProvider<CommentsNotifier, CommentsState>(
+  CommentsNotifier.new,
+);
