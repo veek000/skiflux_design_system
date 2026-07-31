@@ -2,16 +2,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/error_handling/error_display.dart';
 import '../../shared/sheets/skiflux_sheet.dart';
+import '../../shared/utils/external_link.dart';
+import '../wallet/data/cards_repository.dart';
+import '../wallet/data/topup_repository.dart';
 import 'data/payment_store.dart';
 
-// Figma: **Settings → Add New Card** sheet (`1256:20477`) — Cardholder Name,
-// Card Number, Expiry Date + CVV, an encrypted-details reassurance banner, and
-// "Save Card Details". Saves to [paymentCardsProvider] and resolves with the
-// new card.
+// Figma: **Settings → Add New Card** sheet (`1256:20477`).
+//
+// PCI honesty: the app never collects a card number, expiry, or CVV. Per the
+// spec, `POST /wallet/cards/add` returns a gateway-hosted checkout URL where
+// the card is entered (Paystack charges a small refunded verification
+// amount; Stripe uses a no-charge setup session) — only the token and masked
+// details are ever stored. This sheet is the hand-off to that hosted page,
+// then refreshes the saved-card list.
+//
+// Resolves with `true` when the user came back and the list was refreshed;
+// null when they backed out.
 
-Future<SavedCard?> showAddCardSheet(BuildContext context) {
-  return showSkifluxSheet<SavedCard>(
+Future<bool?> showAddCardSheet(BuildContext context) {
+  return showSkifluxSheet<bool>(
     context: context,
     builder: (_) => const _AddCardSheet(),
   );
@@ -25,27 +36,10 @@ class _AddCardSheet extends ConsumerStatefulWidget {
 }
 
 class _AddCardSheetState extends ConsumerState<_AddCardSheet> {
-  final _name = TextEditingController();
-  final _number = TextEditingController();
-  final _expiry = TextEditingController();
-  final _cvv = TextEditingController();
+  bool _busy = false;
 
-  @override
-  void dispose() {
-    _name.dispose();
-    _number.dispose();
-    _expiry.dispose();
-    _cvv.dispose();
-    super.dispose();
-  }
-
-  bool get _valid {
-    final digits = _number.text.replaceAll(RegExp(r'\D'), '');
-    return _name.text.trim().isNotEmpty &&
-        digits.length >= 15 &&
-        _expiry.text.trim().length >= 4 &&
-        _cvv.text.trim().length >= 3;
-  }
+  /// True once the checkout URL has been handed off to the browser.
+  bool _handedOff = false;
 
   @override
   Widget build(BuildContext context) {
@@ -61,90 +55,51 @@ class _AddCardSheetState extends ConsumerState<_AddCardSheet> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _label('Cardholder Name'),
-            const SizedBox(height: SkifluxSpacing.spaceS),
-            SkifluxInputField(
-              controller: _name,
-              hintText: 'e.g John Doe',
-              onChanged: (_) => setState(() {}),
-            ),
+            _secureBanner(),
             const SizedBox(height: SkifluxSpacing.spaceL),
-            _label('Card Number'),
-            const SizedBox(height: SkifluxSpacing.spaceS),
-            SkifluxInputField(
-              controller: _number,
-              hintText: '0000 0000 0000 0000',
-              keyboardType: TextInputType.number,
-              trailingIcon: const Icon(
-                RemixIcons.bank_card_fill,
-                size: SkifluxIcons.sizeS,
-                color: SkifluxColors.contentTertiary,
+            Text(
+              _handedOff
+                  ? 'Finish adding your card on the secure page, then come '
+                        'back here and tap "I\'ve added my card".'
+                  : 'You\'ll be taken to our payment provider\'s secure page '
+                        'to enter your card details. A small verification '
+                        'charge may apply and is refunded automatically.',
+              style: SkifluxTypography.bodyP8Regular.copyWith(
+                color: SkifluxColors.contentSecondary,
               ),
-              onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: SkifluxSpacing.spaceL),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _label('Expiry Date'),
-                      const SizedBox(height: SkifluxSpacing.spaceS),
-                      SkifluxInputField(
-                        controller: _expiry,
-                        hintText: 'MM/YY',
-                        keyboardType: TextInputType.number,
-                        onChanged: (_) => setState(() {}),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: SkifluxSpacing.spaceS),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _label('CVV'),
-                      const SizedBox(height: SkifluxSpacing.spaceS),
-                      SkifluxInputField(
-                        controller: _cvv,
-                        hintText: 'e.g 123',
-                        keyboardType: TextInputType.number,
-                        obscureText: true,
-                        onChanged: (_) => setState(() {}),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: SkifluxSpacing.spaceL),
-            _encryptedBanner(),
-            const SizedBox(height: SkifluxSpacing.spaceL),
-            SkifluxButton(
-              label: 'Save Card Details',
-              expanded: true,
-              onPressed: _valid ? _save : null,
-            ),
+            if (!_handedOff)
+              SkifluxButton(
+                label: _busy
+                    ? 'Preparing secure page…'
+                    : 'Continue to Secure Page',
+                expanded: true,
+                onPressed: _busy ? null : _startHostedFlow,
+              )
+            else ...[
+              SkifluxButton(
+                label: _busy ? 'Refreshing…' : "I've added my card",
+                expanded: true,
+                onPressed: _busy ? null : _confirmReturn,
+              ),
+              const SizedBox(height: SkifluxSpacing.spaceS),
+              SkifluxButton(
+                label: 'Cancel',
+                type: SkifluxButtonType.secondary,
+                expanded: true,
+                onPressed: _busy ? null : () => Navigator.of(context).pop(),
+              ),
+            ],
           ],
         ),
       ),
     );
   }
 
-  Widget _label(String text) {
-    return Text(
-      text,
-      style: SkifluxTypography.uiInputLabel.copyWith(
-        color: SkifluxColors.contentPrimary,
-      ),
-    );
-  }
-
-  /// Green "your details are encrypted" reassurance banner.
-  Widget _encryptedBanner() {
+  /// Honest security banner: the card is entered on the gateway's page, not
+  /// in this app.
+  Widget _secureBanner() {
     return Container(
       padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
       decoration: BoxDecoration(
@@ -161,7 +116,8 @@ class _AddCardSheetState extends ConsumerState<_AddCardSheet> {
           const SizedBox(width: SkifluxSpacing.spaceS),
           Expanded(
             child: Text(
-              'Your payment details are encrypted and secure.',
+              'Your card details are entered on the payment provider\'s '
+              'secure page — Skiflux never sees or stores your card number.',
               style: SkifluxTypography.bodyP10Regular.copyWith(
                 color: SkifluxColors.contentSecondary,
               ),
@@ -172,21 +128,55 @@ class _AddCardSheetState extends ConsumerState<_AddCardSheet> {
     );
   }
 
-  void _save() {
-    final digits = _number.text.replaceAll(RegExp(r'\D'), '');
-    // Infer the network from the leading digit (demo — real apps use a BIN
-    // lookup): 4 → Visa, 5 → Mastercard, else Verve.
-    final brand = switch (digits.isEmpty ? '' : digits[0]) {
-      '4' => CardBrand.visa,
-      '5' => CardBrand.mastercard,
-      _ => CardBrand.verve,
-    };
-    final card = SavedCard(
-      brand: brand,
-      last4: digits.substring(digits.length - 4),
-      expiry: _expiry.text.trim(),
-    );
-    ref.read(paymentCardsProvider.notifier).addCard(card);
-    Navigator.of(context).pop(card);
+  /// `POST /wallet/cards/add` → open the returned checkout URL.
+  Future<void> _startHostedFlow() async {
+    setState(() => _busy = true);
+    try {
+      final checkoutUrl = await ref
+          .read(cardsRepositoryProvider)
+          .startAddCard(gatewayName: _preferredGateway());
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _handedOff = true;
+      });
+      await openExternalUrl(context, checkoutUrl);
+    } catch (e, st) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      await ErrorDisplay.show(context, ref, e, stackTrace: st);
+    }
+  }
+
+  /// Re-reads the card vault; the caller decides whether a new card actually
+  /// appeared — nothing here claims success on its own.
+  Future<void> _confirmReturn() async {
+    setState(() => _busy = true);
+    await ref.read(savedCardsProvider.notifier).refresh();
+    if (!mounted) return;
+    setState(() => _busy = false);
+    Navigator.of(context).pop(true);
+  }
+
+  /// Gateway for `AddCardRequest.gateway_name` (required by the spec).
+  /// Best-effort from the cached top-up methods discovery payload; the
+  /// documented server default (paystack) otherwise.
+  String _preferredGateway() {
+    final methods = ref.read(topupMethodsProvider).value;
+    if (methods != null) {
+      for (final key in const ['enabled_topup_gateways', 'gateways']) {
+        final list = methods[key];
+        if (list is List) {
+          for (final entry in list) {
+            if (entry is String && entry.isNotEmpty) return entry;
+            if (entry is Map) {
+              final name = entry['name'] ?? entry['gateway_name'];
+              if (name is String && name.isNotEmpty) return name;
+            }
+          }
+        }
+      }
+    }
+    return 'paystack';
   }
 }

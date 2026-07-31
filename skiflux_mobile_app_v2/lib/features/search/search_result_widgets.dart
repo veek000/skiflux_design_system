@@ -56,22 +56,33 @@ class EpisodeResultCard extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Thumbnail placeholder (demo data has no artwork).
-            // TODO(backend, minor): replace brand-colored placeholder thumbnails with real episode/playlist cover artwork URLs from backend — expects: String (network URL)
-            Container(
-              width: 128,
-              decoration: BoxDecoration(
-                color: SkifluxColors.magenta900,
-                borderRadius: SkifluxRadii.borderL,
-              ),
-              child: Stack(
-                children: [
-                  Positioned(
-                    right: SkifluxSpacing.spaceM,
-                    bottom: SkifluxSpacing.spaceM,
-                    child: _ThumbChip(label: episode.duration),
-                  ),
-                ],
+            // Real `thumbnail_url` artwork when the payload carries one;
+            // brand-coloured block as the offline/missing fallback (same
+            // network→asset pattern as the feed card cover).
+            ClipRRect(
+              borderRadius: SkifluxRadii.borderL,
+              child: SizedBox(
+                width: 128,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (episode.hasThumbnail)
+                      Image.network(
+                        episode.thumbnailUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => const ColoredBox(
+                          color: SkifluxColors.magenta900,
+                        ),
+                      )
+                    else
+                      const ColoredBox(color: SkifluxColors.magenta900),
+                    Positioned(
+                      right: SkifluxSpacing.spaceM,
+                      bottom: SkifluxSpacing.spaceM,
+                      child: _ThumbChip(label: episode.duration),
+                    ),
+                  ],
+                ),
               ),
             ),
             Expanded(
@@ -138,18 +149,19 @@ class PersonResultRow extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(SkifluxSpacing.spaceM),
-            decoration: const BoxDecoration(
-              color: SkifluxColors.backgroundSelected,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              RemixIcons.user_fill,
-              size: SkifluxIcons.sizeS,
-              color: SkifluxColors.contentBrand,
-            ),
-          ),
+          // Real avatar_url when the payload carries one; icon fallback.
+          if (person.avatarUrl != null && person.avatarUrl!.isNotEmpty)
+            ClipOval(
+              child: Image.network(
+                person.avatarUrl!,
+                width: SkifluxUnit.u40,
+                height: SkifluxUnit.u40,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => const _PersonAvatarFallback(),
+              ),
+            )
+          else
+            const _PersonAvatarFallback(),
           const SizedBox(width: SkifluxSpacing.spaceS),
           Expanded(
             child: Column(
@@ -181,6 +193,29 @@ class PersonResultRow extends StatelessWidget {
             onPressed: onAction,
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 40px `Background/Selected` circle with the brand user glyph — shown when
+/// a person row has no avatar URL (or it fails to load).
+class _PersonAvatarFallback extends StatelessWidget {
+  const _PersonAvatarFallback();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: SkifluxUnit.u40,
+      height: SkifluxUnit.u40,
+      decoration: const BoxDecoration(
+        color: SkifluxColors.backgroundSelected,
+        shape: BoxShape.circle,
+      ),
+      child: const Icon(
+        RemixIcons.user_fill,
+        size: SkifluxIcons.sizeS,
+        color: SkifluxColors.contentBrand,
       ),
     );
   }

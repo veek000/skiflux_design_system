@@ -8,7 +8,7 @@
 /// here so no screen carries a stale assumption.
 ///
 /// Every path below is public (`- {}` security in the spec) except
-/// [logout], which needs a valid access token to blacklist the refresh token.
+/// [logout] and [changePassword], which require a valid access token.
 library;
 
 abstract final class AuthEndpoints {
@@ -16,6 +16,11 @@ abstract final class AuthEndpoints {
   static const login = '/auth/login';
   static const logout = '/auth/logout';
   static const refresh = '/auth/token/refresh';
+
+  /// `POST /auth/change-password` — authenticated (bearer only, no `- {}`),
+  /// for a signed-in user who knows their current password. Distinct from the
+  /// OTP-based [resetPassword] flow.
+  static const changePassword = '/auth/change-password';
 
   /// Spec name: NOT `/auth/verify`.
   static const verifyRegisterEmail = '/auth/verify-register-email';
@@ -81,6 +86,18 @@ abstract final class AuthRequests {
     required String email,
     required String otp,
   }) => {'email': email.trim(), 'otp': otp};
+
+  /// `POST /auth/change-password` — the spec's `ChangePasswordRequest`: all
+  /// three fields required, new password minimum 8 characters.
+  static Map<String, dynamic> changePassword({
+    required String currentPassword,
+    required String newPassword,
+    required String confirmNewPassword,
+  }) => {
+    'current_password': currentPassword,
+    'new_password': newPassword,
+    'confirm_new_password': confirmNewPassword,
+  };
 
   /// `POST /auth/reset-password` — OTP plus both password fields.
   static Map<String, dynamic> resetPassword({

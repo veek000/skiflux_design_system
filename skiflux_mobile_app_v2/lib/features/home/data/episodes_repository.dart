@@ -22,6 +22,32 @@ class EpisodesRepository extends ApiRepository {
     '/episodes/following/',
     parse: episodeJsonToFeedItem,
   );
+
+  /// `POST /episodes/track-view` — records watch progress so watch history,
+  /// continue-watching and task unlocks work downstream.
+  ///
+  /// Spec `TrackViewRequest`: `{episode_id, watch_duration_seconds,
+  /// completed}`. Callers (the feed's [ViewTracker]) keep this silent — a
+  /// failed telemetry post is never a user-facing error.
+  Future<void> trackView(
+    String episodeId, {
+    required int watchDurationSeconds,
+    bool completed = false,
+  }) => post<void>(
+    '/episodes/track-view',
+    body: {
+      'episode_id': episodeId,
+      'watch_duration_seconds': watchDurationSeconds,
+      'completed': completed,
+    },
+  );
+
+  /// `POST /episodes/not-interested` — permanently removes the episode from
+  /// the user's recommendation feed (spec `EpisodeActionRequest`).
+  Future<void> markNotInterested(String episodeId) => post<void>(
+    '/episodes/not-interested',
+    body: {'episode_id': episodeId},
+  );
 }
 
 /// Maps OpenAPI `Episode` JSON → [HomeFeedItem] for the home PageView.
@@ -42,11 +68,16 @@ HomeFeedItem episodeJsonToFeedItem(Map<String, dynamic> json) {
   var creatorName = 'Creator';
   var creatorUsername = '';
   var creatorInitials = 'C';
+  String? creatorId;
   if (creator is Map) {
     final c = Map<String, dynamic>.from(creator);
     final first = _stringOrNull(c['first_name']) ?? '';
     final last = _stringOrNull(c['last_name']) ?? '';
-    final display = _stringOrNull(c['display_name']);
+    // Spec `Creator` carries a composed `name`; older payloads used
+    // first/last/display — accept all of them.
+    final display =
+        _stringOrNull(c['name']) ?? _stringOrNull(c['display_name']);
+    creatorId = _stringOrNull(c['id']?.toString());
     creatorUsername = _stringOrNull(c['username']) ?? '';
     creatorName = (display != null && display.isNotEmpty)
         ? display
@@ -57,6 +88,8 @@ HomeFeedItem episodeJsonToFeedItem(Map<String, dynamic> json) {
       creatorInitials =
           '${first.isNotEmpty ? first[0] : ''}${last.isNotEmpty ? last[0] : ''}'
               .toUpperCase();
+    } else if (creatorName.isNotEmpty && creatorName != 'Creator') {
+      creatorInitials = creatorName[0].toUpperCase();
     } else if (creatorUsername.isNotEmpty) {
       creatorInitials = creatorUsername[0].toUpperCase();
     }
@@ -76,7 +109,19 @@ HomeFeedItem episodeJsonToFeedItem(Map<String, dynamic> json) {
     creatorUsername: creatorUsername,
     creatorInitials: creatorInitials.isEmpty ? 'C' : creatorInitials,
     episodeId: id.isEmpty ? null : id,
+    creatorId: creatorId,
+    likeCount: _intOrNull(json['like_count']),
+    commentCount: _intOrNull(json['comment_count']),
+    saveCount: _intOrNull(json['save_count']),
+    durationSeconds: _intOrNull(json['video_duration']),
   );
+}
+
+int? _intOrNull(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value);
+  return null;
 }
 
 String? _stringOrNull(Object? value) {

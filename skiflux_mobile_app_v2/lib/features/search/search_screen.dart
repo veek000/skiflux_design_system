@@ -6,9 +6,12 @@ import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/error_handling/error_display.dart';
 import '../../shared/error_handling/error_handler.dart';
+import '../../shared/toast/skiflux_toast.dart';
+import '../../shared/widgets/load_failure.dart';
 import '../playlists/playlist_screen.dart';
 import '../profile/profile_screen.dart';
 import '../profile/public_user_profile_screen.dart';
+import '../subscriptions/data/subscriptions_store.dart';
 import 'data/recent_searches_store.dart';
 import 'data/search_index.dart';
 import 'search_result_widgets.dart';
@@ -24,6 +27,10 @@ import 'search_results_screen.dart';
 /// - Typing, hits → grouped overview with See-all sections + bottom
 ///   "See all results" link (flow 04)
 /// - Typing, no hits → Nothing-found empty state (flow 05)
+///
+/// Requests are debounced (~300ms) and sequence-guarded so a slow older
+/// response can never overwrite a newer one; a failed search renders an
+/// inline retry panel rather than a modal per keystroke.
 class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});
 
@@ -34,34 +41,47 @@ class SearchScreen extends ConsumerStatefulWidget {
 class _SearchScreenState extends ConsumerState<SearchScreen> {
   final _controller = TextEditingController();
 
-  SearchResults _results = const SearchResults(
-    query: '',
-    episodes: [],
-    creators: [],
-    users: [],
-    playlists: [],
-  );
+  static const _debounceDelay = Duration(milliseconds: 300);
+
+  SearchResults _results = SearchResults.empty;
+  Object? _error;
+  Timer? _debounce;
+  var _searchSeq = 0;
+  var _query = '';
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _controller.dispose();
     super.dispose();
   }
 
-  void _onQueryChanged(String query) async {
+  void _onQueryChanged(String query) {
+    _query = query.trim();
+    _debounce?.cancel();
+    if (_query.isEmpty) {
+      // Invalidate any in-flight request so it can't repopulate the list.
+      _searchSeq++;
+      setState(() {
+        _results = SearchResults.empty;
+        _error = null;
+      });
+      return;
+    }
+    _debounce = Timer(_debounceDelay, () => _runSearch(_query));
+  }
+
+  Future<void> _runSearch(String query) async {
+    final seq = ++_searchSeq;
+    setState(() => _error = null);
     try {
-      final index = ref.read(searchIndexProvider);
-      final results = await index.search(query);
-      if (!mounted) return;
+      final results = await ref.read(searchIndexProvider).search(query);
+      // Stale responses (an older request finishing late) are dropped.
+      if (!mounted || seq != _searchSeq) return;
       setState(() => _results = results);
-    } catch (e, st) {
-      if (!mounted) return;
-      await ErrorDisplay.show(
-        context,
-        ref,
-        SkifluxFailure(SkifluxErrorKind.searchFailed, cause: e),
-        stackTrace: st,
-      );
+    } catch (e) {
+      if (!mounted || seq != _searchSeq) return;
+      setState(() => _error = e);
     }
   }
 
@@ -102,7 +122,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   void _runRecent(RecentSearch entry) {
     _controller.text = entry.query;
-    _onQueryChanged(entry.query);
+    _query = entry.query.trim();
+    _debounce?.cancel();
+    // A deliberate tap needs no debounce.
+    _runSearch(_query);
   }
 
   Future<void> _removeRecent(RecentSearch entry) async {
@@ -133,18 +156,43 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     }
   }
 
+  /// `GET /creators/{id}` takes the creator UUID the search payload carries.
   void _openCreatorProfile(PersonResult person) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => ProfileScreen(creatorId: person.username)));
+    if (person.id.isEmpty) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ProfileScreen(creatorId: person.id),
+      ),
+    );
   }
 
+  /// `GET /users/by-username/{username}` — needs a real username; `BasicUser`
+  /// allows a null one, in which case there is nothing honest to open.
   void _openUserProfile(PersonResult person) {
+    if (person.username.isEmpty) return;
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => PublicUserProfileScreen(username: person.username),
       ),
     );
+  }
+
+  Future<void> _followCreator(PersonResult person) async {
+    try {
+      await ref.read(subscriptionsProvider.notifier).subscribe(
+            SubscribedCreator(
+              id: person.id,
+              name: person.name,
+              username: person.username,
+              initials: person.name.isEmpty ? '?' : person.name[0].toUpperCase(),
+            ),
+          );
+      if (!mounted) return;
+      SkifluxToast.success(context, 'Subscribed to ${person.name}');
+    } catch (e, st) {
+      if (!mounted) return;
+      await ErrorDisplay.show(context, ref, e, stackTrace: st);
+    }
   }
 
   @override
@@ -222,8 +270,20 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   Widget _body(List<RecentSearch> recents) {
-    if (_results.query.isEmpty) {
+    if (_query.isEmpty) {
       return recents.isEmpty ? _firstUseState() : _recentList(recents);
+    }
+    // Inline failure with retry — never a modal per keystroke.
+    if (_error != null) {
+      return LoadFailure(
+        error: _error!,
+        title: "We couldn't run that search",
+        onRetry: () => _runSearch(_query),
+      );
+    }
+    if (_results.query != _query) {
+      // Debounce/request still in flight for the current text.
+      return const Center(child: CircularProgressIndicator());
     }
     return _results.isEmpty ? _nothingFoundState() : _overview();
   }
@@ -316,12 +376,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             first: r.episodes.isEmpty,
             children: [
               for (final c in r.creators.take(_previewLimit))
-                PersonResultRow(
-                  person: c,
-                  actionLabel: 'Follow',
-                  onAction: () {},
-                  onTap: () => _openCreatorProfile(c),
-                ),
+                _creatorRow(c),
             ],
           ),
         if (r.users.isNotEmpty)
@@ -333,7 +388,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 PersonResultRow(
                   person: u,
                   actionLabel: 'View Profile',
-                  onAction: () => _openUserProfile(u),
+                  onAction:
+                      u.username.isEmpty ? null : () => _openUserProfile(u),
                   onTap: () => _openUserProfile(u),
                 ),
             ],
@@ -354,6 +410,20 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           ),
         _seeAllResultsLink(),
       ],
+    );
+  }
+
+  /// Creator row with a live Follow action: label reflects the real follow
+  /// state, and the tap runs the backend toggle (toast only on success).
+  Widget _creatorRow(PersonResult c) {
+    final followed = ref
+        .watch(subscriptionsProvider)
+        .isSubscribed(c.id.isNotEmpty ? c.id : c.username);
+    return PersonResultRow(
+      person: c,
+      actionLabel: followed ? 'Following' : 'Follow',
+      onAction: followed || c.id.isEmpty ? null : () => _followCreator(c),
+      onTap: () => _openCreatorProfile(c),
     );
   }
 

@@ -1,21 +1,53 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/error_handling/error_display.dart';
 import 'data/settings_store.dart';
 import 'widgets/settings_tile.dart';
 
 // Figma: **Settings → Notifications** (`1256:20787`) — grouped notification
-// switches: Activity, Coins & Rewards, Platform. Each toggle is backed by
-// [settingsProvider].
+// switches: Activity, Coins & Rewards, Platform. Backed by [settingsProvider],
+// which syncs the seven switches with `GET/PATCH /me/notification-preferences`:
+// opening this screen pulls the server's answer, and each flip PATCHes
+// optimistically, rolling back (with an error surfaced) when the server
+// refuses.
 
-class NotificationSettingsScreen extends ConsumerWidget {
+class NotificationSettingsScreen extends ConsumerStatefulWidget {
   const NotificationSettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<NotificationSettingsScreen> createState() =>
+      _NotificationSettingsScreenState();
+}
+
+class _NotificationSettingsScreenState
+    extends ConsumerState<NotificationSettingsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Hydrate from the backend; on failure the cached values stay on screen.
+    unawaited(ref.read(settingsProvider.notifier).syncNotificationPrefs());
+  }
+
+  /// Optimistic flip — the notifier already rolled the switch back before
+  /// this catch runs, so all that's left is telling the user why it snapped.
+  Future<void> _toggle(NotificationPref pref, bool value) async {
+    try {
+      await ref
+          .read(settingsProvider.notifier)
+          .setNotificationPref(pref, value);
+    } catch (error, stackTrace) {
+      if (!mounted) return;
+      await ErrorDisplay.show(context, ref, error, stackTrace: stackTrace);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final prefs = ref.watch(settingsProvider).notifications;
-    final notifier = ref.read(settingsProvider.notifier);
 
     SettingsTile tile({
       required NotificationPref pref,
@@ -33,7 +65,9 @@ class NotificationSettingsScreen extends ConsumerWidget {
         subtitle: subtitle,
         trailing: SkifluxSwitch(
           value: prefs[pref] ?? false,
-          onChanged: (v) => notifier.toggleNotification(pref, v),
+          onChanged: (v) {
+            unawaited(_toggle(pref, v));
+          },
         ),
       );
     }

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/error_handling/error_display.dart';
+import '../../shared/toast/skiflux_toast.dart';
 import 'data/subscriptions_store.dart';
 import 'filter_sheet.dart';
 import 'subscription_widgets.dart';
@@ -34,7 +36,16 @@ class _AllSubscriptionsScreenState
       case SetNotificationMode(:final mode):
         notifier.setNotificationMode(creator, mode);
       case Unsubscribe():
-        notifier.unsubscribe(creator);
+        // Optimistic removal with rollback inside the notifier; the row only
+        // stays gone if `POST /creators/{id}/follow/` confirms.
+        try {
+          await notifier.unsubscribe(creator);
+          if (!mounted) return;
+          SkifluxToast.success(context, 'Unsubscribed from ${creator.name}');
+        } catch (e, st) {
+          if (!mounted) return;
+          await ErrorDisplay.show(context, ref, e, stackTrace: st);
+        }
     }
   }
 

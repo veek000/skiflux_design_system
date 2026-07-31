@@ -2,18 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
-import '../../shared/sheets/confirm_sheet.dart';
-import '../../shared/sheets/success_sheet.dart';
+import '../../shared/toast/skiflux_toast.dart';
 import '../auth/data/legal_documents.dart';
 import '../auth/screens/legal_screen.dart';
 import 'data/settings_store.dart';
 import 'widgets/settings_tile.dart';
 
 // Figma: **Settings → Privacy & Data** (`1256:20874`) — data/activity toggles
-// plus data-management links: Request my data → "Data Export Requested"
-// (`1256:20935`), the two legal documents (`1277:32411` / `1277:32341`), and
-// Delete Account → "Delete Account?" (`1256:21069`) → "Account Deleted"
-// (`1256:21002`).
+// plus data-management links and the two legal documents.
+//
+// "Request my data" and "Delete Account" are drawn but honest about their
+// state: the spec has no learner-facing data-export or account-deletion
+// endpoint (deactivation exists only as an admin action), so both say
+// "coming soon" on tap instead of the fabricated "Data Export Requested" /
+// "Account Deleted" success sheets they used to show (`1256:20935`,
+// `1256:21069`, `1256:21002`). Wire the sheets back in when the endpoints
+// ship — and make Delete Account sign out on success.
 
 class PrivacyDataScreen extends ConsumerWidget {
   const PrivacyDataScreen({super.key});
@@ -74,12 +78,10 @@ class PrivacyDataScreen extends ConsumerWidget {
                   iconBackground: SkifluxColors.backgroundPositiveSubtle,
                   iconColor: SkifluxColors.contentPositiveBold,
                   title: 'Request my data',
-                  onTap: () => showSuccessSheet(
+                  subtitle: 'Coming soon',
+                  onTap: () => SkifluxToast.info(
                     context,
-                    title: 'Data Export Requested',
-                    message:
-                        'Your data export is being processed. We will '
-                        'email you a secure download link shortly.',
+                    'Data export is coming soon. Nothing was requested yet.',
                   ),
                 ),
                 SettingsTile(
@@ -102,7 +104,12 @@ class PrivacyDataScreen extends ConsumerWidget {
                   iconColor: SkifluxColors.contentNegative,
                   title: 'Delete Account',
                   titleColor: SkifluxColors.contentNegative,
-                  onTap: () => _deleteAccount(context),
+                  subtitle: 'Coming soon',
+                  onTap: () => SkifluxToast.info(
+                    context,
+                    'Account deletion is coming soon. Contact '
+                    'support@skiflux.com to delete your account today.',
+                  ),
                 ),
               ],
             ),
@@ -126,23 +133,4 @@ class PrivacyDataScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _deleteAccount(BuildContext context) async {
-    final confirmed = await showConfirmSheet(
-      context,
-      title: 'Delete Account?',
-      message:
-          'This action is completely irreversible. All your progress, '
-          'badges, and SkillCoins will be permanently wiped.',
-      confirmLabel: 'Delete Account',
-      icon: RemixIcons.delete_bin_fill,
-    );
-    if (confirmed != true || !context.mounted) return;
-    await showSuccessSheet(
-      context,
-      title: 'Account Deleted',
-      message:
-          'Your account has been deleted. You will be logged out '
-          'shortly.',
-    );
-  }
 }

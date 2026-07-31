@@ -15,9 +15,10 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$SavedCard {
 
- String get id; String get gatewayName; String get cardBrand;/// Pre-masked by the backend, e.g. `**** **** **** 4081`.
- String get maskedNumber; String get last4; String get expMonth; String get expYear; bool get isDefault; DateTime get createdAt;// Empty string (not absent) in the documented Stripe example.
- String get bankName; String get cardType;
+ String get id; String get gatewayName;/// Pre-masked by the backend, e.g. `**** **** **** 4081`.
+ String get maskedNumber; String get last4; DateTime get createdAt;// Empty string (not absent) in the documented Stripe example; optional
+// per the spec either way.
+ String get cardBrand; String get expMonth; String get expYear; bool get isDefault; String get bankName; String get cardType;
 /// Create a copy of SavedCard
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -30,16 +31,16 @@ $SavedCardCopyWith<SavedCard> get copyWith => _$SavedCardCopyWithImpl<SavedCard>
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is SavedCard&&(identical(other.id, id) || other.id == id)&&(identical(other.gatewayName, gatewayName) || other.gatewayName == gatewayName)&&(identical(other.cardBrand, cardBrand) || other.cardBrand == cardBrand)&&(identical(other.maskedNumber, maskedNumber) || other.maskedNumber == maskedNumber)&&(identical(other.last4, last4) || other.last4 == last4)&&(identical(other.expMonth, expMonth) || other.expMonth == expMonth)&&(identical(other.expYear, expYear) || other.expYear == expYear)&&(identical(other.isDefault, isDefault) || other.isDefault == isDefault)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.bankName, bankName) || other.bankName == bankName)&&(identical(other.cardType, cardType) || other.cardType == cardType));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is SavedCard&&(identical(other.id, id) || other.id == id)&&(identical(other.gatewayName, gatewayName) || other.gatewayName == gatewayName)&&(identical(other.maskedNumber, maskedNumber) || other.maskedNumber == maskedNumber)&&(identical(other.last4, last4) || other.last4 == last4)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.cardBrand, cardBrand) || other.cardBrand == cardBrand)&&(identical(other.expMonth, expMonth) || other.expMonth == expMonth)&&(identical(other.expYear, expYear) || other.expYear == expYear)&&(identical(other.isDefault, isDefault) || other.isDefault == isDefault)&&(identical(other.bankName, bankName) || other.bankName == bankName)&&(identical(other.cardType, cardType) || other.cardType == cardType));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,gatewayName,cardBrand,maskedNumber,last4,expMonth,expYear,isDefault,createdAt,bankName,cardType);
+int get hashCode => Object.hash(runtimeType,id,gatewayName,maskedNumber,last4,createdAt,cardBrand,expMonth,expYear,isDefault,bankName,cardType);
 
 @override
 String toString() {
-  return 'SavedCard(id: $id, gatewayName: $gatewayName, cardBrand: $cardBrand, maskedNumber: $maskedNumber, last4: $last4, expMonth: $expMonth, expYear: $expYear, isDefault: $isDefault, createdAt: $createdAt, bankName: $bankName, cardType: $cardType)';
+  return 'SavedCard(id: $id, gatewayName: $gatewayName, maskedNumber: $maskedNumber, last4: $last4, createdAt: $createdAt, cardBrand: $cardBrand, expMonth: $expMonth, expYear: $expYear, isDefault: $isDefault, bankName: $bankName, cardType: $cardType)';
 }
 
 
@@ -50,7 +51,7 @@ abstract mixin class $SavedCardCopyWith<$Res>  {
   factory $SavedCardCopyWith(SavedCard value, $Res Function(SavedCard) _then) = _$SavedCardCopyWithImpl;
 @useResult
 $Res call({
- String id, String gatewayName, String cardBrand, String maskedNumber, String last4, String expMonth, String expYear, bool isDefault, DateTime createdAt, String bankName, String cardType
+ String id, String gatewayName, String maskedNumber, String last4, DateTime createdAt, String cardBrand, String expMonth, String expYear, bool isDefault, String bankName, String cardType
 });
 
 
@@ -67,18 +68,18 @@ class _$SavedCardCopyWithImpl<$Res>
 
 /// Create a copy of SavedCard
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? gatewayName = null,Object? cardBrand = null,Object? maskedNumber = null,Object? last4 = null,Object? expMonth = null,Object? expYear = null,Object? isDefault = null,Object? createdAt = null,Object? bankName = null,Object? cardType = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? gatewayName = null,Object? maskedNumber = null,Object? last4 = null,Object? createdAt = null,Object? cardBrand = null,Object? expMonth = null,Object? expYear = null,Object? isDefault = null,Object? bankName = null,Object? cardType = null,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,gatewayName: null == gatewayName ? _self.gatewayName : gatewayName // ignore: cast_nullable_to_non_nullable
-as String,cardBrand: null == cardBrand ? _self.cardBrand : cardBrand // ignore: cast_nullable_to_non_nullable
 as String,maskedNumber: null == maskedNumber ? _self.maskedNumber : maskedNumber // ignore: cast_nullable_to_non_nullable
 as String,last4: null == last4 ? _self.last4 : last4 // ignore: cast_nullable_to_non_nullable
+as String,createdAt: null == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
+as DateTime,cardBrand: null == cardBrand ? _self.cardBrand : cardBrand // ignore: cast_nullable_to_non_nullable
 as String,expMonth: null == expMonth ? _self.expMonth : expMonth // ignore: cast_nullable_to_non_nullable
 as String,expYear: null == expYear ? _self.expYear : expYear // ignore: cast_nullable_to_non_nullable
 as String,isDefault: null == isDefault ? _self.isDefault : isDefault // ignore: cast_nullable_to_non_nullable
-as bool,createdAt: null == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
-as DateTime,bankName: null == bankName ? _self.bankName : bankName // ignore: cast_nullable_to_non_nullable
+as bool,bankName: null == bankName ? _self.bankName : bankName // ignore: cast_nullable_to_non_nullable
 as String,cardType: null == cardType ? _self.cardType : cardType // ignore: cast_nullable_to_non_nullable
 as String,
   ));
@@ -165,10 +166,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String gatewayName,  String cardBrand,  String maskedNumber,  String last4,  String expMonth,  String expYear,  bool isDefault,  DateTime createdAt,  String bankName,  String cardType)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String gatewayName,  String maskedNumber,  String last4,  DateTime createdAt,  String cardBrand,  String expMonth,  String expYear,  bool isDefault,  String bankName,  String cardType)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _SavedCard() when $default != null:
-return $default(_that.id,_that.gatewayName,_that.cardBrand,_that.maskedNumber,_that.last4,_that.expMonth,_that.expYear,_that.isDefault,_that.createdAt,_that.bankName,_that.cardType);case _:
+return $default(_that.id,_that.gatewayName,_that.maskedNumber,_that.last4,_that.createdAt,_that.cardBrand,_that.expMonth,_that.expYear,_that.isDefault,_that.bankName,_that.cardType);case _:
   return orElse();
 
 }
@@ -186,10 +187,10 @@ return $default(_that.id,_that.gatewayName,_that.cardBrand,_that.maskedNumber,_t
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String gatewayName,  String cardBrand,  String maskedNumber,  String last4,  String expMonth,  String expYear,  bool isDefault,  DateTime createdAt,  String bankName,  String cardType)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String gatewayName,  String maskedNumber,  String last4,  DateTime createdAt,  String cardBrand,  String expMonth,  String expYear,  bool isDefault,  String bankName,  String cardType)  $default,) {final _that = this;
 switch (_that) {
 case _SavedCard():
-return $default(_that.id,_that.gatewayName,_that.cardBrand,_that.maskedNumber,_that.last4,_that.expMonth,_that.expYear,_that.isDefault,_that.createdAt,_that.bankName,_that.cardType);case _:
+return $default(_that.id,_that.gatewayName,_that.maskedNumber,_that.last4,_that.createdAt,_that.cardBrand,_that.expMonth,_that.expYear,_that.isDefault,_that.bankName,_that.cardType);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -206,10 +207,10 @@ return $default(_that.id,_that.gatewayName,_that.cardBrand,_that.maskedNumber,_t
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String gatewayName,  String cardBrand,  String maskedNumber,  String last4,  String expMonth,  String expYear,  bool isDefault,  DateTime createdAt,  String bankName,  String cardType)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String gatewayName,  String maskedNumber,  String last4,  DateTime createdAt,  String cardBrand,  String expMonth,  String expYear,  bool isDefault,  String bankName,  String cardType)?  $default,) {final _that = this;
 switch (_that) {
 case _SavedCard() when $default != null:
-return $default(_that.id,_that.gatewayName,_that.cardBrand,_that.maskedNumber,_that.last4,_that.expMonth,_that.expYear,_that.isDefault,_that.createdAt,_that.bankName,_that.cardType);case _:
+return $default(_that.id,_that.gatewayName,_that.maskedNumber,_that.last4,_that.createdAt,_that.cardBrand,_that.expMonth,_that.expYear,_that.isDefault,_that.bankName,_that.cardType);case _:
   return null;
 
 }
@@ -221,20 +222,21 @@ return $default(_that.id,_that.gatewayName,_that.cardBrand,_that.maskedNumber,_t
 @JsonSerializable()
 
 class _SavedCard implements SavedCard {
-  const _SavedCard({required this.id, required this.gatewayName, required this.cardBrand, required this.maskedNumber, required this.last4, required this.expMonth, required this.expYear, required this.isDefault, required this.createdAt, this.bankName = '', this.cardType = ''});
+  const _SavedCard({required this.id, required this.gatewayName, required this.maskedNumber, required this.last4, required this.createdAt, this.cardBrand = '', this.expMonth = '', this.expYear = '', this.isDefault = false, this.bankName = '', this.cardType = ''});
   factory _SavedCard.fromJson(Map<String, dynamic> json) => _$SavedCardFromJson(json);
 
 @override final  String id;
 @override final  String gatewayName;
-@override final  String cardBrand;
 /// Pre-masked by the backend, e.g. `**** **** **** 4081`.
 @override final  String maskedNumber;
 @override final  String last4;
-@override final  String expMonth;
-@override final  String expYear;
-@override final  bool isDefault;
 @override final  DateTime createdAt;
-// Empty string (not absent) in the documented Stripe example.
+// Empty string (not absent) in the documented Stripe example; optional
+// per the spec either way.
+@override@JsonKey() final  String cardBrand;
+@override@JsonKey() final  String expMonth;
+@override@JsonKey() final  String expYear;
+@override@JsonKey() final  bool isDefault;
 @override@JsonKey() final  String bankName;
 @override@JsonKey() final  String cardType;
 
@@ -251,16 +253,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _SavedCard&&(identical(other.id, id) || other.id == id)&&(identical(other.gatewayName, gatewayName) || other.gatewayName == gatewayName)&&(identical(other.cardBrand, cardBrand) || other.cardBrand == cardBrand)&&(identical(other.maskedNumber, maskedNumber) || other.maskedNumber == maskedNumber)&&(identical(other.last4, last4) || other.last4 == last4)&&(identical(other.expMonth, expMonth) || other.expMonth == expMonth)&&(identical(other.expYear, expYear) || other.expYear == expYear)&&(identical(other.isDefault, isDefault) || other.isDefault == isDefault)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.bankName, bankName) || other.bankName == bankName)&&(identical(other.cardType, cardType) || other.cardType == cardType));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _SavedCard&&(identical(other.id, id) || other.id == id)&&(identical(other.gatewayName, gatewayName) || other.gatewayName == gatewayName)&&(identical(other.maskedNumber, maskedNumber) || other.maskedNumber == maskedNumber)&&(identical(other.last4, last4) || other.last4 == last4)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.cardBrand, cardBrand) || other.cardBrand == cardBrand)&&(identical(other.expMonth, expMonth) || other.expMonth == expMonth)&&(identical(other.expYear, expYear) || other.expYear == expYear)&&(identical(other.isDefault, isDefault) || other.isDefault == isDefault)&&(identical(other.bankName, bankName) || other.bankName == bankName)&&(identical(other.cardType, cardType) || other.cardType == cardType));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,gatewayName,cardBrand,maskedNumber,last4,expMonth,expYear,isDefault,createdAt,bankName,cardType);
+int get hashCode => Object.hash(runtimeType,id,gatewayName,maskedNumber,last4,createdAt,cardBrand,expMonth,expYear,isDefault,bankName,cardType);
 
 @override
 String toString() {
-  return 'SavedCard(id: $id, gatewayName: $gatewayName, cardBrand: $cardBrand, maskedNumber: $maskedNumber, last4: $last4, expMonth: $expMonth, expYear: $expYear, isDefault: $isDefault, createdAt: $createdAt, bankName: $bankName, cardType: $cardType)';
+  return 'SavedCard(id: $id, gatewayName: $gatewayName, maskedNumber: $maskedNumber, last4: $last4, createdAt: $createdAt, cardBrand: $cardBrand, expMonth: $expMonth, expYear: $expYear, isDefault: $isDefault, bankName: $bankName, cardType: $cardType)';
 }
 
 
@@ -271,7 +273,7 @@ abstract mixin class _$SavedCardCopyWith<$Res> implements $SavedCardCopyWith<$Re
   factory _$SavedCardCopyWith(_SavedCard value, $Res Function(_SavedCard) _then) = __$SavedCardCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String gatewayName, String cardBrand, String maskedNumber, String last4, String expMonth, String expYear, bool isDefault, DateTime createdAt, String bankName, String cardType
+ String id, String gatewayName, String maskedNumber, String last4, DateTime createdAt, String cardBrand, String expMonth, String expYear, bool isDefault, String bankName, String cardType
 });
 
 
@@ -288,18 +290,18 @@ class __$SavedCardCopyWithImpl<$Res>
 
 /// Create a copy of SavedCard
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? gatewayName = null,Object? cardBrand = null,Object? maskedNumber = null,Object? last4 = null,Object? expMonth = null,Object? expYear = null,Object? isDefault = null,Object? createdAt = null,Object? bankName = null,Object? cardType = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? gatewayName = null,Object? maskedNumber = null,Object? last4 = null,Object? createdAt = null,Object? cardBrand = null,Object? expMonth = null,Object? expYear = null,Object? isDefault = null,Object? bankName = null,Object? cardType = null,}) {
   return _then(_SavedCard(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,gatewayName: null == gatewayName ? _self.gatewayName : gatewayName // ignore: cast_nullable_to_non_nullable
-as String,cardBrand: null == cardBrand ? _self.cardBrand : cardBrand // ignore: cast_nullable_to_non_nullable
 as String,maskedNumber: null == maskedNumber ? _self.maskedNumber : maskedNumber // ignore: cast_nullable_to_non_nullable
 as String,last4: null == last4 ? _self.last4 : last4 // ignore: cast_nullable_to_non_nullable
+as String,createdAt: null == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
+as DateTime,cardBrand: null == cardBrand ? _self.cardBrand : cardBrand // ignore: cast_nullable_to_non_nullable
 as String,expMonth: null == expMonth ? _self.expMonth : expMonth // ignore: cast_nullable_to_non_nullable
 as String,expYear: null == expYear ? _self.expYear : expYear // ignore: cast_nullable_to_non_nullable
 as String,isDefault: null == isDefault ? _self.isDefault : isDefault // ignore: cast_nullable_to_non_nullable
-as bool,createdAt: null == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
-as DateTime,bankName: null == bankName ? _self.bankName : bankName // ignore: cast_nullable_to_non_nullable
+as bool,bankName: null == bankName ? _self.bankName : bankName // ignore: cast_nullable_to_non_nullable
 as String,cardType: null == cardType ? _self.cardType : cardType // ignore: cast_nullable_to_non_nullable
 as String,
   ));

@@ -79,6 +79,7 @@ class LeaderboardData {
   const LeaderboardData({
     required this.entries,
     this.currentRank,
+    this.currentLevel,
     this.betterThanPercent,
   });
 
@@ -91,6 +92,14 @@ class LeaderboardData {
   /// the payload omitted it and they are not on the page — so the screen can
   /// say nothing rather than claim a rank.
   final int? currentRank;
+
+  /// Their league ("Novice" … "Professional"), from the same source as
+  /// [currentRank]. Null when unknown.
+  final String? currentLevel;
+
+  /// Derived, not sent: the response has no "better than N%" field, so this is
+  /// computed from [currentRank] against the total ranked population. Null
+  /// whenever either input is missing — see `LeaderboardNotifier._percentileOf`.
   final int? betterThanPercent;
 
   bool get isEmpty => entries.isEmpty;
@@ -180,40 +189,41 @@ class LeaderboardNotifier extends AsyncNotifier<LeaderboardData> {
   ///
   /// Which row is "you" is decided on the best evidence available, in order:
   ///
-  /// 1. the row's own `is_current_user` flag, if the backend sends one;
-  /// 2. a username match against `GET /me/profile`;
-  /// 3. the payload's `current_user_rank`, matched against the row ranks.
+  /// 1. the row's own `is_me`, which the entry schema now carries;
+  /// 2. a username match against `my_position` or `GET /me/profile`;
+  /// 3. `my_position`'s rank, matched against the row ranks.
   ///
-  /// Rank 3 is last because it is the weakest: a rank is only "you" if the
-  /// standing field and the rows were computed over the same filter, which is
+  /// Rank 3 is last because it is the weakest: a rank only identifies a row if
+  /// the standing and the rows were computed over the same filter, which is
   /// not guaranteed for a league-filtered page.
   ///
   /// Static so provider tests can exercise the matching without a container.
   static LeaderboardData resolve(LeaderboardPage page, UserProfile? me) {
-    final myUsername = me?.username.replaceFirst('@', '').trim().toLowerCase();
+    final position = page.myPosition;
+    // `my_position` is the better identity source than the cached profile: it
+    // comes from the same query as the rows.
+    final myUsername = _handle(position?.username) ?? _handle(me?.username);
 
     var matched = false;
     final entries = <LeaderboardEntry>[];
     for (final row in page.rows) {
       final isMe =
           row.isCurrentUser ||
-          (myUsername != null &&
-              myUsername.isNotEmpty &&
-              row.username.trim().toLowerCase() == myUsername);
+          (myUsername != null && _handle(row.username) == myUsername);
       matched |= isMe;
       entries.add(_toEntry(row, isCurrentUser: isMe));
     }
 
-    // The standing the screen shows: the payload's own field first, then the
-    // matched row, then the profile's cached rank.
+    // `my_position` first: the spec sends it beside `results` precisely so the
+    // standing survives the learner ranking below the page.
     final currentRank =
-        page.currentRank ??
+        position?.rank ??
         (matched
             ? entries.firstWhere((entry) => entry.isCurrentUser).rank
             : me?.rank);
 
-    // Nothing matched by flag or username, but the payload named a rank —
-    // fall back to marking the row that holds it.
+    // Nothing matched by flag or username, but we know the rank — fall back to
+    // marking the row that holds it.
     if (!matched && currentRank != null) {
       for (var i = 0; i < entries.length; i++) {
         if (entries[i].rank != currentRank) continue;
@@ -222,19 +232,35 @@ class LeaderboardNotifier extends AsyncNotifier<LeaderboardData> {
       }
     }
 
+    final level = position?.currentLevel;
+
     return LeaderboardData(
       entries: entries,
       currentRank: currentRank,
-      betterThanPercent:
-          page.betterThanPercent ?? _percentileOf(currentRank, page.rows.length),
+      currentLevel: (level != null && level.isNotEmpty)
+          ? level
+          : (me?.currentLevel.isNotEmpty ?? false)
+          ? me!.currentLevel
+          : null,
+      betterThanPercent: _percentileOf(currentRank, page.totalCount),
     );
   }
 
-  /// "Better than N%" when the payload didn't compute it, derived from the
-  /// rank's position in the page. Null unless both inputs are usable — an
-  /// invented percentage is worse than an absent one.
-  static int? _percentileOf(int? rank, int total) {
-    if (rank == null || rank < 1 || total < 2 || rank > total) return null;
+  /// Bare lowercase handle, or null when there is nothing to compare.
+  static String? _handle(String? username) {
+    final handle = username?.replaceFirst('@', '').trim().toLowerCase();
+    return (handle == null || handle.isEmpty) ? null : handle;
+  }
+
+  /// "Better than N%", derived — the response carries no such field.
+  ///
+  /// [total] must be the response's `count` (every ranked learner), **not** the
+  /// number of rows on the page: ranking 12th of a 50-row page reads as "better
+  /// than 78%" when 12th of 5,000 is better than 99%. Null unless both inputs
+  /// are usable, since an invented percentage is worse than an absent one.
+  static int? _percentileOf(int? rank, int? total) {
+    if (rank == null || total == null) return null;
+    if (rank < 1 || total < 2 || rank > total) return null;
     return ((total - rank) / (total - 1) * 100).round();
   }
 

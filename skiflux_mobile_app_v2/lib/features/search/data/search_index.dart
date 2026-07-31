@@ -1,13 +1,14 @@
-/// Search domain models + the local demo dataset the search flow runs
-/// against.
+/// Search domain models + the thin façade the search screens call.
 ///
-/// ⚠️ Demo content only — like the feed/comments/profile, nothing here is
-/// backed by a real service. The dataset is intentionally small but varied
-/// enough to exercise every flow state (grouped overview, per-category tabs,
-/// empty tabs, nothing-found).
+/// Backed by `GET /search` (spec `GlobalSearchResponse`). Results carry the
+/// backend ids the rest of the app navigates with: creator rows keep the
+/// creator UUID for `GET /creators/{id}`, user rows keep the username for
+/// `GET /users/by-username/{u}`. Creator rows also carry the real
+/// `followers_count`; nothing renders a placeholder subscriber figure.
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'search_repository.dart';
 
 enum SearchCategory { episodes, creators, users, playlists }
@@ -37,24 +38,37 @@ class EpisodeResult {
     required this.duration,
     required this.views,
     required this.creator,
+    this.id = '',
+    this.thumbnailUrl,
   });
 
+  /// Spec `Episode` — the same schema the feeds parse.
   factory EpisodeResult.fromJson(Map<String, dynamic> json) {
-    final creator = json['creator'] ?? {};
+    final creator = json['creator'];
+    final order = json['order'];
+    final durationSeconds = json['video_duration'] is int
+        ? json['video_duration'] as int
+        : 0;
     return EpisodeResult(
-      epNumber: (json['episode_number'] as int?) ?? 0,
+      id: json['id']?.toString() ?? '',
+      epNumber: order is num ? order.toInt() : 0,
       title: (json['title'] as String?) ?? '',
-      duration: (json['duration_formatted'] as String?) ?? '0:00',
-      views: '${json['view_count'] ?? 0} views',
-      creator: (creator['username'] as String?) ?? '',
+      duration: _durationLabel(durationSeconds),
+      views: '${_countLabel(json['view_count'] is int ? json['view_count'] as int : 0)} views',
+      creator: creator is Map ? _string(creator['username']) ?? '' : '',
+      thumbnailUrl: _string(json['thumbnail_url']),
     );
   }
 
+  final String id;
   final int epNumber;
   final String title;
   final String duration;
   final String views;
   final String creator;
+  final String? thumbnailUrl;
+
+  bool get hasThumbnail => thumbnailUrl != null && thumbnailUrl!.isNotEmpty;
 
   String get epTag => 'EP ${epNumber.toString().padLeft(2, '0')}';
 }
@@ -63,49 +77,87 @@ class PersonResult {
   const PersonResult({
     required this.name,
     required this.username,
-    required this.subscribers,
+    this.id = '',
+    this.avatarUrl,
+    this.followersCount,
   });
 
-  factory PersonResult.fromJson(Map<String, dynamic> json) {
-    final name = (json['display_name'] as String?) ?? (json['username'] as String?) ?? '';
+  /// Spec `Creator` (`{id, name, username, avatar_url, followers_count}`).
+  factory PersonResult.fromCreatorJson(Map<String, dynamic> json) {
+    final username = _string(json['username']) ?? '';
+    final name = _string(json['name']) ?? username;
     return PersonResult(
+      id: json['id']?.toString() ?? '',
       name: name,
-      username: (json['username'] as String?) ?? '',
-      subscribers: '...',
+      username: username,
+      avatarUrl: _string(json['avatar_url']),
+      followersCount: json['followers_count'] is int
+          ? json['followers_count'] as int
+          : null,
     );
   }
 
+  /// Spec `BasicUser` (`{id, name, username, avatar_url}`) — no follower
+  /// figure exists for learners, so none is shown.
+  factory PersonResult.fromUserJson(Map<String, dynamic> json) {
+    final username = _string(json['username']) ?? '';
+    final name = _string(json['name']) ?? username;
+    return PersonResult(
+      id: json['id']?.toString() ?? '',
+      name: name,
+      username: username,
+      avatarUrl: _string(json['avatar_url']),
+    );
+  }
+
+  /// Backend UUID — creator rows navigate with it (`GET /creators/{id}`).
+  final String id;
   final String name;
   final String username;
-  final String subscribers;
+  final String? avatarUrl;
 
-  String get subtitle => '@$username · $subscribers subscribers';
+  /// Real `followers_count` when the payload carries one (creators only).
+  final int? followersCount;
+
+  /// "@handle · 1.2k subscribers", trimmed to whatever is actually known.
+  String get subtitle {
+    final parts = <String>[
+      if (username.isNotEmpty) '@$username',
+      if (followersCount != null)
+        '${_countLabel(followersCount!)} subscribers',
+    ];
+    return parts.join(' · ');
+  }
 }
 
 class PlaylistResult {
   const PlaylistResult({
     required this.title,
-    required this.creator,
     required this.episodeCount,
-    required this.duration,
+    this.id = '',
+    this.skillworld,
   });
 
-  factory PlaylistResult.fromJson(Map<String, dynamic> json) {
-    final creator = json['creator'] ?? {};
-    return PlaylistResult(
-      title: (json['title'] as String?) ?? '',
-      creator: (creator['username'] as String?) ?? '',
-      episodeCount: (json['episode_count'] as int?) ?? 0,
-      duration: (json['duration_formatted'] as String?) ?? '0:00',
-    );
-  }
+  /// Spec `Season` — search's "playlists" group is the seasons page. There is
+  /// no creator or duration on a Season, so the row doesn't claim one.
+  factory PlaylistResult.fromJson(Map<String, dynamic> json) => PlaylistResult(
+    id: json['id']?.toString() ?? '',
+    title: (json['title'] as String?) ?? '',
+    episodeCount: json['episode_count'] is int
+        ? json['episode_count'] as int
+        : 0,
+    skillworld: _string(json['skillworld']),
+  );
 
+  final String id;
   final String title;
-  final String creator;
   final int episodeCount;
-  final String duration;
+  final String? skillworld;
 
-  String get subtitle => '$creator · $episodeCount episodes';
+  String get subtitle {
+    final count = '$episodeCount episode${episodeCount == 1 ? '' : 's'}';
+    return skillworld == null ? count : '$skillworld · $count';
+  }
 }
 
 class SearchResults {
@@ -116,6 +168,43 @@ class SearchResults {
     required this.users,
     required this.playlists,
   });
+
+  /// Parses a `GET /search` body: `GlobalSearchResponse`, optionally wrapped
+  /// in `{data: …}` and/or a single-element array, each group either a DRF
+  /// page (`{results: []}`) or a bare list.
+  factory SearchResults.fromResponse(String query, Object? body) {
+    var root = body;
+    if (root is Map && root['data'] is Object) root = root['data'];
+    if (root is List) root = root.isEmpty ? const <String, dynamic>{} : root.first;
+    final map = root is Map
+        ? Map<String, dynamic>.from(root)
+        : const <String, dynamic>{};
+
+    return SearchResults(
+      query: query,
+      episodes: _group(map['episodes'], EpisodeResult.fromJson),
+      creators: _group(map['creators'], PersonResult.fromCreatorJson),
+      users: _group(map['users'], PersonResult.fromUserJson),
+      // The spec calls this group `seasons`; older builds said `playlists`.
+      playlists: _group(
+        map['seasons'] ?? map['playlists'],
+        PlaylistResult.fromJson,
+      ),
+    );
+  }
+
+  static List<T> _group<T>(
+    Object? raw,
+    T Function(Map<String, dynamic>) parse,
+  ) {
+    Object? list = raw;
+    if (list is Map) list = list['results'];
+    if (list is! List) return const [];
+    return [
+      for (final entry in list)
+        if (entry is Map) parse(Map<String, dynamic>.from(entry)),
+    ];
+  }
 
   final String query;
   final List<EpisodeResult> episodes;
@@ -145,49 +234,56 @@ class SearchResults {
     }
     return best;
   }
+
+  static const empty = SearchResults(
+    query: '',
+    episodes: [],
+    creators: [],
+    users: [],
+    playlists: [],
+  );
 }
 
-/// Case-insensitive substring search over the demo dataset.
+/// Thin façade the search screens call; delegates to `GET /search`.
 ///
-/// Riverpod choice: plain [Provider] — pure read-only index, no session
-/// mutations (like leaderboard Pass 1). Live query results stay in the
-/// screen; this provider only exposes [search].
+/// Riverpod choice: plain [Provider] — pure read-only lookup, no session
+/// mutations. Live query results stay in the screen; this provider only
+/// exposes [search].
 class SearchIndex {
   const SearchIndex(this.ref);
   final Ref ref;
 
   Future<SearchResults> search(String query) async {
     final q = query.trim();
-    if (q.isEmpty) {
-      return const SearchResults(
-        query: '',
-        episodes: [],
-        creators: [],
-        users: [],
-        playlists: [],
-      );
-    }
-    
-    final repo = ref.read(searchRepositoryProvider);
-    final json = await repo.search(q);
-    
-    final results = json['results'] as Map<String, dynamic>? ?? {};
-    
-    final creatorsJson = (results['creators'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final usersJson = (results['users'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final episodesJson = (results['episodes'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final playlistsJson = (results['playlists'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    
-    return SearchResults(
-      query: q,
-      creators: creatorsJson.map((e) => PersonResult.fromJson(e)).toList(),
-      users: usersJson.map((e) => PersonResult.fromJson(e)).toList(),
-      episodes: episodesJson.map((e) => EpisodeResult.fromJson(e)).toList(),
-      playlists: playlistsJson.map((e) => PlaylistResult.fromJson(e)).toList(),
-    );
+    if (q.isEmpty) return SearchResults.empty;
+    return ref.read(searchRepositoryProvider).search(q);
   }
 }
 
 final searchIndexProvider = Provider<SearchIndex>((ref) {
   return SearchIndex(ref);
 });
+
+// ── Formatting helpers ───────────────────────────────────────────────
+
+String _durationLabel(int seconds) {
+  if (seconds <= 0) return '0:00';
+  final h = seconds ~/ 3600;
+  final m = (seconds % 3600) ~/ 60;
+  final s = seconds % 60;
+  final ss = s.toString().padLeft(2, '0');
+  if (h > 0) return '$h:${m.toString().padLeft(2, '0')}:$ss';
+  return '$m:$ss';
+}
+
+String _countLabel(int n) {
+  if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+  if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}k';
+  return '$n';
+}
+
+String? _string(Object? value) {
+  if (value == null) return null;
+  final s = value.toString().trim();
+  return s.isEmpty ? null : s;
+}

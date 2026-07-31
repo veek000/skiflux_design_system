@@ -38,12 +38,10 @@ dependencies:
   # multi-select by default and added `pickFile` for the single-file case,
   # which is what the submission screen uses.
   file_picker: ^12.0.0-beta.7
-  # Native share sheet for quiz "Share Result" — confirmed "real". Currently
-  # DECLARED BUT UNUSED: every share entry point routes through the in-app
-  # `showShareSheet` modal instead, so nothing imports this yet. Kept for when
-  # the share targets are wired to real deep links (see the TODO(backend,
-  # minor) in shared/sheets/share_sheet.dart).
-  share_plus: ^13.3.0
+  # Native OS share sheet — share entry points (feed, quiz result) hand off to
+  # the platform sheet with the episode title + video URL. Real deep links are
+  # still a backend ask (tracker #59).
+  share_plus: 13.3.0
   # App state (Pass 1: notifications / leaderboard / streaks) — confirmed
   # for Riverpod migration.
   flutter_riverpod: ^3.3.2
@@ -96,6 +94,20 @@ dependencies:
   # Apple requires this whenever a third-party sign-in is offered on iOS, so it
   # is a store-review requirement, not just parity with the Figma frame.
   sign_in_with_apple: 8.1.0
+  # External hand-offs: payment-gateway checkout URLs, mission links, help-centre
+  # and store-rating links. Replaces the clipboard fallback that stood in while
+  # this dependency was awaiting approval (shared/utils/external_link.dart).
+  url_launcher: 6.3.2
+  # Disk + memory caching for remote episode thumbnails and avatars, so the feed
+  # and list rails stop refetching the same images on every rebuild.
+  cached_network_image: 3.4.1
+  # Device storage paths for the offline-download pipeline.
+  path_provider: 2.1.6
+  # Network-type check (wifi vs mobile) so the "download on Wi-Fi only"
+  # preference can actually be enforced before a download starts. NOT used for
+  # reachability — the connectivity banner stays driven by the app's own dio
+  # traffic (see shared/network/connectivity_store.dart).
+  connectivity_plus: 7.3.1
 
 flutter_launcher_icons:
   image_path: "assets/app_icons/app_icon_source.png"

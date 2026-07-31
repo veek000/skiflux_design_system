@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
-import '../playlists/data/playlists_store.dart';
+import '../playlists/data/playlists_store.dart' show CoinPack, kCoinRateNaira;
 import 'buy_coins_screen.dart';
 import 'data/wallet_store.dart';
 import 'transaction_details_screen.dart';
@@ -12,6 +12,10 @@ import 'withdraw_screen.dart';
 // Wallet hub. Brand balance card (Total Balance, coin figure, ₦ approx,
 // Withdraw + Buy coins), Earned/Spent/Withdrawn stat strip, and the
 // transaction list with All/Earned/Spent filter pills.
+//
+// The hero reads the *real* wallet balance (`GET /wallet/my-wallet`,
+// Decimal, floored for whole-coin display) — a signed-in user sees a
+// loading state until it arrives, never a fabricated figure.
 
 class WalletScreen extends ConsumerStatefulWidget {
   const WalletScreen({super.key});
@@ -37,7 +41,6 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final coins = ref.watch(playlistsProvider).skillCoins;
     final wallet = ref.watch(walletProvider);
     final txns = switch (_filter) {
       _TxnFilter.all => wallet.transactions,
@@ -65,7 +68,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
         child: ListView(
           padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
           children: [
-            _BalanceHero(coins: coins),
+            _BalanceHero(wallet: wallet),
             const SizedBox(height: SkifluxSpacing.spaceL),
             _StatStrip(wallet: wallet),
             const SizedBox(height: SkifluxSpacing.spaceL),
@@ -119,14 +122,19 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
 
 /// Brand-tinted balance card (`1256:24685`): "Total Balance", coin glyph +
 /// H6-scale amber figure, "≈ ₦N · 1 coin = ₦6", Withdraw + Buy coins.
+///
+/// The figure is the floor of the backend wallet's Decimal balance. Until
+/// that payload has loaded the card shows a loading treatment, not a number.
 class _BalanceHero extends StatelessWidget {
-  const _BalanceHero({required this.coins});
+  const _BalanceHero({required this.wallet});
 
-  final int coins;
+  final WalletState wallet;
 
   @override
   Widget build(BuildContext context) {
+    final coins = wallet.wholeCoins;
     final naira = coins * kCoinRateNaira;
+    final pendingFirstLoad = !wallet.balanceKnown && wallet.loading;
     return Container(
       padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
       decoration: BoxDecoration(
@@ -151,17 +159,26 @@ class _BalanceHero extends StatelessWidget {
                 color: SkifluxColors.contentNotice,
               ),
               const SizedBox(width: SkifluxSpacing.spaceS),
-              Text(
-                CoinPack.thousands(coins),
-                style: SkifluxTypography.headingH6ExtraBold.copyWith(
-                  color: SkifluxColors.contentNotice,
+              if (pendingFirstLoad)
+                const SizedBox(
+                  width: SkifluxUnit.u20,
+                  height: SkifluxUnit.u20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                Text(
+                  CoinPack.thousands(coins),
+                  style: SkifluxTypography.headingH6ExtraBold.copyWith(
+                    color: SkifluxColors.contentNotice,
+                  ),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: SkifluxSpacing.spaceXs),
           Text(
-            '≈ ₦${CoinPack.thousands(naira)} · 1 coin = ₦$kCoinRateNaira',
+            pendingFirstLoad
+                ? 'Loading your balance…'
+                : '≈ ₦${CoinPack.thousands(naira)} · 1 coin = ₦$kCoinRateNaira',
             style: SkifluxTypography.bodyP10Regular.copyWith(
               color: SkifluxColors.contentTertiary,
             ),

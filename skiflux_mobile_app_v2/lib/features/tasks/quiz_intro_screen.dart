@@ -56,8 +56,10 @@ class QuizIntroScreen extends ConsumerWidget {
                     color: SkifluxColors.contentPrimary,
                   ),
                 ),
-                const SizedBox(height: SkifluxSpacing.spaceL),
-                TaskRewardPill(coins: task.coins, xp: task.xp),
+                if (task.hasAnyReward) ...[
+                  const SizedBox(height: SkifluxSpacing.spaceL),
+                  TaskRewardPill(task: task),
+                ],
                 const SizedBox(height: SkifluxSpacing.spaceL),
                 TaskEpisodeRow(
                   title: task.episodeTitle,
@@ -97,17 +99,24 @@ class QuizIntroScreen extends ConsumerWidget {
                         text:
                             '${quiz.questionCount} Questions multiple choice format.',
                       ),
-                      const SizedBox(height: SkifluxSpacing.spaceS),
-                      _InfoRow(
-                        icon: RemixIcons.time_fill,
-                        text:
-                            'Takes roughly ${quiz.minutes} minutes to complete.',
-                      ),
+                      // Live quizzes may carry no time limit — say nothing
+                      // rather than "roughly 0 minutes".
+                      if (quiz.minutes > 0) ...[
+                        const SizedBox(height: SkifluxSpacing.spaceS),
+                        _InfoRow(
+                          icon: RemixIcons.time_fill,
+                          text:
+                              'Takes roughly ${quiz.minutes} minutes to complete.',
+                        ),
+                      ],
                       const SizedBox(height: SkifluxSpacing.spaceS),
                       _InfoRow(
                         icon: RemixIcons.checkbox_circle_fill,
-                        text:
-                            'You must score ${quiz.passPercent}% to pass and earn coins.',
+                        // Only promise coins when the task declares a reward.
+                        text: task.hasCoinReward
+                            ? 'You must score ${quiz.passPercent}% to pass '
+                                  'and earn coins.'
+                            : 'You must score ${quiz.passPercent}% to pass.',
                       ),
                     ],
                   ),

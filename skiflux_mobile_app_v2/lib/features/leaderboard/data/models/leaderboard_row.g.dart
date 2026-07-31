@@ -14,6 +14,7 @@ _LeaderboardRow _$LeaderboardRowFromJson(Map<String, dynamic> json) =>
       username: json['username'] as String? ?? '',
       avatarUrl: json['avatar_url'] as String?,
       xp: (json['xp'] as num?)?.toInt() ?? 0,
+      currentLevel: json['current_level'] as String? ?? '',
       isCurrentUser: json['is_current_user'] as bool? ?? false,
     );
 
@@ -25,5 +26,6 @@ Map<String, dynamic> _$LeaderboardRowToJson(_LeaderboardRow instance) =>
       'username': instance.username,
       'avatar_url': instance.avatarUrl,
       'xp': instance.xp,
+      'current_level': instance.currentLevel,
       'is_current_user': instance.isCurrentUser,
     };

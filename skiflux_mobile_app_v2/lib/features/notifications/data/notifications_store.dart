@@ -1,9 +1,11 @@
 /// Notifications backing the Notifications screen (Figma Notification Flow
 /// `1256:28688`).
 ///
-/// [NotificationsNotifier.refreshFromBackend] loads `GET /me/notifications`;
-/// the demo cards stay as the offline fallback, same arrangement as
-/// `wallet_store` and `streaks_store`. Read state is optimistic — the row goes
+/// [NotificationsNotifier.refreshFromBackend] loads `GET /me/notifications`.
+/// The demo cards exist only for the signed-out/demo session — with a session
+/// the seed (which includes fabricated money notifications) is never shown:
+/// loading clears it, an empty feed stays empty, and a failed load surfaces
+/// as an error + retry state instead. Read state is optimistic — the row goes
 /// read immediately and `POST /me/{id}/read` syncs behind it.
 library;
 
@@ -11,6 +13,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../shared/network/token_store.dart';
 import 'models/notification_item.dart';
 import 'notifications_repository.dart';
 
@@ -60,10 +63,18 @@ class NotificationsNotifier extends Notifier<List<AppNotification>> {
   List<AppNotification> build() => _seed(DateTime.now());
 
   /// True once `GET /me/notifications` has answered. While false the screen is
-  /// showing the demo seed.
+  /// showing the demo seed (signed out) or a loading/error state (signed in).
   bool get fromBackend => _fromBackend;
   bool _fromBackend = false;
+
+  /// A fetch is in flight — the screen shows a loader instead of seeds.
+  bool get loading => _loading;
   bool _loading = false;
+
+  /// Signed-in load failed with nothing live to show — the screen renders
+  /// an error + retry instead of the fabricated seed.
+  bool get loadFailed => _loadFailed;
+  bool _loadFailed = false;
 
   List<AppNotification> get unread =>
       state.where((n) => n.unread).toList(growable: false);
@@ -93,22 +104,46 @@ class NotificationsNotifier extends Notifier<List<AppNotification>> {
     if (id != null) unawaited(_syncRead(id));
   }
 
-  /// Loads `GET /me/notifications`. Keeps the current list on failure so the
-  /// screen never empties out — same contract as the other stores.
+  /// Loads `GET /me/notifications`.
   ///
-  /// An empty feed *does* replace the seed: a fresh account is supposed to see
-  /// the empty state, not demo cards.
+  /// Signed out: no-op — the seed *is* the demo. Signed in: the seed is
+  /// dropped before the fetch (a signed-in user must never see fabricated
+  /// "Withdrawal successful" cards, not even during a load); an empty feed
+  /// stays empty; a failure flips [loadFailed] so the screen offers a retry —
+  /// unless a previous fetch succeeded, in which case the last real list is
+  /// kept (stale beats wrong).
   Future<void> refreshFromBackend() async {
     if (_loading) return;
     _loading = true;
+    bool session;
+    try {
+      session = await ref.read(tokenStoreProvider).hasSession();
+    } catch (_) {
+      session = false;
+    }
+    if (!session) {
+      _loading = false;
+      return;
+    }
+    if (!_fromBackend) {
+      _loadFailed = false;
+      state = const [];
+    }
     try {
       final items = await ref.read(notificationsRepositoryProvider).list();
       _fromBackend = true;
+      _loadFailed = false;
       state = [for (final item in items) _fromItem(item)];
     } catch (_) {
-      // Offline / unreachable — leave the current cards in place.
+      if (!_fromBackend) {
+        _loadFailed = true;
+        state = const [];
+      }
+      // Had live data: keep it in place.
     } finally {
       _loading = false;
+      // Reassign so listeners re-read [loading]/[loadFailed].
+      state = List<AppNotification>.of(state);
     }
   }
 

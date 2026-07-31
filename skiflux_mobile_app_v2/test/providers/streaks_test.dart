@@ -156,6 +156,15 @@ void main() {
       expect(c.read(streaksProvider).currentWeek.label, 'Server Label');
     });
 
+    test('computed label spans the 7 tracked days (Sun through Sat)', () {
+      // Sun May 20 2029 + 6 = Sat May 26 — not the 8-day "27th" span.
+      expect(StreakWeek(DateTime(2029, 5, 20), const []).label,
+          'May 20th - 26th');
+      // Month boundary: Sun Apr 29 2029 + 6 = Sat May 5.
+      expect(StreakWeek(DateTime(2029, 4, 29), const []).label,
+          'Apr 29th - May 5th');
+    });
+
     test('renders today as pending and later days as future', () async {
       final c = withRepo(_FakeStreaksRepository(summary()));
       await c.read(streaksProvider.notifier).refreshFromBackend();

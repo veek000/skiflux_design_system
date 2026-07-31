@@ -1,14 +1,25 @@
 /// Tasks tab (Figma **Task Flow** `1256:12977`).
 ///
-/// Learning tasks remain demo-seeded until watched-tasks integration.
-/// Missions (platform tasks) load from `GET /me/platform-tasks` when
-/// [refreshMissionsFromBackend] runs after sign-in.
+/// Signed in, both sections are live: learning tasks come from
+/// `GET /episodes/watched/tasks` hydrated by `GET /me/submissions`, missions
+/// from `GET /me/platform-tasks`. The demo seeds exist only for the
+/// signed-out/demo session — a signed-in user never sees fabricated tasks:
+/// an empty backend answer renders the honest empty state, and a failed load
+/// renders an error with retry (same contract as `home_feed_store.dart`).
 library;
 
+import 'dart:async';
+
+import 'package:decimal/decimal.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../shared/network/token_store.dart';
+import '../../wallet/data/wallet_store.dart';
+import 'episode_tasks_repository.dart';
+import 'models/episode_task_models.dart';
 import 'models/platform_task.dart';
 import 'platform_tasks_repository.dart';
+import 'skillcoin_display.dart';
 
 // ── Enums ────────────────────────────────────────────────────────────
 
@@ -19,6 +30,23 @@ enum LearningTaskStatus { completed, pending, inReview, actionNeeded }
 
 /// How a learning task is completed.
 enum LearningTaskKind { submission, quiz }
+
+/// Where a Tasks section's list came from — drives the tab's honesty states.
+enum TaskSectionSource {
+  /// Signed-out demo data.
+  seed,
+
+  /// A session exists and a fetch is in flight (list is empty meanwhile —
+  /// seeds are never shown to a signed-in user, not even during a load).
+  loading,
+
+  /// `GET` answered; the list — possibly empty — is the server's.
+  live,
+
+  /// A session exists and the fetch failed with nothing live to show:
+  /// the tab renders an error + retry, never the seed.
+  error,
+}
 
 // ── Models ───────────────────────────────────────────────────────────
 
@@ -38,7 +66,98 @@ class LearningTask {
     this.briefIntro,
     this.briefBullets = const [],
     this.quiz,
+    this.episodeId,
+    this.acceptedProofTypes = const [],
+    this.slaHours = 0,
+    this.fromBackend = false,
   });
+
+  /// Adapter: one `GET /episodes/watched/tasks` row (+ its latest
+  /// `GET /me/submissions` record, when any) → list card model.
+  ///
+  /// Rewards: the `WatchedEpisodeTaskItem` schema carries **no** coin/XP
+  /// fields; `completion_criteria` (spec type `{}`) is read opportunistically
+  /// for `skillcoin_reward`/`xp_reward`-style keys, and when nothing is there
+  /// the card simply shows no reward chip rather than inventing "+25".
+  factory LearningTask.fromWatched(
+    WatchedEpisodeTask task, {
+    UserSubmission? latestSubmission,
+  }) {
+    final isQuiz = task.isAssessment;
+    final coins = _criteriaCoins(task.completionCriteria);
+    final xp = _criteriaXp(task.completionCriteria);
+
+    var status = statusFrom(task.status, submitted: task.submittedAt != null);
+    String? feedback;
+    int? quizCorrect;
+    if (latestSubmission != null) {
+      status = statusFrom(latestSubmission.status, submitted: true);
+      if (status == LearningTaskStatus.actionNeeded) {
+        feedback = latestSubmission.rejectionReason;
+      }
+      final score = latestSubmission.scorePercent;
+      if (isQuiz && score != null && task.questions.isNotEmpty) {
+        quizCorrect = ((score * task.questions.length) / 100).round();
+      }
+    }
+
+    final questionCount = task.questions.length;
+    final passPercent = task.passScorePercent;
+    final description = isQuiz
+        ? '$questionCount multiple-choice '
+              'question${questionCount == 1 ? '' : 's'}'
+              '${passPercent != null ? ' · score $passPercent% to pass' : ''}'
+        : 'Submit a link or file'
+              '${task.slaTimeLimitHours > 0 ? ' · reviewed within ${task.slaTimeLimitHours}hrs' : ''}';
+
+    final quiz = isQuiz && task.questions.isNotEmpty
+        ? QuizData(
+            introBody: task.taskBrief.isNotEmpty
+                ? task.taskBrief
+                : 'This assessment is auto-graded and you will receive '
+                      'your results immediately.',
+            questionCount: questionCount,
+            minutes: task.timeLimitMinutes ?? 0,
+            passPercent: passPercent ?? 100,
+            rewardCoins: coins,
+            rewardXp: xp,
+            timerSeconds: (task.timeLimitMinutes ?? 0) * 60,
+            questions: [
+              for (final q in task.questions)
+                QuizQuestion(
+                  id: q.id,
+                  prompt: q.questionText,
+                  options: q.options,
+                  correctIndex: q.correctIndex,
+                ),
+            ],
+          )
+        : null;
+
+    return LearningTask(
+        id: task.id,
+        title: _titleFromBrief(
+          task.taskBrief,
+          fallback: isQuiz ? 'Episode Assessment' : 'Episode Task',
+        ),
+        description: description,
+        episodeLabel: task.episodeTitle,
+        episodeTitle: task.episodeTitle,
+        episodeSubtitle: task.seasonTitle,
+        status: status,
+        kind: isQuiz ? LearningTaskKind.quiz : LearningTaskKind.submission,
+        coins: coins,
+        xp: xp,
+        feedback: feedback,
+        briefIntro: task.taskBrief,
+        quiz: quiz,
+        episodeId: task.episodeId.isEmpty ? null : task.episodeId,
+        acceptedProofTypes: task.acceptedProofTypes,
+        slaHours: task.slaTimeLimitHours,
+        fromBackend: true,
+      )
+      ..quizCorrect = quizCorrect;
+  }
 
   final String id;
   final String title;
@@ -48,26 +167,52 @@ class LearningTask {
   final String episodeSubtitle;
   LearningTaskStatus status;
   final LearningTaskKind kind;
-  final int coins;
+
+  /// SkillCoin reward — [Decimal], displayed via [coinsLabel] so a fractional
+  /// reward is never truncated. Zero means "the API told us nothing" and the
+  /// UI hides the chip rather than promising a number.
+  final Decimal coins;
   final int xp;
 
-  /// Reviewer note — shown on Action Needed cards.
+  /// Reviewer note — shown on Action Needed cards; live data carries the
+  /// backend's `rejection_reason`.
   String? feedback;
 
-  /// Submission detail: intro paragraph under "The Brief".
+  /// Submission detail: intro paragraph under "The Brief". For live tasks
+  /// this is the creator's `task_brief`.
   final String? briefIntro;
 
-  /// Submission detail: checklist bullets.
+  /// Submission detail: checklist bullets (seed-only; the wire brief is one
+  /// free-text block).
   final List<String> briefBullets;
 
   /// Quiz payload when [kind] is quiz.
   final QuizData? quiz;
 
+  /// Backend episode UUID — `POST /episodes/task/submit` keys on this.
+  final String? episodeId;
+
+  /// Creator-declared proof types (`["link", "image", "video", "file"]`) —
+  /// drives the upload extension allowlist on the submission screen.
+  final List<String> acceptedProofTypes;
+
+  /// Creator SLA in hours; 0 when unknown.
+  final int slaHours;
+
+  /// True when this row came from the API (submissions go to the backend).
+  final bool fromBackend;
+
   /// Last quiz attempt answers (index per question) — powers View Result.
   List<int?>? quizAnswers;
 
-  /// Correct count from the last quiz attempt.
+  /// Correct count from the last quiz attempt (or derived from the backend's
+  /// `score_percent` when hydrating).
   int? quizCorrect;
+
+  String get coinsLabel => formatSkillcoin(coins);
+  bool get hasCoinReward => coins > Decimal.zero;
+  bool get hasXpReward => xp > 0;
+  bool get hasAnyReward => hasCoinReward || hasXpReward;
 
   String get statusLabel => switch (status) {
     LearningTaskStatus.completed => 'Completed',
@@ -87,6 +232,75 @@ class LearningTask {
   bool get actionEnabled =>
       status != LearningTaskStatus.inReview &&
       status != LearningTaskStatus.completed;
+
+  /// Maps the API's free-string statuses (watched-tasks `status` and
+  /// `/me/submissions` `pending|approved|rejected|passed|failed`) onto the
+  /// four UI states. [submitted] disambiguates "pending": a pending
+  /// *submission* is awaiting review, a pending *task* is not started.
+  static LearningTaskStatus statusFrom(String raw, {bool submitted = false}) {
+    final s = raw.toLowerCase();
+    if (s.contains('approv') || s.contains('pass') || s.contains('complet')) {
+      return LearningTaskStatus.completed;
+    }
+    if (s.contains('reject') ||
+        s.contains('fail') ||
+        s.contains('revis') ||
+        s.contains('action')) {
+      return LearningTaskStatus.actionNeeded;
+    }
+    if (s.contains('review')) return LearningTaskStatus.inReview;
+    if (s.contains('submit') && !s.contains('not') && !s.contains('un')) {
+      return LearningTaskStatus.inReview;
+    }
+    if (s.contains('pending')) {
+      return submitted
+          ? LearningTaskStatus.inReview
+          : LearningTaskStatus.pending;
+    }
+    return LearningTaskStatus.pending;
+  }
+
+  /// First sentence/line of the brief, clamped for the card; the fallback
+  /// labels the task by kind rather than inventing content.
+  static String _titleFromBrief(String brief, {required String fallback}) {
+    final text = brief.trim();
+    if (text.isEmpty) return fallback;
+    var line = text.split('\n').first.trim();
+    final sentenceEnd = line.indexOf(RegExp(r'[.!?]'));
+    if (sentenceEnd > 0) line = line.substring(0, sentenceEnd);
+    line = line.trim();
+    if (line.length > 60) line = '${line.substring(0, 57).trimRight()}…';
+    return line.isEmpty ? fallback : line;
+  }
+
+  static Decimal _criteriaCoins(Map<String, dynamic> criteria) {
+    for (final key in const [
+      'skillcoin_reward',
+      'skillcoins',
+      'coin_reward',
+      'coins',
+    ]) {
+      final value = criteria[key];
+      if (value is num) return Decimal.parse(value.toString());
+      if (value is String) {
+        final parsed = Decimal.tryParse(value);
+        if (parsed != null) return parsed;
+      }
+    }
+    return Decimal.zero;
+  }
+
+  static int _criteriaXp(Map<String, dynamic> criteria) {
+    for (final key in const ['xp_reward', 'xp']) {
+      final value = criteria[key];
+      if (value is num) return value.toInt();
+      if (value is String) {
+        final parsed = int.tryParse(value);
+        if (parsed != null) return parsed;
+      }
+    }
+    return 0;
+  }
 }
 
 class MissionTask {
@@ -103,11 +317,11 @@ class MissionTask {
     this.progressCurrent = 0,
     this.progressTarget = 1,
     this.externalUrl,
+    this.manual = true,
     this.fromBackend = false,
   });
 
   factory MissionTask.fromPlatform(PlatformTask t) {
-    final coins = int.tryParse(t.skillcoinReward.round().toString()) ?? 0;
     final completed = t.completed || t.status == PlatformTaskStatus.claimed;
     final actionLabel = completed
         ? 'Done'
@@ -122,7 +336,8 @@ class MissionTask {
       id: t.id,
       title: t.title,
       description: t.description,
-      coins: coins,
+      // Exact Decimal — "2.50" must never round up to 3 on the card.
+      coins: t.skillcoinReward,
       actionLabel: actionLabel,
       iconKey: t.icon.isEmpty ? 'star' : t.icon,
       completed: completed,
@@ -131,6 +346,7 @@ class MissionTask {
       progressCurrent: t.progressCurrent,
       progressTarget: t.progressTarget,
       externalUrl: t.externalUrl,
+      manual: t.verificationMode == 'manual' || t.triggerType.isEmpty,
       fromBackend: true,
     );
   }
@@ -138,7 +354,9 @@ class MissionTask {
   final String id;
   final String title;
   final String description;
-  final int coins;
+
+  /// SkillCoin reward as [Decimal]; render via [coinsLabel].
+  final Decimal coins;
   final String actionLabel;
 
   /// Key resolved to Remix in the UI (instagram, twitter/x, …).
@@ -149,7 +367,28 @@ class MissionTask {
   int progressCurrent;
   int progressTarget;
   String? externalUrl;
+
+  /// Manual tasks are submitted (then claimed) by the user; automatic ones
+  /// are progressed by backend triggers.
+  final bool manual;
   bool fromBackend;
+
+  /// A write for this mission is in flight — the card's CTA shows a spinner
+  /// and ignores taps until the server answers.
+  bool pending = false;
+
+  String get coinsLabel => formatSkillcoin(coins);
+  bool get hasCoinReward => coins > Decimal.zero;
+
+  /// Link-type missions must actually visit their destination: the tap opens
+  /// [externalUrl] before the start/submit calls. Claims never re-open it.
+  bool get shouldOpenExternalLink =>
+      externalUrl != null &&
+      externalUrl!.isNotEmpty &&
+      !completed &&
+      !claimable &&
+      (status == PlatformTaskStatus.notStarted ||
+          status == PlatformTaskStatus.inProgress);
 }
 
 class QuizData {
@@ -166,12 +405,20 @@ class QuizData {
 
   final String introBody;
   final int questionCount;
+
+  /// Estimated/allowed minutes; 0 = unknown (row hidden on the intro).
   final int minutes;
   final int passPercent;
-  final int rewardCoins;
+
+  /// [Decimal] for the same reason as the task rewards.
+  final Decimal rewardCoins;
   final int rewardXp;
   final List<QuizQuestion> questions;
+
+  /// 0 = no time limit — the assessment screen then runs untimed.
   final int timerSeconds;
+
+  String get rewardCoinsLabel => formatSkillcoin(rewardCoins);
 }
 
 class QuizQuestion {
@@ -179,7 +426,12 @@ class QuizQuestion {
     required this.prompt,
     required this.options,
     required this.correctIndex,
+    this.id,
   });
+
+  /// Backend question UUID — required to submit answers. Null on seeds and
+  /// when the API omits it (spec gap; see `episode_task_models.dart`).
+  final String? id;
 
   final String prompt;
   final List<String> options;
@@ -202,12 +454,31 @@ class UploadedFileInfo {
 
 // ── State + Notifier ─────────────────────────────────────────────────
 
-/// Snapshot of learning + mission demo lists.
+/// Snapshot of the learning + mission lists and where each came from.
 class TasksState {
-  TasksState({required this.learning, required this.missions});
+  TasksState({
+    required this.learning,
+    required this.missions,
+    this.learningSource = TaskSectionSource.seed,
+    this.missionsSource = TaskSectionSource.seed,
+  });
 
   final List<LearningTask> learning;
   final List<MissionTask> missions;
+  final TaskSectionSource learningSource;
+  final TaskSectionSource missionsSource;
+
+  TasksState copyWith({
+    List<LearningTask>? learning,
+    List<MissionTask>? missions,
+    TaskSectionSource? learningSource,
+    TaskSectionSource? missionsSource,
+  }) => TasksState(
+    learning: learning ?? this.learning,
+    missions: missions ?? this.missions,
+    learningSource: learningSource ?? this.learningSource,
+    missionsSource: missionsSource ?? this.missionsSource,
+  );
 
   List<LearningTask> learningFiltered(LearningTaskStatus? status) {
     if (status == null) return List.unmodifiable(learning);
@@ -230,27 +501,137 @@ class TasksState {
 
 /// Riverpod choice: [NotifierProvider] — learning/mission status mutate
 /// via markInReview / markCompleted / recordQuizResult / completeMission.
-/// Learning tasks stay seed until episode-task integration; missions refresh
-/// from `/me/platform-tasks`.
+/// [refreshFromBackend] re-syncs both sections; TasksBody calls it whenever
+/// the Tasks tab opens, and the auth flow kicks the missions half at login.
 class TasksNotifier extends Notifier<TasksState> {
+  bool _missionsInFlight = false;
+  bool _learningInFlight = false;
+
   @override
   TasksState build() {
     return TasksState(learning: _seedLearning(), missions: _seedMissions());
   }
 
-  /// Replaces the missions tab with live platform tasks when available.
-  Future<void> refreshMissionsFromBackend() async {
+  Future<bool> _hasSession() async {
     try {
-      final list = await ref.read(platformTasksRepositoryProvider).list();
-      if (list.isEmpty) return;
-      final missions = list
-          .where((t) => t.isActive)
-          .map(MissionTask.fromPlatform)
-          .toList(growable: false);
-      state = TasksState(learning: state.learning, missions: missions);
+      return await ref.read(tokenStoreProvider).hasSession();
     } catch (_) {
-      // Keep demo missions offline.
+      return false;
     }
+  }
+
+  /// Re-syncs both tabs. Safe to call on every Tasks-tab open.
+  Future<void> refreshFromBackend() async {
+    await Future.wait([
+      refreshMissionsFromBackend(),
+      refreshLearningFromBackend(),
+    ]);
+  }
+
+  /// Missions ← `GET /me/platform-tasks`.
+  ///
+  /// Signed out: no-op (seeds are the demo). Signed in: the seed is dropped
+  /// before the fetch, an empty answer stays empty, and a failure keeps the
+  /// last live list when there is one — otherwise the tab shows error+retry.
+  Future<void> refreshMissionsFromBackend() async {
+    if (_missionsInFlight) return;
+    _missionsInFlight = true;
+    try {
+      if (!await _hasSession()) return;
+      final hadLive = state.missionsSource == TaskSectionSource.live;
+      if (!hadLive) {
+        state = state.copyWith(
+          missions: const [],
+          missionsSource: TaskSectionSource.loading,
+        );
+      }
+      try {
+        final list = await ref.read(platformTasksRepositoryProvider).list();
+        final missions = list
+            .where((t) => t.isActive)
+            .map(MissionTask.fromPlatform)
+            .toList(growable: false);
+        state = state.copyWith(
+          missions: missions,
+          missionsSource: TaskSectionSource.live,
+        );
+      } catch (_) {
+        if (state.missionsSource == TaskSectionSource.live) return;
+        state = state.copyWith(
+          missions: const [],
+          missionsSource: TaskSectionSource.error,
+        );
+      }
+    } finally {
+      _missionsInFlight = false;
+    }
+  }
+
+  /// Learning ← `GET /episodes/watched/tasks`, statuses hydrated from
+  /// `GET /me/submissions` (best-effort — the watched payload already carries
+  /// a status, so a failed submissions read degrades, not breaks).
+  Future<void> refreshLearningFromBackend() async {
+    if (_learningInFlight) return;
+    _learningInFlight = true;
+    try {
+      if (!await _hasSession()) return;
+      final hadLive = state.learningSource == TaskSectionSource.live;
+      if (!hadLive) {
+        state = state.copyWith(
+          learning: const [],
+          learningSource: TaskSectionSource.loading,
+        );
+      }
+      try {
+        final repo = ref.read(episodeTasksRepositoryProvider);
+        final watched = await repo.getWatchedTasks();
+        var submissions = const <UserSubmission>[];
+        try {
+          submissions = await repo.getMySubmissions();
+        } catch (_) {
+          // Statuses fall back to the watched-tasks payload.
+        }
+        state = state.copyWith(
+          learning: learningFromBackend(watched, submissions),
+          learningSource: TaskSectionSource.live,
+        );
+      } catch (_) {
+        if (state.learningSource == TaskSectionSource.live) return;
+        state = state.copyWith(
+          learning: const [],
+          learningSource: TaskSectionSource.error,
+        );
+      }
+    } finally {
+      _learningInFlight = false;
+    }
+  }
+
+  /// Joins each watched task with its most recent submission.
+  static List<LearningTask> learningFromBackend(
+    List<WatchedEpisodeTask> watched,
+    List<UserSubmission> submissions,
+  ) {
+    final latestByTask = <String, UserSubmission>{};
+    for (final s in submissions) {
+      if (s.taskId.isEmpty) continue;
+      final prior = latestByTask[s.taskId];
+      final priorDate = prior?.sortDate;
+      final date = s.sortDate;
+      if (prior == null ||
+          priorDate == null ||
+          (date != null && date.isAfter(priorDate))) {
+        latestByTask[s.taskId] = s;
+      }
+    }
+    return [
+      for (final task in watched)
+        if (task.id.isNotEmpty)
+          LearningTask.fromWatched(
+            task,
+            latestSubmission: latestByTask[task.id],
+          ),
+    ];
   }
 
   void markInReview(String id) {
@@ -258,20 +639,14 @@ class TasksNotifier extends Notifier<TasksState> {
     if (t == null) return;
     t.status = LearningTaskStatus.inReview;
     t.feedback = null;
-    state = TasksState(
-      learning: List<LearningTask>.of(state.learning),
-      missions: state.missions,
-    );
+    state = state.copyWith(learning: List<LearningTask>.of(state.learning));
   }
 
   void markCompleted(String id) {
     final t = state.byId(id);
     if (t == null) return;
     t.status = LearningTaskStatus.completed;
-    state = TasksState(
-      learning: List<LearningTask>.of(state.learning),
-      missions: state.missions,
-    );
+    state = state.copyWith(learning: List<LearningTask>.of(state.learning));
   }
 
   /// Persist quiz answers + score and mark the task completed when passed.
@@ -286,51 +661,79 @@ class TasksNotifier extends Notifier<TasksState> {
     t.quizAnswers = List<int?>.from(answers);
     t.quizCorrect = correct;
     if (passed) t.status = LearningTaskStatus.completed;
-    state = TasksState(
-      learning: List<LearningTask>.of(state.learning),
-      missions: state.missions,
-    );
+    state = state.copyWith(learning: List<LearningTask>.of(state.learning));
   }
 
-  /// Mission CTA: claim when claimable, else start/submit, then re-list.
-  Future<void> completeMission(String id) async {
-    MissionTask? mission;
+  MissionTask? missionById(String id) {
     for (final m in state.missions) {
-      if (m.id == id) {
-        mission = m;
+      if (m.id == id) return m;
+    }
+    return null;
+  }
+
+  void _emitMissions() {
+    state = state.copyWith(missions: List<MissionTask>.of(state.missions));
+  }
+
+  /// Mission CTA: claim when claimable, else start/submit — all against the
+  /// backend for live missions. The card flips to Done only on the server's
+  /// 2xx; a failure rolls back to the pre-tap state and **rethrows** so the
+  /// screen surfaces it (a swallowed claim failure is silently lost coins).
+  /// A successful claim also refreshes the wallet so the balance moves.
+  Future<void> completeMission(String id) async {
+    final mission = missionById(id);
+    if (mission == null || mission.completed || mission.pending) return;
+
+    if (!mission.fromBackend) {
+      // Demo mission (signed-out): local completion is the whole feature.
+      mission.completed = true;
+      _emitMissions();
+      return;
+    }
+
+    final repo = ref.read(platformTasksRepositoryProvider);
+    final claiming =
+        mission.claimable || mission.status == PlatformTaskStatus.claimable;
+    mission.pending = true;
+    _emitMissions();
+    try {
+      PlatformTask? updated;
+      if (claiming) {
+        updated = await repo.claim(id);
+      } else if (mission.status == PlatformTaskStatus.notStarted) {
+        updated = await repo.start(id);
+        if (mission.manual) {
+          // Manual tasks: submit marks claimable (platform-tasks.md).
+          updated = await repo.submit(id) ?? updated;
+        }
+      } else {
+        updated = await repo.submit(id);
+      }
+      if (updated != null) {
+        _replaceMission(id, MissionTask.fromPlatform(updated));
+      }
+      if (claiming) {
+        // Coins landed — pull the fresh balance alongside the fresh list.
+        unawaited(ref.read(walletProvider.notifier).refreshFromBackend());
+      }
+      await refreshMissionsFromBackend();
+    } finally {
+      mission.pending = false;
+      final current = missionById(id);
+      if (current != null) current.pending = false;
+      _emitMissions();
+    }
+  }
+
+  void _replaceMission(String id, MissionTask replacement) {
+    final missions = List<MissionTask>.of(state.missions);
+    for (var i = 0; i < missions.length; i++) {
+      if (missions[i].id == id) {
+        missions[i] = replacement;
         break;
       }
     }
-    if (mission == null || mission.completed) return;
-
-    if (mission.fromBackend) {
-      final repo = ref.read(platformTasksRepositoryProvider);
-      try {
-        if (mission.claimable) {
-          await repo.claim(id);
-        } else if (mission.status == PlatformTaskStatus.notStarted) {
-          await repo.start(id);
-          // Manual tasks: submit marks claimable (platform-tasks.md).
-          if (mission.actionLabel == 'Start') {
-            await repo.submit(id);
-          }
-        } else if (mission.status == PlatformTaskStatus.inProgress) {
-          await repo.submit(id);
-        } else {
-          await repo.claim(id);
-        }
-        await refreshMissionsFromBackend();
-        return;
-      } catch (_) {
-        // Fall through to local optimistic complete for UX continuity.
-      }
-    }
-
-    mission.completed = true;
-    state = TasksState(
-      learning: state.learning,
-      missions: List<MissionTask>.of(state.missions),
-    );
+    state = state.copyWith(missions: missions);
   }
 
   // ── Seeds ────────────────────────────────────────────────────────
@@ -347,17 +750,17 @@ class TasksNotifier extends Notifier<TasksState> {
       '1440px desktop frame size.',
     ];
 
-    const quiz = QuizData(
+    final quiz = QuizData(
       introBody:
           'This assessment tests your knowledge from Episode 05. It is '
           'auto-graded and you will receive your results immediately.',
       questionCount: 3,
       minutes: 2,
       passPercent: 100,
-      rewardCoins: 20,
+      rewardCoins: Decimal.fromInt(20),
       rewardXp: 50,
       timerSeconds: 6 * 60,
-      questions: [
+      questions: const [
         QuizQuestion(
           prompt:
               'What is the primary purpose of a Design System in a product?',
@@ -394,6 +797,8 @@ class TasksNotifier extends Notifier<TasksState> {
       ],
     );
 
+    final coins25 = Decimal.fromInt(25);
+
     // First card (Figma TF15): completed submission — View Result → result
     // screen (not task details).
     final completedSubmission = LearningTask(
@@ -405,7 +810,7 @@ class TasksNotifier extends Notifier<TasksState> {
       episodeSubtitle: 'Episode 1',
       status: LearningTaskStatus.completed,
       kind: LearningTaskKind.submission,
-      coins: 25,
+      coins: coins25,
       xp: 25,
       briefIntro: briefIntro,
       briefBullets: briefBullets,
@@ -423,7 +828,7 @@ class TasksNotifier extends Notifier<TasksState> {
             episodeSubtitle: 'Episode 1',
             status: LearningTaskStatus.completed,
             kind: LearningTaskKind.quiz,
-            coins: 25,
+            coins: coins25,
             xp: 25,
             quiz: quiz,
           )
@@ -442,7 +847,7 @@ class TasksNotifier extends Notifier<TasksState> {
         episodeSubtitle: 'Episode 1',
         status: LearningTaskStatus.pending,
         kind: LearningTaskKind.submission,
-        coins: 25,
+        coins: coins25,
         xp: 25,
         briefIntro: briefIntro,
         briefBullets: briefBullets,
@@ -457,7 +862,7 @@ class TasksNotifier extends Notifier<TasksState> {
         episodeSubtitle: 'Episode 1',
         status: LearningTaskStatus.pending,
         kind: LearningTaskKind.quiz,
-        coins: 25,
+        coins: coins25,
         xp: 25,
         quiz: quiz,
       ),
@@ -471,7 +876,7 @@ class TasksNotifier extends Notifier<TasksState> {
         episodeSubtitle: 'Episode 1',
         status: LearningTaskStatus.inReview,
         kind: LearningTaskKind.submission,
-        coins: 25,
+        coins: coins25,
         xp: 25,
         briefIntro: briefIntro,
         briefBullets: briefBullets,
@@ -486,7 +891,7 @@ class TasksNotifier extends Notifier<TasksState> {
         episodeSubtitle: 'Episode 1',
         status: LearningTaskStatus.actionNeeded,
         kind: LearningTaskKind.submission,
-        coins: 25,
+        coins: coins25,
         xp: 25,
         feedback:
             'Contrast on secondary buttons is too low for WCAG compliance. '
@@ -498,13 +903,15 @@ class TasksNotifier extends Notifier<TasksState> {
   }
 
   static List<MissionTask> _seedMissions() {
+    final coins5 = Decimal.fromInt(5);
+    final coins7 = Decimal.fromInt(7);
     return [
       MissionTask(
         id: 'm-ig',
         title: 'Follow Instagram',
         description:
             'Join our visual community for design inspiration and creator highlights',
-        coins: 5,
+        coins: coins5,
         actionLabel: 'Follow',
         iconKey: 'instagram',
       ),
@@ -513,7 +920,7 @@ class TasksNotifier extends Notifier<TasksState> {
         title: 'Follow X',
         description:
             'Stay updated with the latest creator episodes and platform news.',
-        coins: 5,
+        coins: coins5,
         actionLabel: 'Follow',
         iconKey: 'twitter',
       ),
@@ -522,7 +929,7 @@ class TasksNotifier extends Notifier<TasksState> {
         title: 'Follow Facebook',
         description:
             'Stay updated with the latest creator episodes and platform news.',
-        coins: 5,
+        coins: coins5,
         actionLabel: 'Follow',
         iconKey: 'facebook',
       ),
@@ -531,7 +938,7 @@ class TasksNotifier extends Notifier<TasksState> {
         title: 'Follow LinkedIn',
         description:
             'Stay updated with the latest creator episodes and platform news.',
-        coins: 5,
+        coins: coins5,
         actionLabel: 'Follow',
         iconKey: 'linkedin',
       ),
@@ -540,7 +947,7 @@ class TasksNotifier extends Notifier<TasksState> {
         title: 'Follow TikTok',
         description:
             'Stay updated with the latest creator episodes and platform news.',
-        coins: 5,
+        coins: coins5,
         actionLabel: 'Follow',
         iconKey: 'tiktok',
       ),
@@ -549,7 +956,7 @@ class TasksNotifier extends Notifier<TasksState> {
         title: 'Join Telegram Community',
         description:
             'Stay updated with the latest creator episodes and platform news.',
-        coins: 7,
+        coins: coins7,
         actionLabel: 'Join',
         iconKey: 'telegram',
       ),
@@ -558,7 +965,7 @@ class TasksNotifier extends Notifier<TasksState> {
         title: 'Join WhatsApp Community',
         description:
             'Stay updated with the latest creator episodes and platform news.',
-        coins: 7,
+        coins: coins7,
         actionLabel: 'Join',
         iconKey: 'whatsapp',
       ),
@@ -566,7 +973,7 @@ class TasksNotifier extends Notifier<TasksState> {
         id: 'm-creator',
         title: 'Follow First Creator',
         description: 'Spend 10 minutes watching learning episodes',
-        coins: 5,
+        coins: coins5,
         actionLabel: 'Follow',
         iconKey: 'user',
       ),
@@ -574,7 +981,7 @@ class TasksNotifier extends Notifier<TasksState> {
         id: 'm-rate',
         title: 'Rate the App',
         description: 'Thank you for rating Skiflux on the App Store!',
-        coins: 5,
+        coins: coins5,
         actionLabel: 'Rate',
         iconKey: 'star',
       ),
@@ -583,7 +990,7 @@ class TasksNotifier extends Notifier<TasksState> {
         title: 'Upload Profile Picture',
         description:
             'Never miss a new creator announcement, platform tutorial, or update.',
-        coins: 25,
+        coins: Decimal.fromInt(25),
         actionLabel: 'Upload',
         iconKey: 'image',
       ),

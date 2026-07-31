@@ -4,28 +4,26 @@ import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/error_handling/error_display.dart';
 import '../../shared/error_handling/error_handler.dart';
+import '../../shared/network/api_exception.dart';
 import '../../shared/sheets/skiflux_sheet.dart';
+import 'data/models/supported_bank.dart';
+import 'data/wallet_repository.dart';
 import 'data/wallet_store.dart';
 
 // Figma: **Profile Flow 06** (`2069:11204`) — "Add New Bank Account" sheet.
-// Important-note banner, Select Bank dropdown, Account Number input,
-// Verify & Save. Saves the account as the wallet's default withdrawal
-// destination and resolves with it.
+//
+// Real flow: the bank picker is fed by `GET /wallet/withdrawals/banks`
+// (gateway discovered via `GET /wallet/withdrawals/methods`), and
+// Verify & Save runs `POST /wallet/withdrawals/accounts` — the *backend*
+// performs the account-name verification against the gateway. The saved
+// account (with its server id and verified holder name) becomes the
+// wallet's default withdrawal destination. No bank names or holder names
+// are invented client-side.
 
 /// Figma's dialog avatar: a 98px circle around a 48px glyph. Neither size
 /// exists on the token scale.
 const double _avatarSize = 98;
 const double _glyphSize = 48;
-
-/// Demo bank list for the dropdown (no bank API yet).
-const List<String> _kBanks = [
-  'GT Bank',
-  'Access Bank',
-  'Zenith Bank',
-  'First Bank',
-  'UBA',
-  'Kuda',
-];
 
 Future<BankAccount?> showAddBankSheet(BuildContext context) {
   return showSkifluxSheet<BankAccount>(
@@ -43,8 +41,9 @@ class _AddBankSheet extends ConsumerStatefulWidget {
 
 class _AddBankSheetState extends ConsumerState<_AddBankSheet> {
   final _numberController = TextEditingController();
-  String _bank = _kBanks.first;
+  SupportedBank? _bank;
   bool _numberValid = false;
+  bool _busy = false;
 
   @override
   void dispose() {
@@ -54,6 +53,7 @@ class _AddBankSheetState extends ConsumerState<_AddBankSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final options = ref.watch(addBankOptionsProvider);
     return SkifluxSheetShell(
       title: 'Add New Bank Account',
       child: SingleChildScrollView(
@@ -75,7 +75,30 @@ class _AddBankSheetState extends ConsumerState<_AddBankSheet> {
               ),
             ),
             const SizedBox(height: SkifluxSpacing.spaceS),
-            _bankDropdown(),
+            options.when(
+              loading: () => _bankShell(
+                child: Row(
+                  children: [
+                    const SizedBox(
+                      width: SkifluxUnit.u20,
+                      height: SkifluxUnit.u20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    const SizedBox(width: SkifluxSpacing.spaceS),
+                    Text(
+                      'Loading banks…',
+                      style: SkifluxTypography.bodyP10Regular.copyWith(
+                        color: SkifluxColors.contentTertiary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              error: (e, st) => _banksError(),
+              data: (data) => data.banks.isEmpty
+                  ? _banksError()
+                  : _bankDropdown(data.banks),
+            ),
             const SizedBox(height: SkifluxSpacing.spaceL),
             Text(
               'Account Number',
@@ -93,9 +116,10 @@ class _AddBankSheetState extends ConsumerState<_AddBankSheet> {
             ),
             const SizedBox(height: SkifluxSpacing.spaceL),
             SkifluxButton(
-              label: 'Verify & Save',
+              label: _busy ? 'Verifying…' : 'Verify & Save',
               expanded: true,
-              onPressed: _numberValid ? _save : null,
+              onPressed:
+                  _numberValid && _bank != null && !_busy ? _save : null,
             ),
           ],
         ),
@@ -148,8 +172,57 @@ class _AddBankSheetState extends ConsumerState<_AddBankSheet> {
     );
   }
 
-  /// Pill-shaped bank picker matching the input-field look.
-  Widget _bankDropdown() {
+  /// The pill container the picker states share.
+  Widget _bankShell({required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: SkifluxSpacing.spaceL,
+        vertical: SkifluxSpacing.spaceM,
+      ),
+      decoration: BoxDecoration(
+        borderRadius: SkifluxRadii.borderPill,
+        border: Border.all(
+          color: SkifluxColors.borderSecondary,
+          width: SkifluxBorderWidth.xs,
+        ),
+      ),
+      child: child,
+    );
+  }
+
+  /// Banks couldn't be loaded — named error + retry; the list is never
+  /// substituted with made-up banks.
+  Widget _banksError() {
+    return Container(
+      padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
+      decoration: BoxDecoration(
+        color: SkifluxColors.backgroundNegativeSubtle,
+        borderRadius: SkifluxRadii.borderL,
+      ),
+      child: Column(
+        children: [
+          Text(
+            "We couldn't load the bank list. Please try again.",
+            textAlign: TextAlign.center,
+            style: SkifluxTypography.bodyP10Regular.copyWith(
+              color: SkifluxColors.contentSecondary,
+            ),
+          ),
+          const SizedBox(height: SkifluxSpacing.spaceS),
+          SkifluxButton(
+            label: 'Retry',
+            size: SkifluxButtonSize.s,
+            type: SkifluxButtonType.secondary,
+            onPressed: () => ref.invalidate(addBankOptionsProvider),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Pill-shaped bank picker fed by the gateway's own list.
+  Widget _bankDropdown(List<SupportedBank> banks) {
+    final value = _bank != null && banks.contains(_bank) ? _bank : null;
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: SkifluxSpacing.spaceL,
@@ -163,9 +236,15 @@ class _AddBankSheetState extends ConsumerState<_AddBankSheet> {
         ),
       ),
       child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: _bank,
+        child: DropdownButton<SupportedBank>(
+          value: value,
           isExpanded: true,
+          hint: Text(
+            'Choose your bank',
+            style: SkifluxTypography.bodyP10Regular.copyWith(
+              color: SkifluxColors.contentTertiary,
+            ),
+          ),
           icon: const Icon(
             RemixIcons.arrow_down_s_line,
             size: SkifluxIcons.sizeM,
@@ -176,8 +255,8 @@ class _AddBankSheetState extends ConsumerState<_AddBankSheet> {
           ),
           borderRadius: SkifluxRadii.borderL,
           items: [
-            for (final bank in _kBanks)
-              DropdownMenuItem(value: bank, child: Text(bank)),
+            for (final bank in banks)
+              DropdownMenuItem(value: bank, child: Text(bank.name)),
           ],
           onChanged: (value) {
             if (value != null) setState(() => _bank = value);
@@ -188,30 +267,66 @@ class _AddBankSheetState extends ConsumerState<_AddBankSheet> {
   }
 
   Future<void> _save() async {
+    final bank = _bank;
+    final gateway = ref.read(addBankOptionsProvider).value?.gatewayName;
     try {
       final number = _numberController.text.trim();
-      if (number.length < 10 || !RegExp(r'^\d+$').hasMatch(number)) {
+      // Client-side format guard only; the *verification* is the backend's.
+      if (bank == null ||
+          gateway == null ||
+          number.length < 10 ||
+          !RegExp(r'^\d+$').hasMatch(number)) {
         throw const SkifluxFailure(SkifluxErrorKind.bankVerificationFailed);
       }
-      // Demo stand-in for backend name verification (`1256:20435` — Account
-      // Name Mismatch): account numbers ending in 0000 simulate a name that
-      // doesn't match the Skiflux profile, so that error state is reachable.
-      if (number.endsWith('0000')) {
+      setState(() => _busy = true);
+      final saved = await ref
+          .read(walletRepositoryProvider)
+          .addWithdrawalAccount(
+            bankCode: bank.code,
+            accountNumber: number,
+            gatewayName: gateway,
+            bankName: bank.name,
+          );
+      if (!mounted) return;
+      setState(() => _busy = false);
+      final account = BankAccount(
+        id: saved.id,
+        bankName: saved.bankName.isNotEmpty ? saved.bankName : bank.name,
+        accountNumber: saved.accountNumber.isNotEmpty
+            ? saved.accountNumber
+            : number,
+        // The holder name the *gateway* resolved — never typed client-side.
+        holderName: saved.accountName.isNotEmpty
+            ? saved.accountName
+            : saved.displayName,
+      );
+      ref.read(walletProvider.notifier).addBank(account);
+      Navigator.of(context).pop(account);
+    } catch (e, st) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      if (_isNameMismatch(e)) {
+        // The designed rejection state (`1256:20435`) for the backend's
+        // name-match refusal.
         await showAccountMismatchSheet(context);
         return;
       }
-      final account = BankAccount(
-        bankName: _bank,
-        accountNumber: number,
-        // Demo identity — matches the profile header.
-        holderName: 'Amara Design',
-      );
-      ref.read(walletProvider.notifier).addBank(account);
-      if (mounted) Navigator.of(context).pop(account);
-    } catch (e, st) {
-      if (!mounted) return;
       await ErrorDisplay.show(context, ref, e, stackTrace: st);
     }
+  }
+
+  /// True when the backend's rejection text names an account-name mismatch —
+  /// the one failure with its own designed sheet. Everything else goes to
+  /// the standard bankVerificationFailed modal.
+  static bool _isNameMismatch(Object error) {
+    if (error is! SkifluxFailure) return false;
+    final cause = error.cause;
+    if (cause is! ApiException) return false;
+    final text = [
+      cause.detail ?? '',
+      for (final messages in cause.fieldErrors.values) ...messages,
+    ].join(' ').toLowerCase();
+    return text.contains('name') && text.contains('match');
   }
 }
 

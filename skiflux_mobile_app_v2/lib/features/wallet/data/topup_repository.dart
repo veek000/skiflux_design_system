@@ -1,18 +1,134 @@
+/// Wallet top-up (buy SkillCoins) via hosted gateway checkout.
+///
+/// The real money flow per the OpenAPI spec: `initiate` returns a checkout
+/// URL + transaction reference, the user pays in the browser, and `verify`
+/// is the only thing allowed to declare the purchase successful. Nothing in
+/// this repository ever credits coins client-side.
 library;
 
+import 'package:decimal/decimal.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/error_handling/error_handler.dart';
 import '../../../shared/network/api_client.dart';
 import '../../../shared/network/api_repository.dart';
 
-/// Repository for wallet top-up operations.
+/// `GET /wallet/topup/methods` — active currencies and the gateways that
+/// support them ("drives the frontend's add-money screen with no
+/// hardcoding"). Untyped (`additionalProperties: {}`) in the spec.
+const kTopupMethodsPath = '/wallet/topup/methods';
+
+/// `POST /wallet/topup/initiate` — body `TopupInitiateRequest` (only
+/// `amount_fiat` is required); response is untyped in the spec but carries
+/// the gateway checkout URL and our `tx_ref`.
+const kTopupInitiatePath = '/wallet/topup/initiate';
+
+/// `POST /wallet/topup/verify` — body `VerifyPaymentRequest` (`tx_ref`
+/// required); untyped response carrying the verification status.
+const kTopupVerifyPath = '/wallet/topup/verify';
+
+/// `POST /wallet/topup/charge-card` — body `ChargeSavedCardRequest`
+/// (`saved_card_id` + `amount_fiat` required); returns `PaymentTransaction`.
+const kTopupChargeCardPath = '/wallet/topup/charge-card';
+
+/// Result of `POST /wallet/topup/initiate`.
 ///
-/// Endpoints:
-/// - `GET  /wallet/topup/methods`     — available currencies & gateways
-/// - `POST /wallet/topup/initiate`    — start a top-up
-/// - `POST /wallet/topup/verify`      — confirm after payment
-/// - `POST /wallet/topup/charge-card` — one-tap charge a saved card
+/// The spec leaves the body untyped, so parsing is tolerant about key names
+/// — but it never invents values: a body with no reference or no checkout
+/// URL is a contract failure, not a success.
+class TopupInitiation {
+  const TopupInitiation({required this.txRef, required this.checkoutUrl});
+
+  /// Our internal reference (`PaymentTransaction.tx_ref`) — what `verify`
+  /// takes back.
+  final String txRef;
+
+  /// The gateway's hosted payment page.
+  final Uri checkoutUrl;
+
+  factory TopupInitiation.fromJson(Map<String, dynamic> json) {
+    final txRef = _firstString(json, const [
+      'tx_ref',
+      'reference',
+      'transaction_reference',
+      'trx_ref',
+    ]);
+    final rawUrl = _firstString(json, const [
+      'checkout_url',
+      'authorization_url',
+      'payment_url',
+      'payment_link',
+      'link',
+      'url',
+    ]);
+    final url = rawUrl == null ? null : Uri.tryParse(rawUrl);
+    if (txRef == null || url == null || !url.hasScheme) {
+      throw const FormatException(
+        'Top-up initiate response missing tx_ref/checkout URL',
+      );
+    }
+    return TopupInitiation(txRef: txRef, checkoutUrl: url);
+  }
+}
+
+/// Verification outcome. Anything not explicitly successful or failed is
+/// [pending] — the honest default while the gateway settles.
+enum TopupVerificationStatus { successful, pending, failed }
+
+/// Result of `POST /wallet/topup/verify`.
+class TopupVerification {
+  const TopupVerification({required this.status, this.amountSkillcoins});
+
+  final TopupVerificationStatus status;
+
+  /// Coins credited, when the body carries `PaymentTransaction`-style fields.
+  /// Null means "not reported", never zero.
+  final Decimal? amountSkillcoins;
+
+  factory TopupVerification.fromJson(Map<String, dynamic> json) {
+    final raw =
+        (_firstString(json, const ['status', 'payment_status']) ?? 'pending')
+            .toLowerCase();
+    final status = switch (raw) {
+      'successful' || 'success' || 'completed' || 'verified' =>
+        TopupVerificationStatus.successful,
+      'failed' || 'cancelled' || 'canceled' || 'rejected' =>
+        TopupVerificationStatus.failed,
+      _ => TopupVerificationStatus.pending,
+    };
+    final coins = _firstString(json, const [
+      'amount_skillcoins',
+      'skillcoins',
+    ]);
+    return TopupVerification(
+      status: status,
+      amountSkillcoins: coins == null ? null : Decimal.tryParse(coins),
+    );
+  }
+}
+
+/// First non-empty string under any of [keys], searching the top level and
+/// then one level of nested objects (gateways differ on nesting).
+String? _firstString(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value is String && value.isNotEmpty) return value;
+    if (value is num) return value.toString();
+  }
+  for (final value in json.values) {
+    if (value is Map) {
+      final nested = Map<String, dynamic>.from(value);
+      for (final key in keys) {
+        final inner = nested[key];
+        if (inner is String && inner.isNotEmpty) return inner;
+        if (inner is num) return inner.toString();
+      }
+    }
+  }
+  return null;
+}
+
+/// Repository for wallet top-up operations.
 class TopupRepository extends ApiRepository {
   const TopupRepository(super.dio);
 
@@ -23,55 +139,65 @@ class TopupRepository extends ApiRepository {
   /// Response shape is untyped (additionalProperties: {}) in the OpenAPI spec,
   /// so we return the raw JSON and let callers parse as needed.
   Future<Map<String, dynamic>> getTopupMethods() => getObject(
-        '/wallet/topup/methods',
+        kTopupMethodsPath,
         parse: (json) => json,
+        kind: SkifluxErrorKind.contentLoadFailed,
       );
 
-  /// Initiates a wallet top-up. Returns a checkout URL or transaction
-  /// reference from the payment gateway.
-  Future<Map<String, dynamic>> initiateTopup({
+  /// Initiates a wallet top-up and returns the hosted checkout hand-off.
+  ///
+  /// [amountFiat] must be a string decimal ("500.00") per the money
+  /// convention. [paymentMethod] restricts the hosted checkout to `card`,
+  /// `bank_transfer`, or `all` (the spec's `PaymentMethodEnum`).
+  Future<TopupInitiation> initiateTopup({
     required String amountFiat,
-    required String currency,
-    required String gatewayName,
+    String? currency,
+    String? gatewayName,
+    String? paymentMethod,
+    bool? saveCard,
     String? idempotencyKey,
     String? redirectUrl,
   }) =>
       post(
-        '/wallet/topup/initiate',
+        kTopupInitiatePath,
         body: {
           'amount_fiat': amountFiat,
-          'currency': currency,
-          'gateway_name': gatewayName,
-          // ignore: use_null_aware_elements
-          if (idempotencyKey != null) 'idempotency_key': idempotencyKey,
-          // ignore: use_null_aware_elements
-          if (redirectUrl != null) 'redirect_url': redirectUrl,
+          'currency': ?currency,
+          'gateway_name': ?gatewayName,
+          'payment_method': ?paymentMethod,
+          'save_card': ?saveCard,
+          'idempotency_key': ?idempotencyKey,
+          'redirect_url': ?redirectUrl,
         },
-        parse: (json) => json,
-      ).then((v) => v ?? {});
+        parse: TopupInitiation.fromJson,
+      ).then((v) => v!);
 
-  /// Verifies a completed top-up after user returns from the payment gateway.
-  Future<Map<String, dynamic>> verifyTopup({
-    required String txRef,
-  }) =>
-      post(
-        '/wallet/topup/verify',
+  /// Verifies a top-up after the user returns from the payment gateway.
+  /// Only a [TopupVerificationStatus.successful] result may drive success UI.
+  Future<TopupVerification> verifyTopup({required String txRef}) => post(
+        kTopupVerifyPath,
         body: {'tx_ref': txRef},
-        parse: (json) => json,
-      ).then((v) => v ?? {});
+        parse: TopupVerification.fromJson,
+      ).then((v) => v!);
 
-  /// One-tap charge a previously saved card token.
+  /// One-tap charge of a previously saved card token. Returns the
+  /// `PaymentTransaction` body raw; callers must check `status` — an
+  /// `initiated`/`pending` transaction is not yet money.
+  ///
+  /// Field name per the spec's `ChargeSavedCardRequest`: `saved_card_id`.
   Future<Map<String, dynamic>> chargeCard({
     required String amountFiat,
-    required String currency,
-    required String cardId,
+    required String savedCardId,
+    String? currency,
+    String? idempotencyKey,
   }) =>
       post(
-        '/wallet/topup/charge-card',
+        kTopupChargeCardPath,
         body: {
           'amount_fiat': amountFiat,
-          'currency': currency,
-          'card_id': cardId,
+          'saved_card_id': savedCardId,
+          'currency': ?currency,
+          'idempotency_key': ?idempotencyKey,
         },
         parse: (json) => json,
       ).then((v) => v ?? {});

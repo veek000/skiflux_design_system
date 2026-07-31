@@ -259,14 +259,27 @@ class SubscriptionEpisodeCard extends ConsumerWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // Reuses the home cover art as demo thumbnail imagery.
-            // TODO(backend, blocking): replace local placeholder asset with real CDN/backend episode thumbnail URL — expects: String (network URL)
-            Image.asset(
-              'assets/home_video_raw1.png',
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) =>
-                  const ColoredBox(color: SkifluxColors.magenta900),
-            ),
+            // Real `thumbnail_url` from the /episodes/following payload;
+            // bundled art only as the offline/missing fallback (same
+            // network→asset pattern as the feed card cover).
+            if (episode.hasThumbnail)
+              Image.network(
+                episode.thumbnailUrl!,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => Image.asset(
+                  'assets/home_video_raw1.png',
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) =>
+                      const ColoredBox(color: SkifluxColors.magenta900),
+                ),
+              )
+            else
+              Image.asset(
+                'assets/home_video_raw1.png',
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) =>
+                    const ColoredBox(color: SkifluxColors.magenta900),
+              ),
             Positioned(
               top: SkifluxSpacing.spaceS,
               left: SkifluxSpacing.spaceS,

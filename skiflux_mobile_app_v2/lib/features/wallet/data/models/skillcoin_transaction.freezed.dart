@@ -18,7 +18,10 @@ mixin _$SkillcoinTransaction {
 @DecimalConverter() Decimal get amount;@JsonKey(unknownEnumValue: SkillcoinTransactionType.unknown) SkillcoinTransactionType get transactionType;/// Backend-rendered display string ("Top-up via Payment Gateway") —
 /// required in responses per the spec; show it verbatim.
  String get transactionTypeLabel; String get description; DateTime get createdAt;/// Optional in the spec; unknown future values read as null.
-@JsonKey(unknownEnumValue: JsonKey.nullForUndefinedEnumValue) SkillcoinTransactionStatus? get status; String? get id; String? get referenceId;
+@JsonKey(unknownEnumValue: JsonKey.nullForUndefinedEnumValue) SkillcoinTransactionStatus? get status; String? get id; String? get referenceId;/// Not in the spec's schema, but DRF serializers commonly include it —
+/// parsed when present, null otherwise (the details screen drops the
+/// "Updated" row for null rather than aliasing it to [createdAt]).
+ DateTime? get updatedAt;
 /// Create a copy of SkillcoinTransaction
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -31,16 +34,16 @@ $SkillcoinTransactionCopyWith<SkillcoinTransaction> get copyWith => _$SkillcoinT
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is SkillcoinTransaction&&(identical(other.amount, amount) || other.amount == amount)&&(identical(other.transactionType, transactionType) || other.transactionType == transactionType)&&(identical(other.transactionTypeLabel, transactionTypeLabel) || other.transactionTypeLabel == transactionTypeLabel)&&(identical(other.description, description) || other.description == description)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.status, status) || other.status == status)&&(identical(other.id, id) || other.id == id)&&(identical(other.referenceId, referenceId) || other.referenceId == referenceId));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is SkillcoinTransaction&&(identical(other.amount, amount) || other.amount == amount)&&(identical(other.transactionType, transactionType) || other.transactionType == transactionType)&&(identical(other.transactionTypeLabel, transactionTypeLabel) || other.transactionTypeLabel == transactionTypeLabel)&&(identical(other.description, description) || other.description == description)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.status, status) || other.status == status)&&(identical(other.id, id) || other.id == id)&&(identical(other.referenceId, referenceId) || other.referenceId == referenceId)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,amount,transactionType,transactionTypeLabel,description,createdAt,status,id,referenceId);
+int get hashCode => Object.hash(runtimeType,amount,transactionType,transactionTypeLabel,description,createdAt,status,id,referenceId,updatedAt);
 
 @override
 String toString() {
-  return 'SkillcoinTransaction(amount: $amount, transactionType: $transactionType, transactionTypeLabel: $transactionTypeLabel, description: $description, createdAt: $createdAt, status: $status, id: $id, referenceId: $referenceId)';
+  return 'SkillcoinTransaction(amount: $amount, transactionType: $transactionType, transactionTypeLabel: $transactionTypeLabel, description: $description, createdAt: $createdAt, status: $status, id: $id, referenceId: $referenceId, updatedAt: $updatedAt)';
 }
 
 
@@ -51,7 +54,7 @@ abstract mixin class $SkillcoinTransactionCopyWith<$Res>  {
   factory $SkillcoinTransactionCopyWith(SkillcoinTransaction value, $Res Function(SkillcoinTransaction) _then) = _$SkillcoinTransactionCopyWithImpl;
 @useResult
 $Res call({
-@DecimalConverter() Decimal amount,@JsonKey(unknownEnumValue: SkillcoinTransactionType.unknown) SkillcoinTransactionType transactionType, String transactionTypeLabel, String description, DateTime createdAt,@JsonKey(unknownEnumValue: JsonKey.nullForUndefinedEnumValue) SkillcoinTransactionStatus? status, String? id, String? referenceId
+@DecimalConverter() Decimal amount,@JsonKey(unknownEnumValue: SkillcoinTransactionType.unknown) SkillcoinTransactionType transactionType, String transactionTypeLabel, String description, DateTime createdAt,@JsonKey(unknownEnumValue: JsonKey.nullForUndefinedEnumValue) SkillcoinTransactionStatus? status, String? id, String? referenceId, DateTime? updatedAt
 });
 
 
@@ -68,7 +71,7 @@ class _$SkillcoinTransactionCopyWithImpl<$Res>
 
 /// Create a copy of SkillcoinTransaction
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? amount = null,Object? transactionType = null,Object? transactionTypeLabel = null,Object? description = null,Object? createdAt = null,Object? status = freezed,Object? id = freezed,Object? referenceId = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? amount = null,Object? transactionType = null,Object? transactionTypeLabel = null,Object? description = null,Object? createdAt = null,Object? status = freezed,Object? id = freezed,Object? referenceId = freezed,Object? updatedAt = freezed,}) {
   return _then(_self.copyWith(
 amount: null == amount ? _self.amount : amount // ignore: cast_nullable_to_non_nullable
 as Decimal,transactionType: null == transactionType ? _self.transactionType : transactionType // ignore: cast_nullable_to_non_nullable
@@ -78,7 +81,8 @@ as String,createdAt: null == createdAt ? _self.createdAt : createdAt // ignore: 
 as DateTime,status: freezed == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
 as SkillcoinTransactionStatus?,id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String?,referenceId: freezed == referenceId ? _self.referenceId : referenceId // ignore: cast_nullable_to_non_nullable
-as String?,
+as String?,updatedAt: freezed == updatedAt ? _self.updatedAt : updatedAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,
   ));
 }
 
@@ -163,10 +167,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function(@DecimalConverter()  Decimal amount, @JsonKey(unknownEnumValue: SkillcoinTransactionType.unknown)  SkillcoinTransactionType transactionType,  String transactionTypeLabel,  String description,  DateTime createdAt, @JsonKey(unknownEnumValue: JsonKey.nullForUndefinedEnumValue)  SkillcoinTransactionStatus? status,  String? id,  String? referenceId)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function(@DecimalConverter()  Decimal amount, @JsonKey(unknownEnumValue: SkillcoinTransactionType.unknown)  SkillcoinTransactionType transactionType,  String transactionTypeLabel,  String description,  DateTime createdAt, @JsonKey(unknownEnumValue: JsonKey.nullForUndefinedEnumValue)  SkillcoinTransactionStatus? status,  String? id,  String? referenceId,  DateTime? updatedAt)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _SkillcoinTransaction() when $default != null:
-return $default(_that.amount,_that.transactionType,_that.transactionTypeLabel,_that.description,_that.createdAt,_that.status,_that.id,_that.referenceId);case _:
+return $default(_that.amount,_that.transactionType,_that.transactionTypeLabel,_that.description,_that.createdAt,_that.status,_that.id,_that.referenceId,_that.updatedAt);case _:
   return orElse();
 
 }
@@ -184,10 +188,10 @@ return $default(_that.amount,_that.transactionType,_that.transactionTypeLabel,_t
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function(@DecimalConverter()  Decimal amount, @JsonKey(unknownEnumValue: SkillcoinTransactionType.unknown)  SkillcoinTransactionType transactionType,  String transactionTypeLabel,  String description,  DateTime createdAt, @JsonKey(unknownEnumValue: JsonKey.nullForUndefinedEnumValue)  SkillcoinTransactionStatus? status,  String? id,  String? referenceId)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function(@DecimalConverter()  Decimal amount, @JsonKey(unknownEnumValue: SkillcoinTransactionType.unknown)  SkillcoinTransactionType transactionType,  String transactionTypeLabel,  String description,  DateTime createdAt, @JsonKey(unknownEnumValue: JsonKey.nullForUndefinedEnumValue)  SkillcoinTransactionStatus? status,  String? id,  String? referenceId,  DateTime? updatedAt)  $default,) {final _that = this;
 switch (_that) {
 case _SkillcoinTransaction():
-return $default(_that.amount,_that.transactionType,_that.transactionTypeLabel,_that.description,_that.createdAt,_that.status,_that.id,_that.referenceId);case _:
+return $default(_that.amount,_that.transactionType,_that.transactionTypeLabel,_that.description,_that.createdAt,_that.status,_that.id,_that.referenceId,_that.updatedAt);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -204,10 +208,10 @@ return $default(_that.amount,_that.transactionType,_that.transactionTypeLabel,_t
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function(@DecimalConverter()  Decimal amount, @JsonKey(unknownEnumValue: SkillcoinTransactionType.unknown)  SkillcoinTransactionType transactionType,  String transactionTypeLabel,  String description,  DateTime createdAt, @JsonKey(unknownEnumValue: JsonKey.nullForUndefinedEnumValue)  SkillcoinTransactionStatus? status,  String? id,  String? referenceId)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function(@DecimalConverter()  Decimal amount, @JsonKey(unknownEnumValue: SkillcoinTransactionType.unknown)  SkillcoinTransactionType transactionType,  String transactionTypeLabel,  String description,  DateTime createdAt, @JsonKey(unknownEnumValue: JsonKey.nullForUndefinedEnumValue)  SkillcoinTransactionStatus? status,  String? id,  String? referenceId,  DateTime? updatedAt)?  $default,) {final _that = this;
 switch (_that) {
 case _SkillcoinTransaction() when $default != null:
-return $default(_that.amount,_that.transactionType,_that.transactionTypeLabel,_that.description,_that.createdAt,_that.status,_that.id,_that.referenceId);case _:
+return $default(_that.amount,_that.transactionType,_that.transactionTypeLabel,_that.description,_that.createdAt,_that.status,_that.id,_that.referenceId,_that.updatedAt);case _:
   return null;
 
 }
@@ -219,7 +223,7 @@ return $default(_that.amount,_that.transactionType,_that.transactionTypeLabel,_t
 @JsonSerializable()
 
 class _SkillcoinTransaction implements SkillcoinTransaction {
-  const _SkillcoinTransaction({@DecimalConverter() required this.amount, @JsonKey(unknownEnumValue: SkillcoinTransactionType.unknown) required this.transactionType, required this.transactionTypeLabel, required this.description, required this.createdAt, @JsonKey(unknownEnumValue: JsonKey.nullForUndefinedEnumValue) this.status, this.id, this.referenceId});
+  const _SkillcoinTransaction({@DecimalConverter() required this.amount, @JsonKey(unknownEnumValue: SkillcoinTransactionType.unknown) required this.transactionType, required this.transactionTypeLabel, required this.description, required this.createdAt, @JsonKey(unknownEnumValue: JsonKey.nullForUndefinedEnumValue) this.status, this.id, this.referenceId, this.updatedAt});
   factory _SkillcoinTransaction.fromJson(Map<String, dynamic> json) => _$SkillcoinTransactionFromJson(json);
 
 @override@DecimalConverter() final  Decimal amount;
@@ -233,6 +237,10 @@ class _SkillcoinTransaction implements SkillcoinTransaction {
 @override@JsonKey(unknownEnumValue: JsonKey.nullForUndefinedEnumValue) final  SkillcoinTransactionStatus? status;
 @override final  String? id;
 @override final  String? referenceId;
+/// Not in the spec's schema, but DRF serializers commonly include it —
+/// parsed when present, null otherwise (the details screen drops the
+/// "Updated" row for null rather than aliasing it to [createdAt]).
+@override final  DateTime? updatedAt;
 
 /// Create a copy of SkillcoinTransaction
 /// with the given fields replaced by the non-null parameter values.
@@ -247,16 +255,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _SkillcoinTransaction&&(identical(other.amount, amount) || other.amount == amount)&&(identical(other.transactionType, transactionType) || other.transactionType == transactionType)&&(identical(other.transactionTypeLabel, transactionTypeLabel) || other.transactionTypeLabel == transactionTypeLabel)&&(identical(other.description, description) || other.description == description)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.status, status) || other.status == status)&&(identical(other.id, id) || other.id == id)&&(identical(other.referenceId, referenceId) || other.referenceId == referenceId));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _SkillcoinTransaction&&(identical(other.amount, amount) || other.amount == amount)&&(identical(other.transactionType, transactionType) || other.transactionType == transactionType)&&(identical(other.transactionTypeLabel, transactionTypeLabel) || other.transactionTypeLabel == transactionTypeLabel)&&(identical(other.description, description) || other.description == description)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.status, status) || other.status == status)&&(identical(other.id, id) || other.id == id)&&(identical(other.referenceId, referenceId) || other.referenceId == referenceId)&&(identical(other.updatedAt, updatedAt) || other.updatedAt == updatedAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,amount,transactionType,transactionTypeLabel,description,createdAt,status,id,referenceId);
+int get hashCode => Object.hash(runtimeType,amount,transactionType,transactionTypeLabel,description,createdAt,status,id,referenceId,updatedAt);
 
 @override
 String toString() {
-  return 'SkillcoinTransaction(amount: $amount, transactionType: $transactionType, transactionTypeLabel: $transactionTypeLabel, description: $description, createdAt: $createdAt, status: $status, id: $id, referenceId: $referenceId)';
+  return 'SkillcoinTransaction(amount: $amount, transactionType: $transactionType, transactionTypeLabel: $transactionTypeLabel, description: $description, createdAt: $createdAt, status: $status, id: $id, referenceId: $referenceId, updatedAt: $updatedAt)';
 }
 
 
@@ -267,7 +275,7 @@ abstract mixin class _$SkillcoinTransactionCopyWith<$Res> implements $SkillcoinT
   factory _$SkillcoinTransactionCopyWith(_SkillcoinTransaction value, $Res Function(_SkillcoinTransaction) _then) = __$SkillcoinTransactionCopyWithImpl;
 @override @useResult
 $Res call({
-@DecimalConverter() Decimal amount,@JsonKey(unknownEnumValue: SkillcoinTransactionType.unknown) SkillcoinTransactionType transactionType, String transactionTypeLabel, String description, DateTime createdAt,@JsonKey(unknownEnumValue: JsonKey.nullForUndefinedEnumValue) SkillcoinTransactionStatus? status, String? id, String? referenceId
+@DecimalConverter() Decimal amount,@JsonKey(unknownEnumValue: SkillcoinTransactionType.unknown) SkillcoinTransactionType transactionType, String transactionTypeLabel, String description, DateTime createdAt,@JsonKey(unknownEnumValue: JsonKey.nullForUndefinedEnumValue) SkillcoinTransactionStatus? status, String? id, String? referenceId, DateTime? updatedAt
 });
 
 
@@ -284,7 +292,7 @@ class __$SkillcoinTransactionCopyWithImpl<$Res>
 
 /// Create a copy of SkillcoinTransaction
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? amount = null,Object? transactionType = null,Object? transactionTypeLabel = null,Object? description = null,Object? createdAt = null,Object? status = freezed,Object? id = freezed,Object? referenceId = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? amount = null,Object? transactionType = null,Object? transactionTypeLabel = null,Object? description = null,Object? createdAt = null,Object? status = freezed,Object? id = freezed,Object? referenceId = freezed,Object? updatedAt = freezed,}) {
   return _then(_SkillcoinTransaction(
 amount: null == amount ? _self.amount : amount // ignore: cast_nullable_to_non_nullable
 as Decimal,transactionType: null == transactionType ? _self.transactionType : transactionType // ignore: cast_nullable_to_non_nullable
@@ -294,7 +302,8 @@ as String,createdAt: null == createdAt ? _self.createdAt : createdAt // ignore: 
 as DateTime,status: freezed == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
 as SkillcoinTransactionStatus?,id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String?,referenceId: freezed == referenceId ? _self.referenceId : referenceId // ignore: cast_nullable_to_non_nullable
-as String?,
+as String?,updatedAt: freezed == updatedAt ? _self.updatedAt : updatedAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,
   ));
 }
 

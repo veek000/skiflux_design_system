@@ -3,75 +3,50 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import 'data/badge_catalogue.dart';
 import 'data/badges_repository.dart';
 
 // Figma: **Profile Flow 05** (`1256:25179`) — Badges screen. "3 of 8 badges
 // earned" + brand progress track + "40% Earned" label, then Earned and
-// Locked 3-column grids. Badge art = the user-provided SVGs already staged
-// in `assets/badges/` (same set the public profile uses).
+// Locked 3-column grids. Badge art is local and complete — the catalogue and
+// the earned rule both live in `data/badge_catalogue.dart`, shared with the
+// public profile.
 
-/// Static catalogue mapping badge names to local SVG asset paths.
-/// Every badge in the app is listed here — all start **inactive**.
-/// Only badges returned by the backend are marked as earned.
-const _kBadgeAssets = <String, String>{
-  'First Task Completed': 'assets/badges/badge_first_task_completed.svg',
-  '3 Days Streak': 'assets/badges/badge_3_days_streak.svg',
-  'Top Learner': 'assets/badges/badge_top_learner.svg',
-  '10 Days Streak': 'assets/badges/badge_10_days_streak.svg',
-  'Big Earner': 'assets/badges/badge_big_earner.svg',
-  'Super Fan': 'assets/badges/badge_super_fan.svg',
-  'Referral Pro': 'assets/badges/badge_referral_pro.svg',
-  'Speed Learner': 'assets/badges/badge_speed_learner.svg',
-};
-
-/// Locked-state captions for each badge (the requirement text).
-const _kLockedCaptions = <String, String>{
-  'First Task Completed': 'Complete first task',
-  '3 Days Streak': 'Complete 3 days',
-  'Top Learner': 'Top learner rank',
-  '10 Days Streak': 'Complete 10 days',
-  'Big Earner': 'Earn 500 coins',
-  'Super Fan': 'Like 50 videos',
-  'Referral Pro': 'Refer 3 friends',
-  'Speed Learner': '5 episodes in a day',
-};
-
-/// One display badge derived purely from the backend response.
-class _DisplayBadge {
-  const _DisplayBadge({
+/// One tile: a badge from the local catalogue, in its earned or locked state.
+class DisplayBadge {
+  const DisplayBadge({
     required this.name,
     required this.caption,
     required this.earned,
-    this.localAsset,
-    this.networkUrl,
+    required this.asset,
   });
 
   final String name;
   final String caption;
   final bool earned;
-  final String? localAsset;
-  final String? networkUrl;
+  final String asset;
 }
 
-/// Builds the complete badge list: all badges start inactive, then any
-/// badge the backend says the user earned gets marked as active.
-List<_DisplayBadge> _buildDisplayBadges(List<UserBadge> earnedBadges) {
-  final earnedByName = <String, UserBadge>{
-    for (final ub in earnedBadges) ub.badge.name: ub,
-  };
+/// The whole catalogue, every badge locked, then flipped to earned for each one
+/// the backend listed.
+///
+/// Matching is on the badge's display name, normalised — `Badge` carries no
+/// slug. A name the backend sends that this build has no art for is simply not
+/// shown; a name it omits stays locked.
+List<DisplayBadge> buildDisplayBadges(List<UserBadge> earnedBadges) {
+  final earned = {for (final ub in earnedBadges) badgeKey(ub.badge.name)};
 
-  return _kBadgeAssets.entries.map((entry) {
-    final earned = earnedByName[entry.key];
-    return _DisplayBadge(
-      name: entry.key,
-      caption: earned != null
-          ? 'Earned'
-          : _kLockedCaptions[entry.key] ?? entry.key,
-      earned: earned != null,
-      localAsset: entry.value,
-      networkUrl: earned?.badge.iconUrl,
-    );
-  }).toList();
+  return [
+    for (final entry in kBadgeAssets.entries)
+      DisplayBadge(
+        name: entry.key,
+        caption: earned.contains(badgeKey(entry.key))
+            ? 'Earned'
+            : kBadgeLockedCaptions[entry.key] ?? entry.key,
+        earned: earned.contains(badgeKey(entry.key)),
+        asset: entry.value,
+      ),
+  ];
 }
 
 class BadgesScreen extends ConsumerWidget {
@@ -115,7 +90,7 @@ class BadgesScreen extends ConsumerWidget {
                 ),
               ),
               data: (earnedBadges) {
-                final badges = _buildDisplayBadges(earnedBadges);
+                final badges = buildDisplayBadges(earnedBadges);
                 final earned = badges.where((b) => b.earned).toList();
                 final locked = badges.where((b) => !b.earned).toList();
                 final total = badges.length;
@@ -213,7 +188,7 @@ class BadgesScreen extends ConsumerWidget {
   }
 
   /// 3-column badge grid; rows wrap as needed.
-  Widget _grid(List<_DisplayBadge> badges) {
+  Widget _grid(List<DisplayBadge> badges) {
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -234,7 +209,7 @@ class BadgesScreen extends ConsumerWidget {
 class _BadgeTile extends StatelessWidget {
   const _BadgeTile({required this.badge});
 
-  final _DisplayBadge badge;
+  final DisplayBadge badge;
 
   /// Luminance-preserving desaturation matrix for locked badge art.
   static const List<double> _greyMatrix = [
@@ -246,17 +221,11 @@ class _BadgeTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Prefer network icon (from backend) when available,
-    // fall back to local SVG asset.
-    final Widget art;
-    if (badge.networkUrl != null && badge.networkUrl!.isNotEmpty) {
-      art = SvgPicture.network(badge.networkUrl!, fit: BoxFit.contain);
-    } else if (badge.localAsset != null) {
-      art = SvgPicture.asset(badge.localAsset!, fit: BoxFit.contain);
-    } else {
-      art = const Icon(RemixIcons.award_fill,
-          color: SkifluxColors.contentTertiary);
-    }
+    // Local art only. `Badge.icon_url` is deliberately ignored: the earned and
+    // locked states are the *same* drawing, one desaturated, so sourcing the
+    // earned tile from the network would put two different sets of artwork
+    // side by side in the same grid.
+    final art = SvgPicture.asset(badge.asset, fit: BoxFit.contain);
 
     return Container(
       padding: const EdgeInsets.all(SkifluxSpacing.spaceM),

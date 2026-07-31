@@ -1,25 +1,46 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../shared/error_handling/error_handler.dart';
+import '../../../shared/network/token_store.dart';
+import 'notification_prefs_repository.dart';
+
 // App-wide preference state for the Settings flow — notification toggles,
 // security switches, download quality, app language, and privacy toggles.
 //
-// Figma: **Settings Flow** (`1256:21198` and detail frames). No backend yet,
-// so this is a session-local Riverpod store seeded with the defaults shown in
-// the frames (which toggles start on/off, which quality/language is selected).
-// TODO(backend, blocking): persist and sync these preferences with the backend user-settings record — expects: {notifications: Map<String,bool>, biometricLogin: bool, twoFactorAuth: bool, autoPlayNext: bool, downloadQuality: String, downloadOnWifiOnly: bool, appLanguage: String, saveWatchHistory: bool, personalisedRecommendations: bool}
+// Figma: **Settings Flow** (`1256:21198` and detail frames). Device-side
+// preferences persist to SharedPreferences; the seven notification switches
+// additionally sync with `GET/PATCH /me/notification-preferences` (the
+// SharedPreferences copy is only the offline cache of the server's answer).
+
+/// Mirrors [SessionEmailStore]'s test gate: under `flutter test` the
+/// SharedPreferences platform channel has no implementation, so persistence is
+/// skipped and every future here completes immediately.
+bool get _useMemoryOnly {
+  if (kIsWeb) return false;
+  return Platform.environment['FLUTTER_TEST'] == 'true';
+}
 
 /// The notification switches on the Notifications frame (`1256:20787`),
 /// grouped Activity / Coins & Rewards / Platform.
+///
+/// [wireName] is the field name in the OpenAPI `NotificationPreferences`
+/// schema — the GET body and the PATCH request both use exactly these seven.
 enum NotificationPref {
-  newEpisodes,
-  taskUpdates,
-  commentReplies,
-  commentLikes,
-  coinEarnings,
-  badges,
-  platformAnnouncements,
+  newEpisodes('new_episodes'),
+  taskUpdates('task_updates'),
+  commentReplies('comment_replies'),
+  commentLikes('comment_likes'),
+  coinEarnings('coin_earnings'),
+  badges('badges'),
+  platformAnnouncements('platform_announcements');
+
+  const NotificationPref(this.wireName);
+
+  final String wireName;
 }
 
 /// Download-quality choices (`1256:20009`). Label + per-episode size caption.
@@ -111,10 +132,50 @@ class SettingsNotifier extends Notifier<SettingsState> {
   static const _saveHistoryKey = 'skiflux.save_watch_history';
   static const _recommendationsKey = 'skiflux.personalised_recommendations';
 
+  /// Offline cache of the server's notification preferences, one bool per
+  /// [NotificationPref.wireName].
+  static const _notificationKeyPrefix = 'skiflux.notification.';
+
+  late Future<void> _ready;
+
   @override
   SettingsState build() {
-    // Load persisted settings
-    SharedPreferences.getInstance().then((prefs) {
+    _ready = _hydrate();
+    return const SettingsState(
+      notifications: {
+        NotificationPref.newEpisodes: true,
+        NotificationPref.taskUpdates: false,
+        NotificationPref.commentReplies: false,
+        NotificationPref.commentLikes: false,
+        NotificationPref.coinEarnings: true,
+        NotificationPref.badges: false,
+        NotificationPref.platformAnnouncements: true,
+      },
+      biometricLogin: false,
+      twoFactorAuth: false,
+      autoPlayNext: true,
+      downloadQuality: DownloadQuality.hd720,
+      downloadOnWifiOnly: true,
+      appLanguage: AppLanguage.enUk,
+      saveWatchHistory: true,
+      personalisedRecommendations: true,
+    );
+  }
+
+  /// Completes once persisted preferences have been applied to [state].
+  ///
+  /// [build] must return synchronously, so hydration runs detached — which
+  /// means an early read (the auth flow's biometric gate decision, session
+  /// restore at the splash) would otherwise see the compiled-in defaults and
+  /// never the user's real preference. Await this before any decision that
+  /// depends on a persisted value. Never throws; an unreadable store just
+  /// leaves the defaults in place.
+  Future<void> get ready => _ready;
+
+  Future<void> _hydrate() async {
+    if (_useMemoryOnly) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
       final bio = prefs.getBool(_biometricKey);
       final twoFa = prefs.getBool(_twoFactorKey);
       final autoPlay = prefs.getBool(_autoPlayKey);
@@ -141,6 +202,13 @@ class SettingsNotifier extends Notifier<SettingsState> {
       }
 
       state = state.copyWith(
+        notifications: {
+          for (final pref in NotificationPref.values)
+            pref:
+                prefs.getBool('$_notificationKeyPrefix${pref.wireName}') ??
+                state.notifications[pref] ??
+                false,
+        },
         biometricLogin: bio ?? state.biometricLogin,
         twoFactorAuth: twoFa ?? state.twoFactorAuth,
         autoPlayNext: autoPlay ?? state.autoPlayNext,
@@ -150,33 +218,65 @@ class SettingsNotifier extends Notifier<SettingsState> {
         saveWatchHistory: saveHist ?? state.saveWatchHistory,
         personalisedRecommendations: recs ?? state.personalisedRecommendations,
       );
-    }).catchError((_) => null);
-
-    return const SettingsState(
-      notifications: {
-        NotificationPref.newEpisodes: true,
-        NotificationPref.taskUpdates: false,
-        NotificationPref.commentReplies: false,
-        NotificationPref.commentLikes: false,
-        NotificationPref.coinEarnings: true,
-        NotificationPref.badges: false,
-        NotificationPref.platformAnnouncements: true,
-      },
-      biometricLogin: false,
-      twoFactorAuth: false,
-      autoPlayNext: true,
-      downloadQuality: DownloadQuality.hd720,
-      downloadOnWifiOnly: true,
-      appLanguage: AppLanguage.enUk,
-      saveWatchHistory: true,
-      personalisedRecommendations: true,
-    );
+    } catch (_) {
+      // Unreadable prefs — keep the in-memory defaults.
+    }
   }
 
-  void toggleNotification(NotificationPref pref, bool value) {
+  /// Pulls `GET /me/notification-preferences` into [state] and the offline
+  /// cache. Call when the Notifications screen opens.
+  ///
+  /// A read: a failure degrades to whatever was hydrated from the cache rather
+  /// than surfacing — the screen keeps rendering the last known truth. Skipped
+  /// entirely when no session exists (the endpoint needs a bearer token).
+  Future<void> syncNotificationPrefs() async {
+    // Hydration first, so a slow cache read can't land after the server's
+    // fresher answer and overwrite it.
+    await _ready;
+    try {
+      if (!await ref.read(tokenStoreProvider).hasSession()) return;
+      final remote = await ref
+          .read(notificationPrefsRepositoryProvider)
+          .getPreferences();
+      final merged = {
+        for (final pref in NotificationPref.values)
+          pref: remote[pref.wireName] ?? state.notifications[pref] ?? false,
+      };
+      state = state.copyWith(notifications: merged);
+      for (final entry in merged.entries) {
+        _cacheNotificationPref(entry.key, entry.value);
+      }
+    } catch (_) {
+      // Includes SkifluxFailure and an unreadable keychain — cached values
+      // stay on screen.
+    }
+  }
+
+  /// One notification switch: optimistic flip, `PATCH
+  /// /me/notification-preferences/update`, rollback when the server refuses.
+  ///
+  /// Rethrows the [SkifluxFailure] after rolling back so the screen surfaces
+  /// it (ErrorDisplay); success needs no extra UI — the switch staying put
+  /// *is* the confirmation.
+  Future<void> setNotificationPref(NotificationPref pref, bool value) async {
+    await _ready;
+    final previous = state.notifications[pref] ?? false;
+    if (previous == value) return;
     state = state.copyWith(
       notifications: {...state.notifications, pref: value},
     );
+    _cacheNotificationPref(pref, value);
+    try {
+      await ref
+          .read(notificationPrefsRepositoryProvider)
+          .updatePreference(field: pref.wireName, value: value);
+    } on SkifluxFailure {
+      state = state.copyWith(
+        notifications: {...state.notifications, pref: previous},
+      );
+      _cacheNotificationPref(pref, previous);
+      rethrow;
+    }
   }
 
   void setBiometricLogin(bool value) {
@@ -196,7 +296,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
 
   void setDownloadQuality(DownloadQuality quality) {
     state = state.copyWith(downloadQuality: quality);
-    SharedPreferences.getInstance().then((p) => p.setString(_downloadQualityKey, quality.name)).catchError((_) => false);
+    _saveString(_downloadQualityKey, quality.name);
   }
 
   void setDownloadOnWifiOnly(bool value) {
@@ -206,7 +306,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
 
   void setAppLanguage(AppLanguage language) {
     state = state.copyWith(appLanguage: language);
-    SharedPreferences.getInstance().then((p) => p.setString(_languageKey, language.name)).catchError((_) => false);
+    _saveString(_languageKey, language.name);
   }
 
   void setSaveWatchHistory(bool value) {
@@ -219,7 +319,20 @@ class SettingsNotifier extends Notifier<SettingsState> {
     _saveBool(_recommendationsKey, value);
   }
 
+  void _cacheNotificationPref(NotificationPref pref, bool value) =>
+      _saveBool('$_notificationKeyPrefix${pref.wireName}', value);
+
   void _saveBool(String key, bool value) {
-    SharedPreferences.getInstance().then((p) => p.setBool(key, value)).catchError((_) => false);
+    if (_useMemoryOnly) return;
+    SharedPreferences.getInstance()
+        .then((p) => p.setBool(key, value))
+        .catchError((_) => false);
+  }
+
+  void _saveString(String key, String value) {
+    if (_useMemoryOnly) return;
+    SharedPreferences.getInstance()
+        .then((p) => p.setString(key, value))
+        .catchError((_) => false);
   }
 }

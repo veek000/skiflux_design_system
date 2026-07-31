@@ -8,6 +8,7 @@ import '../../shared/error_handling/error_display.dart';
 import '../../shared/error_handling/error_handler.dart';
 import '../../shared/sheets/success_sheet.dart';
 import '../../shared/toast/skiflux_toast.dart';
+import 'data/episode_tasks_repository.dart';
 import 'data/tasks_store.dart';
 import 'task_shared_widgets.dart';
 
@@ -29,10 +30,11 @@ class _SubmissionTaskScreenState extends ConsumerState<SubmissionTaskScreen> {
   final _linkController = TextEditingController();
   final _noteController = TextEditingController();
   UploadedFileInfo? _file;
+  bool _submitting = false;
 
-  /// Extensions accepted by the demo uploader (Figma lists a subset;
-  /// product supports the broader set below).
-  static const _allowed = <String>[
+  /// Default extension set for tasks that declare no `accepted_proof_types`
+  /// (Figma lists a subset; product supports the broader set below).
+  static const _defaultAllowed = <String>[
     'png',
     'jpg',
     'jpeg',
@@ -58,6 +60,58 @@ class _SubmissionTaskScreenState extends ConsumerState<SubmissionTaskScreen> {
     'txt',
   ];
 
+  /// Proof "types" the creator can declare (`["link","image","video","file"]`
+  /// per the spec) → concrete picker extensions. Raw extension tokens pass
+  /// through so a creator writing `["pdf"]` also works.
+  static const _proofTypeExtensions = <String, List<String>>{
+    'image': ['png', 'jpg', 'jpeg', 'gif', 'webp'],
+    'screenshot': ['png', 'jpg', 'jpeg', 'gif', 'webp'],
+    'photo': ['png', 'jpg', 'jpeg', 'gif', 'webp'],
+    'video': ['mp4', 'mov', 'webm'],
+    'audio': ['mp3', 'wav', 'm4a'],
+    'voice': ['mp3', 'wav', 'm4a'],
+    'file': [
+      'pdf', 'zip', 'rar', '7z', 'doc', 'docx',
+      'xls', 'xlsx', 'csv', 'ppt', 'pptx', 'txt',
+    ],
+    'document': ['pdf', 'doc', 'docx', 'txt'],
+    'archive': ['zip', 'rar', '7z'],
+  };
+
+  /// The task's allowlist: creator-declared proof types when present,
+  /// otherwise the product default.
+  List<String> get _allowed {
+    final types =
+        ref.read(tasksProvider).byId(widget.taskId)?.acceptedProofTypes ??
+        const [];
+    if (types.isEmpty) return _defaultAllowed;
+    final out = <String>{};
+    for (final raw in types) {
+      final type = raw.trim().toLowerCase();
+      if (type.isEmpty || type == 'link' || type == 'url' || type == 'text') {
+        continue; // link/text proofs have no file extension.
+      }
+      final mapped = _proofTypeExtensions[type];
+      if (mapped != null) {
+        out.addAll(mapped);
+      } else if (_defaultAllowed.contains(type)) {
+        out.add(type);
+      }
+    }
+    return out.isEmpty ? _defaultAllowed : out.toList(growable: false);
+  }
+
+  /// "PNG, JPG, PDF … · Max 10MB" from the live allowlist. When the creator
+  /// narrowed the formats we show exactly those; the default set keeps the
+  /// Figma's representative subset to avoid a wall of extensions.
+  String get _dropzoneCaption {
+    final allowed = _allowed;
+    final shown = identical(allowed, _defaultAllowed)
+        ? const ['png', 'jpg', 'pdf', 'zip', 'doc', 'xls', 'ppt', 'mp3', 'mp4']
+        : (allowed.length > 9 ? allowed.sublist(0, 9) : allowed);
+    return '${shown.map((e) => e.toUpperCase()).join(', ')} · Max 10MB';
+  }
+
   @override
   void dispose() {
     _linkController.dispose();
@@ -66,6 +120,7 @@ class _SubmissionTaskScreenState extends ConsumerState<SubmissionTaskScreen> {
   }
 
   bool get _canSubmit {
+    if (_submitting) return false;
     if (_method == 0) return _linkController.text.trim().isNotEmpty;
     return _file != null;
   }
@@ -116,11 +171,12 @@ class _SubmissionTaskScreenState extends ConsumerState<SubmissionTaskScreen> {
   Future<void> _submit() async {
     if (!_canSubmit) return;
     try {
-      // Link method: require a usable http(s) URL before "sending".
+      // Link method: require a usable http(s) URL before sending.
       // Invalid input surfaces as a task-submission failure (modal) via
-      // the centralized error layer — proof-of-concept for the pattern.
+      // the centralized error layer.
+      String? link;
       if (_method == 0) {
-        final link = _linkController.text.trim();
+        link = _linkController.text.trim();
         final uri = Uri.tryParse(link);
         final valid =
             uri != null &&
@@ -131,9 +187,48 @@ class _SubmissionTaskScreenState extends ConsumerState<SubmissionTaskScreen> {
         }
       }
 
-      if (ref.read(tasksProvider).byId(widget.taskId) == null) {
+      final task = ref.read(tasksProvider).byId(widget.taskId);
+      if (task == null) {
         throw const SkifluxFailure(SkifluxErrorKind.taskSubmission);
       }
+
+      // Live tasks upload for real via `POST /episodes/task/submit`; the
+      // success sheet appears only after the server's 2xx. Demo (signed-out)
+      // seeds keep the local-only flow.
+      if (task.fromBackend) {
+        final episodeId = task.episodeId;
+        if (episodeId == null) {
+          throw const SkifluxFailure(SkifluxErrorKind.taskSubmission);
+        }
+        final note = _noteController.text.trim();
+        setState(() => _submitting = true);
+        try {
+          final repo = ref.read(episodeTasksRepositoryProvider);
+          if (_method == 0) {
+            await repo.submitProjectLink(
+              episodeId: episodeId,
+              url: link!,
+              note: note.isEmpty ? null : note,
+            );
+          } else {
+            final file = _file!;
+            final path = file.path;
+            if (path == null || path.isEmpty) {
+              // Picker returned no readable path — nothing to upload.
+              throw const SkifluxFailure(SkifluxErrorKind.taskSubmission);
+            }
+            await repo.submitProjectFile(
+              episodeId: episodeId,
+              filePath: path,
+              fileName: file.name,
+              note: note.isEmpty ? null : note,
+            );
+          }
+        } finally {
+          if (mounted) setState(() => _submitting = false);
+        }
+      }
+
       ref.read(tasksProvider.notifier).markInReview(widget.taskId);
       if (!mounted) return;
       // Confirmation rides the app-wide overlay pattern (blur + scrim +
@@ -154,7 +249,8 @@ class _SubmissionTaskScreenState extends ConsumerState<SubmissionTaskScreen> {
       Navigator.of(context).pop();
     } catch (e, st) {
       if (!mounted) return;
-      // Centralized classify → toast/modal + crash-report hook.
+      // Centralized classify → toast/modal + crash-report hook. The picked
+      // file / link stays in place so the user can retry without redoing it.
       await ErrorDisplay.show(context, ref, e, stackTrace: st);
     }
   }
@@ -203,8 +299,10 @@ class _SubmissionTaskScreenState extends ConsumerState<SubmissionTaskScreen> {
                     color: SkifluxColors.contentPrimary,
                   ),
                 ),
-                const SizedBox(height: SkifluxSpacing.spaceL),
-                TaskRewardPill(coins: task.coins, xp: task.xp),
+                if (task.hasAnyReward) ...[
+                  const SizedBox(height: SkifluxSpacing.spaceL),
+                  TaskRewardPill(task: task),
+                ],
                 const SizedBox(height: SkifluxSpacing.spaceL),
                 TaskEpisodeRow(
                   title: task.episodeTitle,
@@ -239,7 +337,7 @@ class _SubmissionTaskScreenState extends ConsumerState<SubmissionTaskScreen> {
                     fieldKey: const ValueKey('link_input'),
                   )
                 else ...[
-                  _DashedUploadZone(onTap: _pickFile),
+                  _DashedUploadZone(onTap: _pickFile, caption: _dropzoneCaption),
                   if (_file != null) ...[
                     const SizedBox(height: SkifluxSpacing.spaceS),
                     _UploadedFileRow(
@@ -273,8 +371,12 @@ class _SubmissionTaskScreenState extends ConsumerState<SubmissionTaskScreen> {
                   SkifluxSpacing.spaceL,
                 ),
                 child: SkifluxButton(
-                  label: 'Submit Task & Earn ${task.coins} coins',
+                  // Promise coins only when the task actually declares them.
+                  label: task.hasCoinReward
+                      ? 'Submit Task & Earn ${task.coinsLabel} coins'
+                      : 'Submit Task',
                   expanded: true,
+                  loading: _submitting,
                   onPressed: _canSubmit ? _submit : null,
                 ),
               ),
@@ -358,9 +460,12 @@ class _BriefCard extends StatelessWidget {
 
 /// Figma `1256:14245` — dashed dropzone with upload-cloud icon.
 class _DashedUploadZone extends StatelessWidget {
-  const _DashedUploadZone({required this.onTap});
+  const _DashedUploadZone({required this.onTap, required this.caption});
 
   final VoidCallback onTap;
+
+  /// Accepted-format line, derived from the task's real allowlist.
+  final String caption;
 
   @override
   Widget build(BuildContext context) {
@@ -398,7 +503,7 @@ class _DashedUploadZone extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    'PNG, JPG, PDF, ZIP, DOC, XLS, PPT, MP3, MP4 · Max 10MB',
+                    caption,
                     textAlign: TextAlign.center,
                     style: SkifluxTypography.bodyP11Regular.copyWith(
                       color: SkifluxColors.contentDisabled,

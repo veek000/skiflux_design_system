@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../../shared/error_handling/error_display.dart';
 import '../../../shared/sheets/skiflux_sheet.dart';
 import '../../playlists/data/playlists_store.dart';
+import '../../wallet/data/episode_purchase_repository.dart';
 import '../../wallet/data/wallet_store.dart';
 import 'buy_coins_sheet.dart';
 
@@ -13,8 +17,12 @@ import 'buy_coins_sheet.dart';
 // Headered "Unlock Episode" sheet showing a transaction summary
 // (Available Balance / Episode Cost / New balance). When the balance can't
 // cover the cost, a negative banner + "Buy Coins" CTA routes into the Buy
-// Coins flow; on return with enough coins the summary re-enables. Confirming
-// deducts coins and shows the "Episode Unlocked" success state.
+// Coins flow; on return with enough coins the summary re-enables.
+//
+// Confirming runs the real spend — `POST /episodes/purchase` — and only a
+// 2xx unlocks the episode and mirrors the deduction; the wallet is then
+// re-read for the authoritative balance. A failure shows the coin-purchase
+// modal with no deduction and no unlock.
 
 Future<void> showEpisodeUnlockSheet(
   BuildContext context, {
@@ -316,19 +324,26 @@ class _EpisodeUnlockSheetState extends ConsumerState<_EpisodeUnlockSheet> {
     // Busy state renders inline in the primary button — the sheet keeps its
     // exact layout (no resize, no "Unlocking" title swap).
     setState(() => _busy = true);
-    await Future<void>.delayed(const Duration(milliseconds: 900));
-    final ok = ref.read(playlistsProvider.notifier).tryUnlock(ep.id);
-    if (!mounted) return;
-    if (!ok) {
+    try {
+      // The real spend. Anything but 2xx throws — no deduction, no unlock.
+      await ref.read(episodePurchaseRepositoryProvider).purchase(ep.id);
+      if (!mounted) return;
+      // Backend accepted: unlock + mirror the confirmed spend locally, then
+      // re-read the wallet for the authoritative balance and ledger.
+      ref.read(playlistsProvider.notifier).markPurchased(ep.id);
+      ref.read(walletProvider.notifier).recordUnlock(ep.epTag, ep.coinCost);
+      unawaited(ref.read(walletProvider.notifier).refreshFromBackend());
+      setState(() {
+        _busy = false;
+        _phase = _UnlockPhase.success;
+      });
+    } catch (e, st) {
+      if (!mounted) return;
       setState(() => _busy = false);
-      return;
+      // coinPurchaseFailed modal ("No charges were made") via the
+      // repository's failure kind.
+      await ErrorDisplay.show(context, ref, e, stackTrace: st);
     }
-    // Record the spend in the wallet ledger (Profile Flow 02 list).
-    ref.read(walletProvider.notifier).recordUnlock(ep.epTag, ep.coinCost);
-    setState(() {
-      _busy = false;
-      _phase = _UnlockPhase.success;
-    });
   }
 }
 

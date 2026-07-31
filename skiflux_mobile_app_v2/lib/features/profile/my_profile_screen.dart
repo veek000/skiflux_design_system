@@ -624,17 +624,23 @@ class _WatchHistoryCard extends ConsumerWidget {
 
 // ── Menu list ────────────────────────────────────────────────────────
 
-class _MenuList extends StatelessWidget {
+class _MenuList extends ConsumerWidget {
   const _MenuList();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Real standing once the profile loads; the demo string only stands in
+    // while signed out, like the header above. `rankLabel` already formats
+    // "#12 in Master" from `rank` + `current_level`.
+    final profile = ref.watch(meProfileProvider).value;
+    final rankLabel = profile?.rankLabel ?? _MyProfileDemo.leaderboardRank;
+
     return Column(
       children: [
         _MenuRow(
           icon: RemixIcons.trophy_fill,
           label: 'Leaderboard',
-          detail: _MyProfileDemo.leaderboardRank,
+          detail: rankLabel,
           onTap: () => Navigator.of(
             context,
           ).push(MaterialPageRoute(builder: (_) => const LeaderboardScreen())),

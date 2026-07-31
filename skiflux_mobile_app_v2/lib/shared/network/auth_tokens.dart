@@ -1,25 +1,80 @@
 /// The single place that knows what an auth response looks like.
 ///
-/// Tracker item 61b: `POST /auth/login`, `/auth/signup`, `/auth/token/refresh`
-/// and both mobile social logins have description-only responses in the OpenAPI
-/// spec — no schema. The descriptions promise an access and a refresh token but
-/// not the field names. [AuthTokens.fromJson] therefore accepts every plausible
-/// spelling; when the backend dev confirms the real shape, correcting it is an
-/// edit to this one file and nothing else moves.
+/// **Tracker 61b is answered.** `POST /auth/login` and both mobile social
+/// logins now document `AuthTokenResponse` — `{access_token, refresh_token,
+/// user}` — and `/auth/token/refresh` documents `RefreshTokenResponse`
+/// (`{access_token, refresh_token}`, no user). The documented spelling is
+/// tried first below; the other spellings are kept because they cost a list
+/// entry and a backend still in motion may yet move.
 library;
 
-/// An access/refresh token pair.
+/// The learner the tokens belong to — `AuthTokenUser`, sent alongside a login
+/// or social sign-in but **not** by a refresh.
+class AuthUser {
+  const AuthUser({
+    required this.id,
+    required this.email,
+    required this.firstName,
+    required this.lastName,
+    required this.isOnboarded,
+    this.username,
+    this.avatarUrl,
+  });
+
+  final String id;
+  final String email;
+  final String firstName;
+  final String lastName;
+
+  /// Whether `POST /profile/complete-onboarding/` has run for this account.
+  ///
+  /// False means the account exists but has no username, goal or skillworld —
+  /// so signing in must land in the wizard, not on a Home built around a
+  /// profile that isn't there.
+  final bool isOnboarded;
+
+  final String? username;
+  final String? avatarUrl;
+
+  static AuthUser? tryFromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final json = Map<String, dynamic>.from(raw);
+    final id = json['id'];
+    if (id is! String || id.isEmpty) return null;
+    return AuthUser(
+      id: id,
+      email: json['email'] as String? ?? '',
+      firstName: json['first_name'] as String? ?? '',
+      lastName: json['last_name'] as String? ?? '',
+      // Absent is NOT "not onboarded" — see [AuthTokens.needsOnboarding].
+      isOnboarded: json['is_onboarded'] as bool? ?? true,
+      username: json['username'] as String?,
+      avatarUrl: json['avatar_url'] as String?,
+    );
+  }
+}
+
+/// An access/refresh token pair, plus whoever it belongs to.
 class AuthTokens {
-  const AuthTokens({required this.access, required this.refresh});
+  const AuthTokens({required this.access, required this.refresh, this.user});
 
   final String access;
   final String refresh;
 
-  /// Candidate key names, most-likely first. `access`/`refresh` is
-  /// SimpleJWT's default (the spec is DRF), `access_token`/`refresh_token` is
-  /// the OAuth-style spelling the endpoint descriptions use in prose.
-  static const _accessKeys = ['access', 'access_token', 'accessToken', 'token'];
-  static const _refreshKeys = ['refresh', 'refresh_token', 'refreshToken'];
+  /// Null on a refresh, and on any response that omits the object.
+  final AuthUser? user;
+
+  /// Whether this sign-in should be routed into the onboarding wizard.
+  ///
+  /// Only an explicit `is_onboarded: false` counts. A missing `user` object
+  /// must mean "carry on as before" — reading absence as "not onboarded" would
+  /// march every existing learner back through the wizard the first time a
+  /// response shape wobbled.
+  bool get needsOnboarding => user?.isOnboarded == false;
+
+  /// Candidate key names, documented spelling first.
+  static const _accessKeys = ['access_token', 'access', 'accessToken', 'token'];
+  static const _refreshKeys = ['refresh_token', 'refresh', 'refreshToken'];
 
   /// Reads a token pair out of a login/signup/refresh body.
   ///
@@ -44,7 +99,14 @@ class AuthTokens {
         'Auth response contained no recognisable refresh token',
       );
     }
-    return AuthTokens(access: access, refresh: refresh);
+    // `user` sits beside the tokens, so read it from whichever level they came
+    // from — and fall back to the outer body in case only the pair was nested.
+    return AuthTokens(
+      access: access,
+      refresh: refresh,
+      user: AuthUser.tryFromJson(source['user']) ??
+          AuthUser.tryFromJson(json['user']),
+    );
   }
 
   /// Like [fromJson] but returns null instead of throwing when the body holds
@@ -91,8 +153,11 @@ class AuthTokens {
   /// which take the refresh token per the spec.
   Map<String, dynamic> get refreshPayload => {'refresh_token': refresh};
 
-  AuthTokens copyWith({String? access, String? refresh}) =>
-      AuthTokens(access: access ?? this.access, refresh: refresh ?? this.refresh);
+  AuthTokens copyWith({String? access, String? refresh}) => AuthTokens(
+    access: access ?? this.access,
+    refresh: refresh ?? this.refresh,
+    user: user,
+  );
 
   @override
   bool operator ==(Object other) =>

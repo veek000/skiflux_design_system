@@ -8,9 +8,17 @@ import 'models/notification_item.dart';
 /// In-app notification feed — `GET /me/notifications` and the per-item
 /// mark-read.
 ///
-/// Both endpoints are documented in the spec with an empty response body, so
-/// [parse] normalises aliases rather than trusting field names; see the
-/// blocking TODO below.
+/// The list response is now documented as `NotificationListResponse`:
+/// `{count, results, next, offset, limit}` wrapping `NotificationItem`
+/// (`{id, type, title, body, data, is_read, created_at}`). [getList] unwraps
+/// the `results` envelope; the pagination fields are unused because the screen
+/// loads a single page.
+///
+/// [parse] still normalises aliases — the documented spelling is tried first —
+/// because two fields the UI needs are *not* in the schema: the action pill's
+/// label and the card's icon. See [parse].
+///
+/// Mark-read remains a 200 with no body.
 class NotificationsRepository extends ApiRepository {
   const NotificationsRepository(super.dio);
 
@@ -44,24 +52,38 @@ class NotificationsRepository extends ApiRepository {
   /// failure here as "sync it next time", not as a UI error.
   Future<void> markRead(String id) => post(readPath(id));
 
-  /// Normalises an undocumented row into [NotificationItem].
+  /// Maps a `NotificationItem` row onto the app's model.
+  ///
+  /// The documented key is first in every list below; the rest are tolerated
+  /// spellings kept because they cost nothing.
+  ///
+  /// Two of the screen's elements have no field to read:
+  ///
+  /// - **The icon.** Derived from `type` by `NotificationsNotifier.iconKeyFor`,
+  ///   which matches on substrings and falls back to a bell.
+  /// - **The action pill** ("Watch EP. 04", "View Reply"). No `action_label`
+  ///   exists, so the only plausible home is the freeform `data` object — which
+  ///   the schema declares as `{}` with no contents. Until that is pinned down,
+  ///   a card without one simply renders no pill.
   ///
   /// Public so provider tests can exercise the alias handling without a Dio
   /// round trip.
-  // TODO(backend, blocking): document the `GET /me/notifications` response
-  // body — the spec declares 200 "No response body", so the field names below
-  // are inferred — expects: List<{id: String, title: String, message: String,
-  // type: String, created_at: DateTime, is_read: bool, action_label: String?}>
+  // TODO(backend, blocking): `NotificationItem.data` is typed `{}` — the app
+  // reads the action pill's label and deep-link target out of it and cannot
+  // know what it carries — expects: data: {action_label: String?, action_type:
+  // String?, episode_id: String?, comment_id: String?}, plus the enumerated
+  // `type` vocabulary so the icon table can stop matching on substrings
   static NotificationItem parse(Map<String, dynamic> json) {
-    // FCM-style payloads nest the interesting bits under `data`; fall back to
-    // it for the two fields most likely to live there.
+    // The documented `data` object is where anything beyond the six flat fields
+    // has to live.
     final data = json['data'];
     final nested = data is Map ? Map<String, dynamic>.from(data) : const {};
 
     return NotificationItem(
       id: _string(json, const ['id', 'notification_id', 'uuid']),
       title: _string(json, const ['title', 'heading', 'subject']),
-      message: _string(json, const ['message', 'body', 'description']),
+      // `body` is the documented name.
+      message: _string(json, const ['body', 'message', 'description']),
       type:
           _string(json, const ['type', 'notification_type', 'category', 'event'])
               .ifEmpty(
@@ -75,13 +97,14 @@ class NotificationsRepository extends ApiRepository {
         'time',
       ]),
       isRead: _isRead(json),
+      // Not a schema field at any level — `data` is the only candidate.
       actionLabel:
-          _optionalString(json, const [
+          _optionalString(nested, const [
             'action_label',
             'action',
             'cta_label',
           ]) ??
-          _optionalString(nested, const ['action_label', 'action']),
+          _optionalString(json, const ['action_label', 'action', 'cta_label']),
     );
   }
 

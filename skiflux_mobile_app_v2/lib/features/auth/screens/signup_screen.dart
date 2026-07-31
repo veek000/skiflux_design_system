@@ -911,9 +911,17 @@ class _WorldCard extends StatelessWidget {
 // =============================================================================
 
 class WelcomeScreen extends StatelessWidget {
-  const WelcomeScreen({super.key, required this.onStart});
+  const WelcomeScreen({
+    super.key,
+    required this.onStart,
+    this.submitting = false,
+  });
 
   final VoidCallback onStart;
+
+  /// The onboarding payload is being POSTed — the CTA wears its spinner and
+  /// refuses a second tap that would double-submit.
+  final bool submitting;
 
   /// Vertical offset of the ray burst from the centre of the frame. Figma pins
   /// it to `calc(50% - 81.05px)`, so it sits behind the hero circle rather than
@@ -997,7 +1005,8 @@ class WelcomeScreen extends StatelessWidget {
       footer: SkifluxButton(
         label: 'Start Learning',
         expanded: true,
-        onPressed: onStart,
+        loading: submitting,
+        onPressed: submitting ? null : onStart,
       ),
     );
   }

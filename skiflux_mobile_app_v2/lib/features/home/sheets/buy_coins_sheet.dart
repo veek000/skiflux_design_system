@@ -1,21 +1,31 @@
+import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../../shared/error_handling/error_display.dart';
+import '../../../shared/error_handling/error_handler.dart';
 import '../../../shared/sheets/skiflux_sheet.dart';
+import '../../../shared/toast/skiflux_toast.dart';
+import '../../../shared/utils/external_link.dart';
 import '../../playlists/data/playlists_store.dart';
+import '../../wallet/buy_coins_screen.dart'
+    show CoinPacksErrorState, TopupPendingBanner;
+import '../../wallet/data/topup_repository.dart';
 import '../../wallet/data/wallet_store.dart';
 import '../../wallet/widgets/coin_widgets.dart';
 
 // Figma: Other Video Player Flow 04 → 03 → 02
 // (`1256:27567` packs → `1256:27688` payment → `1256:27814` success).
 //
-// Three-phase headerless sheet: pick a pack → confirm payment method →
-// success. Tops up the SkillCoin wallet via [PlaylistsNotifier.topUp].
+// Four-phase headerless sheet backed by the real top-up endpoints: pick a
+// pack → confirm payment method → `POST /wallet/topup/initiate` + gateway
+// checkout hand-off → `POST /wallet/topup/verify`. The success phase renders
+// only after verify confirms; no coins are ever credited client-side.
 
 enum _PayMethod { card, bank }
 
-enum _BuyPhase { packs, payment, success }
+enum _BuyPhase { packs, payment, pendingCheckout, success }
 
 /// Opens Buy Coins. Resolves with the number of coins purchased (or null
 /// if the user backed out) so callers can react (e.g. retry an unlock).
@@ -37,12 +47,18 @@ class _BuyCoinsSheetState extends ConsumerState<_BuyCoinsSheet> {
   _BuyPhase _phase = _BuyPhase.packs;
   CoinPack? _selected;
   _PayMethod _method = _PayMethod.card;
+  bool _busy = false;
+  TopupInitiation? _handOff;
+
+  /// Backend-reported coins credited by verify, when it said.
+  Decimal? _coinsCredited;
 
   @override
   Widget build(BuildContext context) {
     return switch (_phase) {
       _BuyPhase.packs => _packsView(),
       _BuyPhase.payment => _paymentView(),
+      _BuyPhase.pendingCheckout => _pendingView(),
       _BuyPhase.success => _successView(),
     };
   }
@@ -74,7 +90,9 @@ class _BuyCoinsSheetState extends ConsumerState<_BuyCoinsSheet> {
             const SizedBox(height: SkifluxSpacing.spaceL),
             ref.watch(coinPacksProvider).when(
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, st) => Center(child: Text('Failed to load packs: $e')),
+              error: (e, st) => CoinPacksErrorState(
+                onRetry: () => ref.invalidate(coinPacksProvider),
+              ),
               data: (packs) {
                 if (packs.isEmpty) {
                   return const Center(
@@ -174,7 +192,7 @@ class _BuyCoinsSheetState extends ConsumerState<_BuyCoinsSheet> {
             CoinSummaryCard(
               rows: [
                 CoinSummaryRow('Amount', pack.priceLabel),
-                const CoinSummaryRow('Rate', '1 coin = ₦$kCoinRateNaira'),
+                CoinSummaryRow('Rate', pack.approxRateLabel),
                 CoinSummaryRow(
                   "You're Buying",
                   '${pack.coins}',
@@ -185,16 +203,20 @@ class _BuyCoinsSheetState extends ConsumerState<_BuyCoinsSheet> {
             ),
             const SizedBox(height: SkifluxSpacing.spaceL),
             SkifluxButton(
-              label: 'Pay ${pack.priceLabel} · Get ${pack.coins} coins',
+              label: _busy
+                  ? 'Contacting payment provider…'
+                  : 'Pay ${pack.priceLabel} · Get ${pack.coins} coins',
               expanded: true,
-              onPressed: _confirmPurchase,
+              onPressed: _busy ? null : _startCheckout,
             ),
             const SizedBox(height: SkifluxSpacing.spaceS),
             SkifluxButton(
               label: 'Back',
               type: SkifluxButtonType.secondary,
               expanded: true,
-              onPressed: () => setState(() => _phase = _BuyPhase.packs),
+              onPressed: _busy
+                  ? null
+                  : () => setState(() => _phase = _BuyPhase.packs),
             ),
           ],
         ),
@@ -202,20 +224,126 @@ class _BuyCoinsSheetState extends ConsumerState<_BuyCoinsSheet> {
     );
   }
 
-  // --- Phase 3: success --------------------------------------------------
-
-  Future<void> _confirmPurchase() async {
+  /// `POST /wallet/topup/initiate`, then hand off to the gateway checkout.
+  Future<void> _startCheckout() async {
     final pack = _selected!;
-    ref.read(playlistsProvider.notifier).topUp(pack.coins);
-    // Ledger entry for the wallet screen's transaction list.
-    ref.read(walletProvider.notifier).recordTopUp(pack.coins, pack.priceNaira);
-    if (!mounted) return;
-    setState(() => _phase = _BuyPhase.success);
+    setState(() => _busy = true);
+    try {
+      final handOff = await ref.read(topupRepositoryProvider).initiateTopup(
+            amountFiat: pack.amountFiatWire,
+            currency: 'NGN',
+            paymentMethod: _method == _PayMethod.card ? 'card' : 'bank_transfer',
+          );
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _handOff = handOff;
+        _phase = _BuyPhase.pendingCheckout;
+      });
+      await openExternalUrl(context, handOff.checkoutUrl);
+    } catch (e, st) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      await ErrorDisplay.show(context, ref, e, stackTrace: st);
+    }
   }
+
+  // --- Phase 3: waiting for the gateway ---------------------------------
+
+  Widget _pendingView() {
+    final handOff = _handOff!;
+    return SkifluxSheetShell(
+      title: 'Complete your payment',
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          SkifluxSpacing.spaceL,
+          SkifluxSpacing.spaceL,
+          SkifluxSpacing.spaceL,
+          0,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TopupPendingBanner(reference: handOff.txRef),
+            const SizedBox(height: SkifluxSpacing.spaceL),
+            SkifluxButton(
+              label: _busy ? 'Checking payment…' : "I've completed payment",
+              expanded: true,
+              onPressed: _busy ? null : _verify,
+            ),
+            const SizedBox(height: SkifluxSpacing.spaceS),
+            SkifluxButton(
+              label: 'Cancel',
+              type: SkifluxButtonType.secondary,
+              expanded: true,
+              onPressed: _busy
+                  ? null
+                  : () => setState(() {
+                        _handOff = null;
+                        _phase = _BuyPhase.payment;
+                      }),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// `POST /wallet/topup/verify` — the only path into the success phase.
+  Future<void> _verify() async {
+    final handOff = _handOff;
+    if (handOff == null) return;
+    setState(() => _busy = true);
+    try {
+      final result = await ref
+          .read(topupRepositoryProvider)
+          .verifyTopup(txRef: handOff.txRef);
+      if (!mounted) return;
+      switch (result.status) {
+        case TopupVerificationStatus.successful:
+          // Real balance + ledger before the success view renders.
+          await ref.read(walletProvider.notifier).refreshFromBackend();
+          if (!mounted) return;
+          setState(() {
+            _busy = false;
+            _coinsCredited = result.amountSkillcoins;
+            _phase = _BuyPhase.success;
+          });
+        case TopupVerificationStatus.pending:
+          setState(() => _busy = false);
+          SkifluxToast.info(
+            context,
+            'Payment not confirmed yet. Finish paying in your browser, '
+            'then try again.',
+          );
+        case TopupVerificationStatus.failed:
+          setState(() {
+            _busy = false;
+            _handOff = null;
+            _phase = _BuyPhase.payment;
+          });
+          await ErrorDisplay.show(
+            context,
+            ref,
+            const SkifluxFailure(SkifluxErrorKind.coinPurchaseFailed),
+          );
+      }
+    } catch (e, st) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      await ErrorDisplay.show(context, ref, e, stackTrace: st);
+    }
+  }
+
+  // --- Phase 4: success (verify-confirmed only) -------------------------
 
   Widget _successView() {
     final coins = ref.watch(playlistsProvider).skillCoins;
     final pack = _selected!;
+    final credited = _coinsCredited == null
+        ? pack.coins
+        : wholeCoinFloor(_coinsCredited!);
     return SkifluxSheetShell(
       title: '',
       showHeader: false,
@@ -256,7 +384,7 @@ class _BuyCoinsSheetState extends ConsumerState<_BuyCoinsSheet> {
             ),
             const SizedBox(height: SkifluxSpacing.spaceXs),
             Text(
-              'Your wallet has been topped up with ${pack.coins} SkillCoins. '
+              'Your wallet has been topped up with $credited SkillCoins. '
               'You can now use them to unlock episodes.',
               textAlign: TextAlign.center,
               style: SkifluxTypography.bodyP8Regular.copyWith(
@@ -268,7 +396,7 @@ class _BuyCoinsSheetState extends ConsumerState<_BuyCoinsSheet> {
               filled: true,
               rows: [
                 CoinSummaryRow('Amount', pack.priceLabel),
-                CoinSummaryRow('Coins Purchased', '+${pack.coins}'),
+                CoinSummaryRow('Coins Purchased', '+$credited'),
               ],
               totalLabel: 'New balance',
               totalCoins: coins,
@@ -277,7 +405,7 @@ class _BuyCoinsSheetState extends ConsumerState<_BuyCoinsSheet> {
             SkifluxButton(
               label: 'Done',
               expanded: true,
-              onPressed: () => Navigator.of(context).pop(pack.coins),
+              onPressed: () => Navigator.of(context).pop(credited),
             ),
           ],
         ),

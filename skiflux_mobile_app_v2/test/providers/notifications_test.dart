@@ -1,9 +1,11 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:skiflux_mobile_app_v2/features/notifications/data/models/notification_item.dart';
 import 'package:skiflux_mobile_app_v2/features/notifications/data/notifications_repository.dart';
 import 'package:skiflux_mobile_app_v2/features/notifications/data/notifications_store.dart';
+import 'package:skiflux_mobile_app_v2/shared/network/token_store.dart';
 
 void main() {
   late ProviderContainer container;
@@ -68,9 +70,15 @@ void main() {
   });
 
   group('notificationsProvider refreshFromBackend', () {
-    ProviderContainer withRepo(_FakeNotificationsRepository repo) {
+    ProviderContainer withRepo(
+      _FakeNotificationsRepository repo, {
+      bool signedIn = true,
+    }) {
       final c = ProviderContainer(
-        overrides: [notificationsRepositoryProvider.overrideWithValue(repo)],
+        overrides: [
+          notificationsRepositoryProvider.overrideWithValue(repo),
+          tokenStoreProvider.overrideWithValue(_FakeTokenStore(signedIn)),
+        ],
       );
       addTearDown(c.dispose);
       return c;
@@ -109,12 +117,52 @@ void main() {
       expect(c.read(notificationsProvider), isEmpty);
     });
 
-    test('keeps the demo seed when the request fails', () async {
+    test('signed-in failure is an error state, never the demo seed', () async {
+      // The seed includes fabricated money notifications — a signed-in user
+      // must get an error + retry, not those.
       final c = withRepo(_FakeNotificationsRepository(null));
+      await c.read(notificationsProvider.notifier).refreshFromBackend();
+
+      expect(c.read(notificationsProvider), isEmpty);
+      expect(c.read(notificationsProvider.notifier).loadFailed, isTrue);
+      expect(c.read(notificationsProvider.notifier).fromBackend, isFalse);
+    });
+
+    test('signed out keeps the demo seed and never calls the API', () async {
+      final repo = _FakeNotificationsRepository([item()]);
+      final c = withRepo(repo, signedIn: false);
       await c.read(notificationsProvider.notifier).refreshFromBackend();
 
       expect(c.read(notificationsProvider), hasLength(16));
       expect(c.read(notificationsProvider.notifier).fromBackend, isFalse);
+      expect(c.read(notificationsProvider.notifier).loadFailed, isFalse);
+      expect(repo.listCalls, 0);
+    });
+
+    test('a failed re-fetch keeps the last live list, not an error', () async {
+      final repo = _FakeNotificationsRepository([item()]);
+      final c = withRepo(repo);
+      await c.read(notificationsProvider.notifier).refreshFromBackend();
+
+      repo.failNext = true;
+      await c.read(notificationsProvider.notifier).refreshFromBackend();
+
+      expect(c.read(notificationsProvider), hasLength(1));
+      expect(c.read(notificationsProvider.notifier).loadFailed, isFalse);
+    });
+
+    test('a retry after a failure recovers to the live feed', () async {
+      final repo = _FakeNotificationsRepository([item()], failNext: true);
+      final c = withRepo(repo);
+      await c.read(notificationsProvider.notifier).refreshFromBackend();
+      expect(c.read(notificationsProvider.notifier).loadFailed, isTrue);
+
+      repo.failNext = false;
+      await c.read(notificationsProvider.notifier).refreshFromBackend();
+
+      expect(c.read(notificationsProvider), hasLength(1));
+      expect(c.read(notificationsProvider.notifier).loadFailed, isFalse);
+      expect(c.read(notificationsProvider.notifier).fromBackend, isTrue);
     });
 
     test('maps read state onto the unread flag', () async {
@@ -188,15 +236,17 @@ void main() {
   });
 
   group('NotificationsRepository.parse', () {
-    test('reads the documented field names', () {
+    test('reads the documented NotificationItem', () {
+      // The spec's six flat fields plus `data`. Note there is no `message`,
+      // no `icon` and no `action_label` — the body key is `body`.
       final item = NotificationsRepository.parse({
         'id': 'abc',
-        'title': 'Task submitted',
-        'message': 'Under review',
         'type': 'task_submitted',
-        'created_at': '2026-07-01T10:00:00Z',
+        'title': 'Task submitted',
+        'body': 'Under review',
+        'data': <String, dynamic>{},
         'is_read': true,
-        'action_label': 'View',
+        'created_at': '2026-07-01T10:00:00Z',
       });
 
       expect(item.id, 'abc');
@@ -205,13 +255,24 @@ void main() {
       expect(item.type, 'task_submitted');
       expect(item.createdAt?.toUtc(), DateTime.utc(2026, 7, 1, 10));
       expect(item.isRead, isTrue);
-      expect(item.actionLabel, 'View');
+      // Nothing in `data` to build a pill from, so the card renders without one
+      // rather than inventing a label.
+      expect(item.actionLabel, isNull);
+    });
+
+    test('the documented body key wins over the tolerated alias', () {
+      final item = NotificationsRepository.parse({
+        'id': 'a',
+        'body': 'Documented',
+        'message': 'Tolerated',
+      });
+      expect(item.message, 'Documented');
     });
 
     test('falls back to alias field names', () {
       final item = NotificationsRepository.parse({
         'notification_id': 42,
-        'body': 'Alias body',
+        'message': 'Alias body',
         'notification_type': 'coin_earned',
         'send_time': '2026-07-01T10:00:00Z',
         'unread': true,
@@ -291,14 +352,20 @@ void main() {
   });
 }
 
-/// Returns [items], or throws when they are null (the offline path). Records
-/// every id passed to [markRead] so the optimistic-read sync can be asserted.
+/// Returns [items], or throws when they are null (the offline path) or when
+/// [failNext] is set. Records every id passed to [markRead] so the
+/// optimistic-read sync can be asserted.
 class _FakeNotificationsRepository extends NotificationsRepository {
-  _FakeNotificationsRepository(this.items, {this.failMarkRead = false})
-    : super(Dio());
+  _FakeNotificationsRepository(
+    this.items, {
+    this.failMarkRead = false,
+    this.failNext = false,
+  }) : super(Dio());
 
   final List<NotificationItem>? items;
   final bool failMarkRead;
+  bool failNext;
+  int listCalls = 0;
   final List<String> markedRead = [];
 
   @override
@@ -307,8 +374,9 @@ class _FakeNotificationsRepository extends NotificationsRepository {
     int? offset,
     bool? unreadOnly,
   }) async {
+    listCalls++;
     final value = items;
-    if (value == null) throw Exception('offline');
+    if (value == null || failNext) throw Exception('offline');
     return value;
   }
 
@@ -317,4 +385,14 @@ class _FakeNotificationsRepository extends NotificationsRepository {
     markedRead.add(id);
     if (failMarkRead) throw Exception('offline');
   }
+}
+
+/// Presence-only session gate, with no platform channel behind it.
+class _FakeTokenStore extends TokenStore {
+  _FakeTokenStore(this.signedIn) : super(const FlutterSecureStorage());
+
+  final bool signedIn;
+
+  @override
+  Future<bool> hasSession() async => signedIn;
 }

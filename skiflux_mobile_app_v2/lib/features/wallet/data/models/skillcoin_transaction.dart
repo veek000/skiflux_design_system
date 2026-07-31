@@ -76,6 +76,11 @@ abstract class SkillcoinTransaction with _$SkillcoinTransaction {
     SkillcoinTransactionStatus? status,
     String? id,
     String? referenceId,
+
+    /// Not in the spec's schema, but DRF serializers commonly include it —
+    /// parsed when present, null otherwise (the details screen drops the
+    /// "Updated" row for null rather than aliasing it to [createdAt]).
+    DateTime? updatedAt,
   }) = _SkillcoinTransaction;
 
   factory SkillcoinTransaction.fromJson(Map<String, dynamic> json) =>

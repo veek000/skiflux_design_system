@@ -1,8 +1,10 @@
+import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/sheets/share_sheet.dart';
+import 'data/skillcoin_display.dart';
 import 'data/tasks_store.dart';
 import 'quiz_assessment_screen.dart';
 
@@ -31,19 +33,25 @@ class QuizResultScreen extends ConsumerWidget {
     final quiz = task?.quiz;
     final isQuiz = task?.kind == LearningTaskKind.quiz && quiz != null;
     final percent = total == 0 ? 0 : ((correct / total) * 100).round();
-    final coins = isQuiz ? (quiz.rewardCoins) : (task?.coins ?? 25);
-    final xp = isQuiz ? (quiz.rewardXp) : (task?.xp ?? 25);
+    // Rewards are whatever the task actually declared — no invented "+25"
+    // fallback; the split card hides entirely when nothing was declared.
+    final coins = isQuiz ? quiz.rewardCoins : (task?.coins ?? Decimal.zero);
+    final coinsLabel = formatSkillcoin(coins);
+    final xp = isQuiz ? quiz.rewardXp : (task?.xp ?? 0);
+    final hasRewards = coins > Decimal.zero || xp > 0;
+    final passPercent = quiz?.passPercent ?? 100;
     final title = isQuiz
         ? (passed ? 'Assessment Passed!' : 'Assessment Failed')
         : 'Task Completed!';
     final body = isQuiz
         ? (passed
-              ? 'You scored $correct/$total ($percent%) on the '
-                    'Design Systems Quiz. Your proof has been logged.'
+              ? 'You scored $correct/$total ($percent%) on this assessment.'
               : 'You scored $correct/$total ($percent%). You need '
-                    '100% to pass. Review the answers and try again.')
-        : 'Your submission was approved. Rewards have been added '
-              'to your wallet.';
+                    '$passPercent% to pass. Review the answers and try again.')
+        : hasRewards
+        ? 'Your submission was approved. Rewards have been added '
+              'to your wallet.'
+        : 'Your submission was approved.';
 
     return Scaffold(
       backgroundColor: SkifluxColors.backgroundPrimary,
@@ -93,7 +101,7 @@ class QuizResultScreen extends ConsumerWidget {
                         color: SkifluxColors.contentTertiary,
                       ),
                     ),
-                    if (passed) ...[
+                    if (passed && hasRewards) ...[
                       const SizedBox(height: SkifluxSpacing.spaceS),
                       // Figma `1256:14729` — two equal columns + centered
                       // vertical stroke (Border/Secondary). Stack guarantees
@@ -140,7 +148,7 @@ class QuizResultScreen extends ConsumerWidget {
                                             width: SkifluxSpacing.spaceXs,
                                           ),
                                           Text(
-                                            '+$coins',
+                                            '+$coinsLabel',
                                             style: SkifluxTypography
                                                 .headingH10Bold
                                                 .copyWith(

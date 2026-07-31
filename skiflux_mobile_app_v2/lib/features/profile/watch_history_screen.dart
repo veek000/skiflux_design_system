@@ -21,9 +21,11 @@ import 'library_episode_row.dart';
 // `1256:24327`: Remove from watch history / Downloads / Save Video /
 // Share Video).
 //
-// Backed by `GET /me/watch-history`. The Figma only draws Today and Yesterday
-// because its sample data stops there; real history runs back further, so
-// anything older is grouped under its own date heading.
+// Backed by `GET /me/watch-history`; row removal and "Clear all" hit
+// `DELETE /me/watch-history/{episode_id}` / `DELETE /me/watch-history`.
+// The Figma only draws Today and Yesterday because its sample data stops
+// there; real history runs back further, so anything older is grouped under
+// its own date heading.
 
 class WatchHistoryScreen extends ConsumerStatefulWidget {
   const WatchHistoryScreen({super.key});
@@ -52,9 +54,7 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
         ),
         // "Clear all" in negative red (1256:24238).
         trailing: TextButton(
-          onPressed: loaded.isEmpty
-              ? null
-              : () => ref.read(watchHistoryProvider.notifier).clear(),
+          onPressed: loaded.isEmpty ? null : _clearAll,
           child: Text(
             'Clear all',
             style: SkifluxTypography.uiButtonMedium.copyWith(
@@ -183,8 +183,7 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
     if (!mounted || action == null) return;
     switch (action) {
       case WatchHistoryMenuAction.remove:
-        ref.read(watchHistoryProvider.notifier).hide(entry);
-        SkifluxToast.info(context, 'Removed from watch history');
+        await _remove(entry);
       case WatchHistoryMenuAction.download:
         // TODO(backend, blocking): no offline download pipeline exists — this
         // only acknowledges the tap — expects: a download URL + local store
@@ -193,6 +192,37 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
         await _save(entry.episode);
       case WatchHistoryMenuAction.share:
         await showShareSheet(context);
+    }
+  }
+
+  /// "Remove from watch history" — optimistic row drop backed by
+  /// `DELETE /me/watch-history/{episode_id}`; the confirmation toast waits
+  /// for the 2xx, and a failure (row restored by the store) says so instead.
+  Future<void> _remove(WatchHistoryEntry entry) async {
+    try {
+      await ref.read(watchHistoryProvider.notifier).remove(entry);
+      if (mounted) SkifluxToast.info(context, 'Removed from watch history');
+    } catch (error) {
+      if (!mounted) return;
+      SkifluxToast.error(
+        context,
+        ref.read(errorHandlerProvider).classify(error).message,
+      );
+    }
+  }
+
+  /// "Clear all" — optimistic wipe backed by `DELETE /me/watch-history`;
+  /// the store restores the list and this surfaces the error on failure.
+  Future<void> _clearAll() async {
+    try {
+      await ref.read(watchHistoryProvider.notifier).clearAll();
+      if (mounted) SkifluxToast.info(context, 'Watch history cleared');
+    } catch (error) {
+      if (!mounted) return;
+      SkifluxToast.error(
+        context,
+        ref.read(errorHandlerProvider).classify(error).message,
+      );
     }
   }
 

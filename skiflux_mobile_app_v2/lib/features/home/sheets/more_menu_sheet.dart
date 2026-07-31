@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../../shared/error_handling/error_display.dart';
 import '../../../shared/sheets/skiflux_sheet.dart';
 import '../../../shared/toast/skiflux_toast.dart';
 import '../../playlists/data/playlists_store.dart';
+import '../data/home_feed_store.dart';
 import '../../tasks/data/tasks_store.dart';
 import '../../tasks/quiz_intro_screen.dart';
 import '../../tasks/submission_task_screen.dart';
@@ -15,15 +17,19 @@ import 'playback_speed_sheet.dart';
 
 // Figma: **Other Video Player Flow 08** (`1256:27071`) — More Menu.
 
-Future<void> showMoreMenuSheet(BuildContext context) {
+Future<void> showMoreMenuSheet(BuildContext context, {String? episodeId}) {
   return showSkifluxSheet(
     context: context,
-    builder: (_) => const _MoreMenuSheet(),
+    builder: (_) => _MoreMenuSheet(episodeId: episodeId),
   );
 }
 
 class _MoreMenuSheet extends ConsumerWidget {
-  const _MoreMenuSheet();
+  const _MoreMenuSheet({this.episodeId});
+
+  /// Backend UUID of the episode this menu was opened for; null for demo
+  /// catalogue items that only exist client-side.
+  final String? episodeId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -123,14 +129,11 @@ class _MoreMenuSheet extends ConsumerWidget {
           _MenuRow(
             icon: RemixIcons.eye_off_fill,
             label: 'Not Interested',
-            onTap: () {
-              Navigator.of(context).pop();
-              SkifluxToast.success(
-                context,
-                "We'll show fewer videos like this",
-              );
-            },
+            onTap: () => _notInterested(context, ref),
           ),
+          // TODO(backend, blocking): no episode-report endpoint exists in the
+          // spec — the toast below is a UX placeholder until one ships —
+          // expects: POST /episodes/{id}/report → 204
           _MenuRow(
             icon: RemixIcons.flag_fill,
             label: 'Report',
@@ -143,6 +146,29 @@ class _MoreMenuSheet extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  /// `POST /episodes/not-interested` via the feed store — the card is removed
+  /// optimistically and restored (with the error surfaced here, sheet still
+  /// open) if the server rejects. Demo items with no backend id just toast.
+  Future<void> _notInterested(BuildContext context, WidgetRef ref) async {
+    final navigator = Navigator.of(context);
+    final id = episodeId;
+    if (id == null) {
+      navigator.pop();
+      SkifluxToast.success(context, "We'll show fewer videos like this");
+      return;
+    }
+    try {
+      await ref.read(homeFeedProvider.notifier).notInterested(id);
+      if (!context.mounted) return;
+      navigator.pop();
+      SkifluxToast.success(context, "We'll show fewer videos like this");
+    } catch (e, st) {
+      if (context.mounted) {
+        await ErrorDisplay.show(context, ref, e, stackTrace: st);
+      }
+    }
   }
 
   void _openTask(BuildContext context, WidgetRef ref) {

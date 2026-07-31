@@ -42,6 +42,7 @@ enum SkifluxErrorKind {
   sessionExpired,
   voicenoteFailed,
   contentLoadFailed,
+  settingsSaveFailed,
   unknown,
 }
 
@@ -164,6 +165,13 @@ class ErrorHandler {
           uiType: ErrorUiType.toast,
           message: 'Something went wrong with your search. Please try again.',
           kind: SkifluxErrorKind.searchFailed,
+          shouldReportToCrashReporting: false,
+        );
+      case SkifluxErrorKind.settingsSaveFailed:
+        return const ClassifiedError(
+          uiType: ErrorUiType.toast,
+          message: "That change couldn't be saved. Please try again.",
+          kind: SkifluxErrorKind.settingsSaveFailed,
           shouldReportToCrashReporting: false,
         );
 

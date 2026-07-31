@@ -360,6 +360,65 @@ void main() {
     });
   });
 
+  group('changePassword', () {
+    test('posts the spec\'s three fields to /auth/change-password', () async {
+      final env = build((_) async => _empty(200));
+
+      await env.repo.changePassword(
+        currentPassword: 'oldpass1',
+        newPassword: 'newpass1!',
+        confirmNewPassword: 'newpass1!',
+      );
+
+      final request = env.adapter.received.single;
+      expect(request.path, AuthEndpoints.changePassword);
+      expect(bodyOf(request), {
+        'current_password': 'oldpass1',
+        'new_password': 'newpass1!',
+        'confirm_new_password': 'newpass1!',
+      });
+    });
+
+    test('is authenticated — unlike every other auth call but logout', () async {
+      // The spec secures this path with bearer auth alone (no `- {}`), so the
+      // request must NOT carry the no-auth marker the public endpoints set.
+      final env = build((_) async => _empty(200));
+
+      await env.repo.changePassword(
+        currentPassword: 'oldpass1',
+        newPassword: 'newpass1!',
+        confirmNewPassword: 'newpass1!',
+      );
+
+      expect(env.adapter.received.single.extra[noAuthExtra], isNot(isTrue));
+    });
+
+    test('a rejected current password surfaces as a SkifluxFailure', () async {
+      final env = build(
+        (_) async =>
+            _json(400, '{"current_password":["Incorrect password."]}'),
+      );
+
+      await expectLater(
+        env.repo.changePassword(
+          currentPassword: 'wrong',
+          newPassword: 'newpass1!',
+          confirmNewPassword: 'newpass1!',
+        ),
+        throwsA(
+          isA<SkifluxFailure>().having(
+            (f) => f.kind,
+            'kind',
+            // Deliberately the settings-save kind, not authFailed — the
+            // authFailed modal says "We couldn't sign you in", which is the
+            // wrong copy on the Change Password screen.
+            SkifluxErrorKind.settingsSaveFailed,
+          ),
+        ),
+      );
+    });
+  });
+
   group('social sign-in', () {
     test('google posts id_token to its own endpoint', () async {
       final env = build(

@@ -12,6 +12,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/data/session_email_store.dart';
 import '../../../shared/error_handling/error_handler.dart';
 import '../../../shared/network/api_exception.dart';
+import '../../../shared/network/auth_tokens.dart';
+import '../../profile/data/profile_repository.dart';
 import 'auth_repository.dart';
 import 'biometric_store.dart';
 import 'social_auth.dart';
@@ -56,6 +58,7 @@ class AuthFlowState {
     this.passwordOnly = false,
     this.email = '',
     this.submitting = false,
+    this.needsOnboarding = false,
   });
 
   final AuthStage stage;
@@ -91,6 +94,15 @@ class AuthFlowState {
   /// can't fire a duplicate signup or spend an OTP twice.
   final bool submitting;
 
+  /// The account that just signed in has never completed the wizard —
+  /// `AuthTokenResponse.user.is_onboarded` was explicitly `false`.
+  ///
+  /// It has no username, goal or skillworld, so the flow sends it through
+  /// "Claim your identity" instead of into an app whose profile screens have
+  /// nothing to render. Absence of the flag leaves this false: see
+  /// [AuthTokens.needsOnboarding].
+  final bool needsOnboarding;
+
   AuthFlowState copyWith({
     AuthStage? stage,
     String? username,
@@ -102,6 +114,7 @@ class AuthFlowState {
     bool? passwordOnly,
     String? email,
     bool? submitting,
+    bool? needsOnboarding,
     bool clearError = false,
   }) => AuthFlowState(
     stage: stage ?? this.stage,
@@ -114,12 +127,27 @@ class AuthFlowState {
     passwordOnly: passwordOnly ?? this.passwordOnly,
     email: email ?? this.email,
     submitting: submitting ?? this.submitting,
+    needsOnboarding: needsOnboarding ?? this.needsOnboarding,
   );
 }
 
 final authFlowProvider = NotifierProvider<AuthFlowNotifier, AuthFlowState>(
   AuthFlowNotifier.new,
 );
+
+/// Where a cold start lands once the splash has played — see
+/// [AuthFlowNotifier.resolveColdStart].
+enum ColdStartDestination {
+  /// No session on the device: the marketing carousel, exactly as before.
+  marketingOnboarding,
+
+  /// A session exists and the user opted into biometric login on a device
+  /// that can offer it: quick unlock guards the stored session.
+  biometricGate,
+
+  /// A session exists with no biometric gate to pass: straight to Home.
+  enterApp,
+}
 
 /// The copy the login frames match on to decide which field wears the error
 /// treatment (`24:4068` email, `24:1497` password).
@@ -227,11 +255,14 @@ class AuthFlowNotifier extends Notifier<AuthFlowState> {
     }
     state = state.copyWith(submitting: true, clearError: true, email: trimmed);
     try {
-      await _repo.login(email: trimmed, password: password);
+      final tokens = await _repo.login(email: trimmed, password: password);
       await ref.read(sessionEmailStoreProvider).write(trimmed);
       state = state.copyWith(
         submitting: false,
         clearError: true,
+        // Routed on by the flow: an account that never finished the wizard
+        // goes to "Claim your identity", not to Home.
+        needsOnboarding: tokens.needsOnboarding,
       );
       return true;
     } on SkifluxFailure catch (failure) {
@@ -423,8 +454,14 @@ class AuthFlowNotifier extends Notifier<AuthFlowState> {
         state = state.copyWith(submitting: false, clearError: true);
         return false;
       }
-      await exchange(idToken: idToken);
-      state = state.copyWith(submitting: false, clearError: true);
+      final result = await exchange(idToken: idToken);
+      state = state.copyWith(
+        submitting: false,
+        clearError: true,
+        // Social sign-in returns the same `AuthTokenResponse`, so a first-time
+        // Google/Apple account lands in the wizard exactly like a password one.
+        needsOnboarding: result is AuthTokens && result.needsOnboarding,
+      );
       return true;
     } on SkifluxFailure catch (failure) {
       state = state.copyWith(
@@ -440,10 +477,13 @@ class AuthFlowNotifier extends Notifier<AuthFlowState> {
   /// fails; see [AuthRepository.logout].
   ///
   /// The provider's own cached account goes too: without that, Google reuses
-  /// the last account silently and "Switch accounts" switches nothing.
+  /// the last account silently and "Switch accounts" switches nothing. The
+  /// cached "Welcome back" email likewise — leaving it would greet the next
+  /// account with the previous one's address on the biometric frame.
   Future<void> signOut() async {
     await _repo.logout();
     await ref.read(socialAuthServiceProvider).signOut();
+    await ref.read(sessionEmailStoreProvider).clear();
     state = state.copyWith(
       stage: AuthStage.signIn,
       passwordOnly: false,
@@ -454,6 +494,105 @@ class AuthFlowNotifier extends Notifier<AuthFlowState> {
 
   /// True when a token pair is on this device — no server round-trip.
   Future<bool> hasSession() => _repo.hasSession();
+
+  /// The wizard's goal copy (`198:16142`) → the spec's `UserGoalEnum` values.
+  /// Kept as an explicit table because the two sets share no derivable shape.
+  static const goalWireValues = <String, String>{
+    'Build a verified portfolio': 'build_portfolio',
+    'Learn a new technical skill': 'learn_skill',
+    'Earn income through tasks': 'earn_income',
+    'Network with creators': 'network',
+  };
+
+  /// The skillworld card label (`2897:12161`) → `UserSkillworldEnum`. Every
+  /// world the app offers lowercases straight onto its wire value ("AI" →
+  /// `ai`); the spec's extra values (`code`, `writing`) have no card and can
+  /// never be selected.
+  static String skillworldWireValue(String label) => label.trim().toLowerCase();
+
+  /// `POST /profile/complete-onboarding/` — sends what the sign-up wizard
+  /// collected (username, goal, skillworld, optional avatar) and marks the
+  /// account onboarded. Without this call every field the wizard gathered was
+  /// silently dropped and the user landed with an empty profile.
+  ///
+  /// Country is not sent: no screen collects it and the spec marks it
+  /// optional. Holds [AuthFlowState.submitting] so the Welcome CTA shows its
+  /// spinner, and **rethrows** the [SkifluxFailure] instead of storing it —
+  /// the Welcome frame has no inline error slot, so the caller surfaces the
+  /// failure (ErrorDisplay) and stays put for a retry.
+  Future<void> completeOnboarding() async {
+    if (state.submitting) return;
+    state = state.copyWith(submitting: true, clearError: true);
+    try {
+      final goalWire = goalWireValues[state.goal?.trim()];
+      final skillworld = state.skillworld?.trim();
+      await ref.read(profileRepositoryProvider).completeOnboarding(
+        username: state.username.trim(),
+        goal: [?goalWire],
+        skillworld: [
+          if (skillworld != null && skillworld.isNotEmpty)
+            skillworldWireValue(skillworld),
+        ],
+        avatarPath: state.avatarPath,
+      );
+      state = state.copyWith(submitting: false, clearError: true);
+    } catch (_) {
+      // Not just SkifluxFailure: an avatar file deleted between pick and
+      // submit throws before the request exists, and the spinner must not
+      // stay wedged on for that either.
+      state = state.copyWith(submitting: false);
+      rethrow;
+    }
+  }
+
+  /// What a finished splash should do for this device — the cold-start
+  /// session restore decision.
+  ///
+  /// - no token pair on the device → the marketing carousel, as today;
+  /// - a session **and** the (hydrated) biometric preference on, on a device
+  ///   that can actually offer biometrics → the biometric gate, so quick
+  ///   unlock guards the stored session;
+  /// - a session otherwise → straight into the app.
+  ///
+  /// [settingsReady] is awaited before the preference is read: the settings
+  /// notifier hydrates SharedPreferences after its first build, so an
+  /// unawaited read here would always see the compiled-in `false` and the
+  /// gate would never show (the cold-start race this exists to fix).
+  ///
+  /// Pure and static — unit-tested without the plugin, keychain or widgets.
+  /// Every probe is failure-tolerant: an unanswerable question must degrade
+  /// to a safe screen, never wedge the splash.
+  static Future<ColdStartDestination> resolveColdStart({
+    required Future<bool> Function() hasSession,
+    required Future<void> Function() settingsReady,
+    required bool Function() biometricLoginEnabled,
+    required Future<BiometricMode?> Function() availableMode,
+  }) async {
+    bool session;
+    try {
+      session = await hasSession();
+    } catch (_) {
+      // Unreadable keychain — indistinguishable from signed out, and the
+      // marketing flow is the only screen that works with no session.
+      session = false;
+    }
+    if (!session) return ColdStartDestination.marketingOnboarding;
+    try {
+      await settingsReady();
+    } catch (_) {
+      // Defaults it is — biometric stays opt-in.
+    }
+    if (!biometricLoginEnabled()) return ColdStartDestination.enterApp;
+    BiometricMode? mode;
+    try {
+      mode = await availableMode();
+    } catch (_) {
+      mode = null;
+    }
+    return mode != null
+        ? ColdStartDestination.biometricGate
+        : ColdStartDestination.enterApp;
+  }
 
   /// Runs [action] with the submitting flag held, advancing to [next] on
   /// success. Returns false when it failed, and rethrows nothing: the failure

@@ -85,6 +85,33 @@ void main() {
       expect(find.text('Task Reward'), findsNWidgets(2));
     });
 
+    testWidgets(
+      'a locally-recorded row is pending with no fabricated reference',
+      (tester) async {
+        // The shape recordUnlock produces right after a confirmed purchase,
+        // before the backend ledger refresh replaces it.
+        await _pump(
+          tester,
+          CoinTxn(
+            title: 'Unlocked EP 04',
+            subtitle: 'Just now · syncing with your wallet',
+            delta: -25,
+            type: CoinTxnType.spent,
+            kind: CoinTxnKind.unlocked,
+            status: CoinTxnStatus.pending,
+            createdAt: DateTime(2026, 7, 30, 9, 15),
+            isLocal: true,
+          ),
+        );
+
+        expect(find.text('Pending'), findsOneWidget);
+        // No reference is invented for local rows — the copyable
+        // Transaction ID row must be absent, not blank.
+        expect(find.text('Transaction ID'), findsNothing);
+        expect(find.text('Updated'), findsNothing);
+      },
+    );
+
     testWidgets('copy control puts the reference on the clipboard', (
       tester,
     ) async {

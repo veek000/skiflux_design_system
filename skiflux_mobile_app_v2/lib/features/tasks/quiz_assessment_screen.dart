@@ -6,6 +6,7 @@ import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/error_handling/error_display.dart';
 import '../../shared/error_handling/error_handler.dart';
+import 'data/episode_tasks_repository.dart';
 import 'data/tasks_store.dart';
 import 'quiz_result_screen.dart';
 
@@ -36,6 +37,10 @@ class _QuizAssessmentScreenState extends ConsumerState<QuizAssessmentScreen> {
   late List<int?> _answers;
   Timer? _timer;
   late int _remaining;
+  bool _submitting = false;
+
+  /// For `time_taken_seconds` on the wire submission.
+  final DateTime _openedAt = DateTime.now();
 
   @override
   void initState() {
@@ -48,7 +53,9 @@ class _QuizAssessmentScreenState extends ConsumerState<QuizAssessmentScreen> {
         ? List<int?>.from(widget.priorAnswers!)
         : List<int?>.filled(q?.questions.length ?? 0, null);
     _remaining = q?.timerSeconds ?? 0;
-    if (!widget.reviewMode && q != null) {
+    // Live quizzes may declare no time limit (timerSeconds 0) — running the
+    // countdown then would auto-submit an untouched quiz after one tick.
+    if (!widget.reviewMode && q != null && q.timerSeconds > 0) {
       _timer = Timer.periodic(const Duration(seconds: 1), (_) {
         if (!mounted) return;
         if (_remaining <= 0) {
@@ -105,6 +112,7 @@ class _QuizAssessmentScreenState extends ConsumerState<QuizAssessmentScreen> {
   }
 
   Future<void> _finish() async {
+    if (_submitting) return;
     _timer?.cancel();
     final quiz = _quiz;
     if (quiz == null || !mounted) return;
@@ -114,13 +122,50 @@ class _QuizAssessmentScreenState extends ConsumerState<QuizAssessmentScreen> {
       for (var i = 0; i < quiz.questions.length; i++) {
         if (_answers[i] == quiz.questions[i].correctIndex) correct++;
       }
-      final passed = correct == quiz.questions.length;
+      // Grade against the creator's threshold (integer math — no float
+      // rounding): the spec exposes `correct_answer` per question, which is
+      // what sanctions client-side grading for the instant result.
+      final total = quiz.questions.length;
+      final passed = correct * 100 >= quiz.passPercent * total;
 
-      // Demo store returns silently if the task vanished — treat that as
-      // a submission failure so the user is not left without feedback.
-      if (ref.read(tasksProvider).byId(widget.taskId) == null) {
+      final task = ref.read(tasksProvider).byId(widget.taskId);
+      // Store returns silently if the task vanished — treat that as a
+      // submission failure so the user is not left without feedback.
+      if (task == null) {
         throw const SkifluxFailure(SkifluxErrorKind.quizSubmission);
       }
+
+      // Live quizzes record the attempt on the backend BEFORE any result UI:
+      // `POST /episodes/task/submit` with answers keyed by question UUID.
+      // A failed write shows the quiz-submission modal and stays here — the
+      // picked answers survive for a retry. (When the payload carried no
+      // question ids — a spec gap — the result stays client-graded.)
+      final episodeId = task.episodeId;
+      if (task.fromBackend && episodeId != null) {
+        final ids = [for (final q in quiz.questions) q.id];
+        final canSubmit = ids.isNotEmpty &&
+            ids.every((id) => id != null && id.isNotEmpty);
+        if (canSubmit) {
+          setState(() => _submitting = true);
+          try {
+            final answers = <String, String>{
+              for (var i = 0; i < quiz.questions.length; i++)
+                if (_answers[i] != null && _answers[i]! >= 0 && _answers[i]! < 4)
+                  ids[i]!: String.fromCharCode(65 + _answers[i]!),
+            };
+            await ref.read(episodeTasksRepositoryProvider).submitAssessment(
+              episodeId: episodeId,
+              answers: answers,
+              timeTakenSeconds: DateTime.now()
+                  .difference(_openedAt)
+                  .inSeconds,
+            );
+          } finally {
+            if (mounted) setState(() => _submitting = false);
+          }
+        }
+      }
+
       ref
           .read(tasksProvider.notifier)
           .recordQuizResult(
@@ -136,7 +181,7 @@ class _QuizAssessmentScreenState extends ConsumerState<QuizAssessmentScreen> {
           builder: (_) => QuizResultScreen(
             taskId: widget.taskId,
             correct: correct,
-            total: quiz.questions.length,
+            total: total,
             answers: _answers,
             passed: passed,
           ),
@@ -180,34 +225,37 @@ class _QuizAssessmentScreenState extends ConsumerState<QuizAssessmentScreen> {
           icon: const Icon(RemixIcons.arrow_left_s_line),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        // Figma still shows the timer chip on Review.
-        trailing: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: SkifluxSpacing.spaceS,
-            vertical: SkifluxSpacing.spaceXs,
-          ),
-          decoration: BoxDecoration(
-            color: SkifluxColors.backgroundDisabled,
-            borderRadius: SkifluxRadii.borderPill,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                RemixIcons.timer_fill,
-                size: 16,
-                color: SkifluxColors.contentSecondary,
-              ),
-              const SizedBox(width: SkifluxSpacing.spaceXs),
-              Text(
-                widget.reviewMode ? '05:59' : _timerLabel,
-                style: SkifluxTypography.uiButtonSmall.copyWith(
-                  color: SkifluxColors.contentSecondary,
+        // Figma still shows the timer chip on Review; untimed live quizzes
+        // (no time limit) drop it rather than counting down from 00:00.
+        trailing: widget.reviewMode || quiz.timerSeconds > 0
+            ? Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: SkifluxSpacing.spaceS,
+                  vertical: SkifluxSpacing.spaceXs,
                 ),
-              ),
-            ],
-          ),
-        ),
+                decoration: BoxDecoration(
+                  color: SkifluxColors.backgroundDisabled,
+                  borderRadius: SkifluxRadii.borderPill,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      RemixIcons.timer_fill,
+                      size: 16,
+                      color: SkifluxColors.contentSecondary,
+                    ),
+                    const SizedBox(width: SkifluxSpacing.spaceXs),
+                    Text(
+                      widget.reviewMode ? '05:59' : _timerLabel,
+                      style: SkifluxTypography.uiButtonSmall.copyWith(
+                        color: SkifluxColors.contentSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            : null,
       ),
       body: Column(
         children: [
@@ -287,9 +335,10 @@ class _QuizAssessmentScreenState extends ConsumerState<QuizAssessmentScreen> {
                       ? (isLast ? 'Done' : 'Next Question')
                       : (isLast ? 'Submit' : 'Next Question'),
                   expanded: true,
+                  loading: _submitting,
                   onPressed: widget.reviewMode
                       ? _next
-                      : (selected == null ? null : _next),
+                      : (selected == null || _submitting ? null : _next),
                 ),
               ),
             ),

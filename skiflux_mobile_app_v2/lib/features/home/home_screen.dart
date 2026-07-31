@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/error_handling/error_display.dart';
 import '../../shared/toast/skiflux_toast.dart';
 import '../../shared/widgets/load_failure.dart';
 import '../../shared/widgets/video_feed_card.dart';
@@ -433,12 +434,19 @@ class _CreatorChipState extends State<_CreatorChip>
             ),
           ),
           // Trailing arrow stays sharp — only creator identity transitions.
+          // `GET /creators/{id}` takes the creator UUID from the episode
+          // payload, not the username; without one there is nothing to open.
           _CircleIconButton(
             icon: RemixIcons.arrow_right_s_line,
             filled: false,
-            onTap: () => Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => ProfileScreen(creatorId: _displayed.creatorUsername))),
+            onTap: _displayed.creatorId == null
+                ? null
+                : () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            ProfileScreen(creatorId: _displayed.creatorId!),
+                      ),
+                    ),
           ),
         ],
       ),
@@ -448,19 +456,40 @@ class _CreatorChipState extends State<_CreatorChip>
 
 /// Creator avatar + optional follow "+" badge (Figma I848:41281).
 ///
-/// The badge is **absent** (not disabled) when [subscriptionsProvider]
-/// already lists this creator. Tap calls [SubscriptionsNotifier.subscribe].
+/// The badge is **absent** (not disabled) when [SubscriptionsState.isSubscribed]
+/// — the single follow predicate — already lists this creator, and also when
+/// the payload carried no creator UUID (there would be no endpoint to call).
+/// Tap runs the real follow toggle: the toast appears only after the backend
+/// confirms, and a failure surfaces through [ErrorDisplay].
 class _AvatarWithFollowCta extends ConsumerWidget {
   const _AvatarWithFollowCta({required this.item});
 
   final HomeFeedItem item;
 
+  Future<void> _follow(BuildContext context, WidgetRef ref) async {
+    try {
+      await ref.read(subscriptionsProvider.notifier).subscribe(
+            SubscribedCreator(
+              id: item.creatorId ?? '',
+              name: item.creatorName,
+              username: item.creatorUsername,
+              initials: item.creatorInitials,
+            ),
+          );
+      if (!context.mounted) return;
+      SkifluxToast.success(context, 'Subscribed to ${item.creatorName}');
+    } catch (e, st) {
+      if (!context.mounted) return;
+      await ErrorDisplay.show(context, ref, e, stackTrace: st);
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final subs = ref.watch(subscriptionsProvider);
-    final alreadyFollowed = subs.creators.any(
-      (c) => c.username == item.creatorUsername,
-    );
+    final alreadyFollowed = ref.watch(subscriptionsProvider).isSubscribed(
+          item.creatorId ?? item.creatorUsername,
+        );
+    final canFollow = item.creatorId != null && item.creatorId!.isNotEmpty;
 
     return Stack(
       clipBehavior: Clip.none,
@@ -470,24 +499,12 @@ class _AvatarWithFollowCta extends ConsumerWidget {
           size: SkifluxUnit.u48,
           initials: item.creatorInitials,
         ),
-        if (!alreadyFollowed)
+        if (!alreadyFollowed && canFollow)
           Positioned(
             right: 0,
             bottom: 0,
             child: GestureDetector(
-              onTap: () {
-                ref.read(subscriptionsProvider.notifier).subscribe(
-                      SubscribedCreator(
-                        name: item.creatorName,
-                        username: item.creatorUsername,
-                        initials: item.creatorInitials,
-                      ),
-                    );
-                SkifluxToast.success(
-                  context,
-                  'Subscribed to ${item.creatorName}',
-                );
-              },
+              onTap: () => _follow(context, ref),
               child: Container(
                 padding: const EdgeInsets.all(SkifluxSpacing.spaceXs),
                 decoration: BoxDecoration(

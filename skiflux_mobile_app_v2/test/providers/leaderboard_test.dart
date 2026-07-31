@@ -54,8 +54,8 @@ void main() {
         _FakeLeaderboardRepository(
           LeaderboardPage(
             rows: [row(1), row(2)],
-            currentRank: 7,
-            betterThanPercent: 42,
+            myPosition: row(7, username: 'ghost'),
+            totalCount: 100,
           ),
         ),
       );
@@ -66,7 +66,8 @@ void main() {
       expect(data.entries.first.initials, 'U1');
       expect(data.entries.first.handle, '@user1');
       expect(data.currentRank, 7);
-      expect(data.betterThanPercent, 42);
+      // Derived from rank 7 of 100, not sent.
+      expect(data.betterThanPercent, 94);
     });
 
     test('a failed request surfaces as an error, not a sample cast', () async {
@@ -137,17 +138,27 @@ void main() {
       int rank, {
       String? username,
       bool isCurrentUser = false,
+      String currentLevel = '',
     }) => LeaderboardRow(
       rank: rank,
       firstName: 'User',
       lastName: '$rank',
       username: username ?? 'user$rank',
       xp: 1000 - rank,
+      currentLevel: currentLevel,
       isCurrentUser: isCurrentUser,
     );
 
-    UserProfile profile({String username = 'me', int? rank}) =>
-        UserProfile(id: 'me', username: username, rank: rank);
+    UserProfile profile({
+      String username = 'me',
+      int? rank,
+      String currentLevel = '',
+    }) => UserProfile(
+      id: 'me',
+      username: username,
+      rank: rank,
+      currentLevel: currentLevel,
+    );
 
     test("marks the row the backend flagged as the user's", () {
       final data = LeaderboardNotifier.resolve(
@@ -172,9 +183,30 @@ void main() {
       expect(data.currentRank, 2);
     });
 
-    test('marks the row holding the payload rank when nothing else does', () {
+    test('prefers my_position over a username match for the standing', () {
+      // `my_position` comes from the same query as the rows, so it outranks the
+      // cached profile as the identity source.
       final data = LeaderboardNotifier.resolve(
-        LeaderboardPage(rows: [row(1), row(2), row(3)], currentRank: 3),
+        LeaderboardPage(
+          rows: [row(1), row(2, username: 'veek'), row(3)],
+          myPosition: row(2, username: '@Veek', currentLevel: 'Master'),
+        ),
+        profile(username: 'someone-else'),
+      );
+
+      expect(data.entries[1].isCurrentUser, isTrue);
+      expect(data.currentRank, 2);
+      expect(data.currentLevel, 'Master');
+    });
+
+    test('marks the row holding my_position rank when nothing else does', () {
+      // A league-filtered page whose rows carry no matching handle: the rank is
+      // the only thing left to identify the row by.
+      final data = LeaderboardNotifier.resolve(
+        LeaderboardPage(
+          rows: [row(1), row(2), row(3)],
+          myPosition: row(3, username: 'ghost'),
+        ),
         profile(username: 'nobody'),
       );
 
@@ -183,8 +215,12 @@ void main() {
     });
 
     test('a rank outside the page highlights nothing but still shows', () {
+      // The whole point of my_position being sent beside `results`.
       final data = LeaderboardNotifier.resolve(
-        LeaderboardPage(rows: [row(1), row(2)], currentRank: 88),
+        LeaderboardPage(
+          rows: [row(1), row(2)],
+          myPosition: row(88, username: 'ghost'),
+        ),
         null,
       );
 
@@ -195,18 +231,20 @@ void main() {
     test("uses the profile's cached rank when the payload omits one", () {
       final data = LeaderboardNotifier.resolve(
         LeaderboardPage(rows: [row(1)]),
-        profile(username: 'nobody', rank: 31),
+        profile(username: 'nobody', rank: 31, currentLevel: 'Novice'),
       );
 
       expect(data.currentRank, 31);
+      expect(data.currentLevel, 'Novice');
     });
 
-    test('derives better-than-percent from the rank when unsent', () {
+    test('derives better-than-percent from the rank — no field carries it', () {
       // Rank 3 of 5 beats 2 of the other 4 → 50%.
       final data = LeaderboardNotifier.resolve(
         LeaderboardPage(
           rows: [row(1), row(2), row(3), row(4), row(5)],
-          currentRank: 3,
+          myPosition: row(3, username: 'ghost'),
+          totalCount: 5,
         ),
         null,
       );
@@ -214,19 +252,52 @@ void main() {
       expect(data.betterThanPercent, 50);
     });
 
+    test('the percentage is against the population, not the page', () {
+      // The regression this fix exists for: 501st of 5,000 is better than 90%,
+      // where computing it over the 3 loaded rows would have said otherwise.
+      final data = LeaderboardNotifier.resolve(
+        LeaderboardPage(
+          rows: [row(1), row(2), row(3)],
+          myPosition: row(501, username: 'ghost'),
+          totalCount: 5000,
+        ),
+        null,
+      );
+
+      expect(data.betterThanPercent, 90);
+    });
+
     test('never invents a percentage from an unusable rank', () {
-      // Rank past the page: the page is not the population it was ranked in.
+      int? percentOf(LeaderboardPage page) =>
+          LeaderboardNotifier.resolve(page, null).betterThanPercent;
+
+      // No total: a bare-array body knows the page size, not the population.
       expect(
-        LeaderboardNotifier
-            .resolve(LeaderboardPage(rows: [row(1)], currentRank: 40), null)
-            .betterThanPercent,
+        percentOf(
+          LeaderboardPage(rows: [row(1)], myPosition: row(4, username: 'g')),
+        ),
+        isNull,
+      );
+      // Rank past the population.
+      expect(
+        percentOf(
+          LeaderboardPage(
+            rows: [row(1)],
+            myPosition: row(40, username: 'g'),
+            totalCount: 10,
+          ),
+        ),
         isNull,
       );
       // Nobody to be better than.
       expect(
-        LeaderboardNotifier
-            .resolve(LeaderboardPage(rows: [row(1)], currentRank: 1), null)
-            .betterThanPercent,
+        percentOf(
+          LeaderboardPage(
+            rows: [row(1)],
+            myPosition: row(1, username: 'g'),
+            totalCount: 1,
+          ),
+        ),
         isNull,
       );
     });
@@ -265,10 +336,23 @@ void main() {
   });
 
   group('LeaderboardRepository.parseBody', () {
-    test('reads the documented envelope', () {
+    test('reads the documented LeaderboardResponse', () {
+      // Shape per the spec's `LeaderboardResponse` / `UserLeaderboardEntry`.
       final page = LeaderboardRepository.parseBody({
-        'current_user_rank': 12,
-        'better_than_percent': 60,
+        'count': 128,
+        'next': null,
+        'previous': null,
+        'my_position': {
+          'rank': 12,
+          'first_name': 'Veek',
+          'last_name': 'O',
+          'username': 'veek',
+          'xp': 2450,
+          'current_level': 'Master',
+          'tasks_done': 8,
+          'coins': '540.00',
+          'is_me': true,
+        },
         'results': [
           {
             'rank': 1,
@@ -276,33 +360,39 @@ void main() {
             'last_name': 'Motion',
             'username': 'lolamotion',
             'avatar_url': 'https://cdn/lola.png',
+            'current_level': 'Professional',
             'xp': 4820,
+            'is_me': false,
           },
         ],
       });
 
-      expect(page.currentRank, 12);
-      expect(page.betterThanPercent, 60);
+      expect(page.totalCount, 128);
+      expect(page.myPosition?.rank, 12);
+      expect(page.myPosition?.currentLevel, 'Master');
+      expect(page.myPosition?.isCurrentUser, isTrue);
       expect(page.rows.single.displayName, 'Lola Motion');
       expect(page.rows.single.initials, 'LM');
       expect(page.rows.single.avatarUrl, 'https://cdn/lola.png');
+      expect(page.rows.single.currentLevel, 'Professional');
       expect(page.rows.single.xp, 4820);
     });
 
-    test('reads a bare array, with no standing', () {
+    test('reads a bare array, with no standing and no total', () {
       final page = LeaderboardRepository.parseBody([
         {'rank': 1, 'username': 'solo', 'xp': 10},
       ]);
 
       expect(page.rows, hasLength(1));
-      expect(page.currentRank, isNull);
-      expect(page.betterThanPercent, isNull);
+      expect(page.myPosition, isNull);
+      expect(page.totalCount, isNull);
     });
 
     test('unwraps a data envelope', () {
       final page = LeaderboardRepository.parseBody({
         'data': {
-          'my_rank': 4,
+          'count': 9,
+          'my_position': {'rank': 4, 'username': 'a'},
           'results': [
             {'rank': 1, 'username': 'a', 'xp': 1},
           ],
@@ -310,32 +400,32 @@ void main() {
       });
 
       expect(page.rows, hasLength(1));
-      expect(page.currentRank, 4);
+      expect(page.myPosition?.rank, 4);
+      expect(page.totalCount, 9);
     });
 
     test('finds rows under an alias key', () {
       final page = LeaderboardRepository.parseBody({
-        'current_rank': 3,
         'leaderboard': [
           {'rank': 1, 'username': 'a', 'xp': 1},
         ],
       });
 
       expect(page.rows, hasLength(1));
-      expect(page.currentRank, 3);
     });
 
     test('an unreadable body yields no rows rather than throwing', () {
       final page = LeaderboardRepository.parseBody({'unexpected': true});
       expect(page.rows, isEmpty);
+      expect(page.myPosition, isNull);
     });
 
-    test('a percentage sent as a double is rounded', () {
+    test('a count sent as a numeric string still reads', () {
       final page = LeaderboardRepository.parseBody({
-        'better_than_percent': 59.6,
+        'count': '128',
         'results': const [],
       });
-      expect(page.betterThanPercent, 60);
+      expect(page.totalCount, 128);
     });
   });
 
@@ -377,6 +467,18 @@ void main() {
       expect(row.rank, 0);
       expect(row.xp, 0);
       expect(row.initials, '?');
+    });
+
+    test('reads current_level, which drives the league label', () {
+      expect(
+        LeaderboardRepository.parseRow({
+          'username': 'a',
+          'current_level': 'Master',
+        }).currentLevel,
+        'Master',
+      );
+      // Absent rather than guessed when the row omits it.
+      expect(LeaderboardRepository.parseRow({'username': 'a'}).currentLevel, '');
     });
 
     test('reads the "this is you" flag under any of its likely names', () {

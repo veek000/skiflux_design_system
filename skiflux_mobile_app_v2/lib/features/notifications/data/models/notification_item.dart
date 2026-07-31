@@ -3,14 +3,16 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'notification_item.freezed.dart';
 part 'notification_item.g.dart';
 
-/// One row from `GET /me/notifications`.
+/// One row from `GET /me/notifications`, mirroring the spec's
+/// `NotificationItem` — `{id, type, title, body, data, is_read, created_at}`.
 ///
-/// **The spec documents this endpoint's 200 as "No response body"** — the
-/// shape below is inferred, and every field except [id] carries a default so a
-/// payload that names things differently degrades to a renderable card instead
-/// of throwing mid-list. `NotificationsRepository.parse` maps the aliases we
-/// consider likely (`message`/`body`, `created_at`/`send_time`, `is_read`/
-/// `read`) before this factory runs; see the blocking TODO there.
+/// Every field except [id] keeps a default so a payload that names something
+/// differently degrades to a renderable card instead of throwing mid-list.
+/// `NotificationsRepository.parse` runs first and tries the documented key
+/// ahead of any tolerated alias.
+///
+/// [actionLabel] has **no** field in the schema — it can only come out of the
+/// freeform `data` object; see the blocking TODO on `parse`.
 @freezed
 abstract class NotificationItem with _$NotificationItem {
   const factory NotificationItem({

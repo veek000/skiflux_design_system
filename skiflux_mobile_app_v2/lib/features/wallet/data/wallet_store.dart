@@ -3,19 +3,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
-import '../../playlists/data/playlists_store.dart' show CoinPack, playlistsProvider;
+import '../../playlists/data/playlists_store.dart' show playlistsProvider;
 import 'models/skillcoin_transaction.dart';
 import 'models/user_wallet.dart';
 import 'models/wallet_financial_summary.dart';
 import 'models/withdrawal_account.dart';
+import 'models/withdrawal_request.dart';
 import 'wallet_repository.dart';
 
-// SkillCoin Wallet data — transaction history + saved bank account.
+// SkillCoin Wallet data — transaction history + saved bank accounts.
 //
 // Figma: **Profile Flow 02** (`1256:24006`). [refreshFromBackend] loads
 // `GET /wallet/my-wallet`, `my-transactions`, `summary`, and withdrawal
-// accounts when a session exists. Demo seed remains the offline fallback.
-// Coin balance display is synced into [playlistsProvider].
+// accounts when a session exists.
+//
+// Money honesty: the fetched [UserWallet]'s Decimal `balance` is the source
+// of truth for every coin figure. The int exposed through
+// [playlistsProvider.skillCoins] is a floor-derived display view of it.
+// Locally-recorded ledger rows are always [CoinTxnStatus.pending] and are
+// replaced wholesale by the backend ledger on every successful refresh —
+// including by an *empty* backend ledger.
 
 /// Ledger bucket — drives the wallet's All / Earned / Spent filter tabs and
 /// the row's icon + amount color.
@@ -25,9 +32,7 @@ enum CoinTxnType { earned, spent, withdrawn }
 enum CoinTxnKind { taskApproved, unlocked, withdrawalProcessed, topUp }
 
 /// Where a ledger entry is in its lifecycle. Drives the status pill on the
-/// details screen (`3664:13489`). Only [completed] appears in the demo seed —
-/// the other two exist because the backend's transaction record has them and
-/// the pill already has to render a colour per state.
+/// details screen (`3664:13489`).
 enum CoinTxnStatus {
   completed,
   pending,
@@ -66,6 +71,7 @@ class CoinTxn {
     this.createdAt,
     this.updatedAt,
     this.reference,
+    this.isLocal = false,
   });
 
   /// Adapter from OpenAPI [SkillcoinTransaction] → UI ledger row.
@@ -83,7 +89,9 @@ class CoinTxn {
       kind: kind,
       status: _mapStatus(txn.status),
       createdAt: txn.createdAt,
-      updatedAt: txn.createdAt,
+      // Real updated_at when the backend sent one; never aliased to
+      // createdAt — the details screen drops the row instead.
+      updatedAt: txn.updatedAt,
       reference: txn.referenceId ?? txn.id,
     );
   }
@@ -116,7 +124,12 @@ class CoinTxn {
   final DateTime? updatedAt;
 
   /// The processor's reference, shown (and copyable) as "Transaction ID".
+  /// Null for locally-recorded rows — a reference is never fabricated.
   final String? reference;
+
+  /// True for rows recorded client-side while the backend confirms. They are
+  /// always [CoinTxnStatus.pending] and vanish on the next ledger refresh.
+  final bool isLocal;
 
   /// "+70" / "-200".
   String get amountLabel => '${delta >= 0 ? '+' : ''}$delta';
@@ -156,10 +169,16 @@ class CoinTxn {
       : SkifluxColors.contentNegative;
 }
 
+/// Ledger-row display form of a signed amount — rounds half-away-from-zero.
+/// Only for transaction deltas and stat totals; a *spendable balance* must go
+/// through [wholeCoinFloor] instead so it is never rounded up.
 int _decimalToDisplayInt(Decimal d) {
-  // Skillcoins are typically whole; round half-away-from-zero for display.
   return int.parse(d.round().toString());
 }
+
+/// Whole-coin view of a balance: floor, so "100.50" displays as 100 coins —
+/// never 101 coins the user doesn't have.
+int wholeCoinFloor(Decimal d) => d.floor().toBigInt().toInt();
 
 CoinTxnType _mapType(SkillcoinTransactionType t, int amount) {
   switch (t) {
@@ -206,6 +225,19 @@ CoinTxnStatus _mapStatus(SkillcoinTransactionStatus? s) {
   };
 }
 
+CoinTxnStatus _mapWithdrawalStatus(WithdrawalRequestStatus s) {
+  return switch (s) {
+    WithdrawalRequestStatus.pending ||
+    WithdrawalRequestStatus.processing =>
+      CoinTxnStatus.pending,
+    WithdrawalRequestStatus.completed => CoinTxnStatus.completed,
+    WithdrawalRequestStatus.failed ||
+    WithdrawalRequestStatus.cancelled ||
+    WithdrawalRequestStatus.rejected =>
+      CoinTxnStatus.failed,
+  };
+}
+
 /// A saved withdrawal destination (`1256:24390` — Add New Bank Account).
 @immutable
 class BankAccount {
@@ -213,7 +245,13 @@ class BankAccount {
     required this.bankName,
     required this.accountNumber,
     required this.holderName,
+    this.id,
   });
+
+  /// Backend `WithdrawalAccount.id` — what `POST /wallet/withdrawals/request`
+  /// takes as `account_id`. Null only for rows that never came from the
+  /// backend; such rows cannot be withdrawn to.
+  final String? id;
 
   final String bankName;
   final String accountNumber;
@@ -250,6 +288,35 @@ class WalletState {
   final WalletFinancialSummary? summary;
   final bool fromBackend;
   final bool loading;
+
+  // ── Real balances (source of truth) ────────────────────────────────
+
+  /// The wallet's exact spendable balance. Null until the backend payload
+  /// has loaded — callers show a loading/zero state, never a fake figure.
+  Decimal? get balance => remoteWallet?.balance;
+
+  /// Hold-aware withdrawable balance, exactly as the backend computed it.
+  Decimal? get withdrawableBalance => remoteWallet?.withdrawableBalance;
+
+  /// Locked wallets can't transact; the withdraw screen gates on this.
+  bool get isLocked => remoteWallet?.isLocked ?? false;
+
+  /// True once a real wallet payload has been loaded this session.
+  bool get balanceKnown => remoteWallet != null;
+
+  /// Whole-coin display form of [balance] (floor); 0 while unknown.
+  int get wholeCoins {
+    final b = balance;
+    return b == null ? 0 : wholeCoinFloor(b);
+  }
+
+  /// Whole-coin ceiling for withdrawals (floor of the withdrawable balance;
+  /// zero when the wallet is locked or unknown).
+  int get wholeWithdrawableCoins {
+    if (isLocked) return 0;
+    final w = withdrawableBalance;
+    return w == null ? 0 : wholeCoinFloor(w);
+  }
 
   int _sum(CoinTxnType type) => transactions
       .where((t) => t.type == type)
@@ -296,8 +363,8 @@ class WalletState {
 }
 
 /// Riverpod [NotifierProvider] — matches the app's other stores (playlists,
-/// notifications). Seeded with the demo ledger; [refreshFromBackend] replaces
-/// it when the session can reach the API.
+/// notifications). Starts empty; [refreshFromBackend] fills it when the
+/// session can reach the API.
 final walletProvider = NotifierProvider<WalletNotifier, WalletState>(
   WalletNotifier.new,
 );
@@ -312,7 +379,9 @@ class WalletNotifier extends Notifier<WalletState> {
   }
 
   /// Loads wallet, transactions, summary, and bank accounts from the API.
-  /// Keeps the current (demo or prior) state on failure.
+  /// Keeps the current state on failure. On success the backend ledger
+  /// replaces the local one entirely — locally-recorded pending rows are
+  /// dropped, and an empty backend ledger clears the list.
   Future<void> refreshFromBackend() async {
     state = state.copyWith(loading: true);
     try {
@@ -329,8 +398,12 @@ class WalletNotifier extends Notifier<WalletState> {
       BankAccount? defaultBank = state.defaultBank;
       try {
         final accounts = await repo.getWithdrawalAccounts();
-        if (accounts.isNotEmpty) {
-          banks = accounts.map(_bankFromAccount).toList(growable: false);
+        // The backend list wins outright — an empty list means the user has
+        // no saved destinations, so stale local rows are cleared too.
+        banks = accounts.map(_bankFromAccount).toList(growable: false);
+        if (accounts.isEmpty) {
+          defaultBank = null;
+        } else {
           final preferred = accounts.cast<WithdrawalAccount?>().firstWhere(
             (a) => a!.isDefault,
             orElse: () => accounts.first,
@@ -338,12 +411,13 @@ class WalletNotifier extends Notifier<WalletState> {
           defaultBank = _bankFromAccount(preferred!);
         }
       } catch (_) {
-        // Banks optional on first wallet open.
+        // Accounts read failed — keep whatever we had; never fabricate.
       }
 
       final mapped = txns.map(CoinTxn.fromSkillcoin).toList(growable: false);
       state = WalletState(
-        transactions: mapped.isEmpty ? state.transactions : mapped,
+        // The backend ledger is authoritative, even when empty.
+        transactions: mapped,
         banks: banks,
         defaultBank: defaultBank,
         remoteWallet: wallet,
@@ -352,9 +426,11 @@ class WalletNotifier extends Notifier<WalletState> {
         loading: false,
       );
 
-      // Keep the skill-coin pill / unlock balance in sync (whole coins).
-      final balanceInt = _decimalToDisplayInt(wallet.balance);
-      ref.read(playlistsProvider.notifier).setSkillCoins(balanceInt);
+      // Keep the skill-coin pill / unlock balance in sync. Floor — a
+      // spendable balance of 100.50 is 100 whole coins, never 101.
+      ref
+          .read(playlistsProvider.notifier)
+          .setSkillCoins(wholeCoinFloor(wallet.balance));
     } catch (_) {
       state = state.copyWith(loading: false);
     }
@@ -362,6 +438,7 @@ class WalletNotifier extends Notifier<WalletState> {
 
   static BankAccount _bankFromAccount(WithdrawalAccount a) {
     return BankAccount(
+      id: a.id,
       bankName: a.bankName.isNotEmpty ? a.bankName : a.displayName,
       accountNumber: a.accountNumber.isNotEmpty
           ? a.accountNumber
@@ -370,68 +447,49 @@ class WalletNotifier extends Notifier<WalletState> {
     );
   }
 
-  /// Records a coins-spent entry when an episode is unlocked.
+  /// Records a local *pending* row after `POST /episodes/purchase` returned
+  /// 2xx, purely as immediate feedback. No reference is fabricated; the row
+  /// is replaced by the backend's own record on the next ledger refresh.
   void recordUnlock(String epTag, int cost) {
-    final now = DateTime.now();
     _prepend(
       CoinTxn(
         title: 'Unlocked $epTag',
-        subtitle: 'Today',
+        subtitle: 'Just now · syncing with your wallet',
         delta: -cost,
         type: CoinTxnType.spent,
         kind: CoinTxnKind.unlocked,
-        createdAt: now,
-        updatedAt: now,
-        reference: _reference(now),
+        status: CoinTxnStatus.pending,
+        createdAt: DateTime.now(),
+        isLocal: true,
       ),
     );
   }
 
-  /// Records a coins-earned entry when a wallet top-up completes.
-  void recordTopUp(int coins, int naira) {
-    final now = DateTime.now();
+  /// Records the ledger row for a 201 from `POST /wallet/withdrawals/request`
+  /// using the backend's own response data (amount, status, id, timestamps) —
+  /// nothing is invented. Replaced by the ledger feed on the next refresh.
+  void recordWithdrawalRequest(WithdrawalRequest request) {
+    final coins = _decimalToDisplayInt(request.amount);
     _prepend(
       CoinTxn(
-        title: 'Coin top-up · $coins coins',
-        subtitle: 'Today · ₦${CoinPack.thousands(naira)} paid',
-        delta: coins,
-        type: CoinTxnType.earned,
-        kind: CoinTxnKind.topUp,
-        paymentMethod: 'Bank Transfer',
-        createdAt: now,
-        updatedAt: now,
-        reference: _reference(now),
-      ),
-    );
-  }
-
-  /// Records a withdrawal entry.
-  void recordWithdrawal(int coins, int naira, String bankLast4) {
-    final now = DateTime.now();
-    _prepend(
-      CoinTxn(
-        title: 'Withdrawal processed',
-        subtitle: 'Today · ₦${CoinPack.thousands(naira)} sent',
+        title: 'Withdrawal requested',
+        subtitle: request.account.displayName.isNotEmpty
+            ? 'To ${request.account.displayName}'
+            : 'Bank withdrawal',
         delta: -coins,
         type: CoinTxnType.withdrawn,
         kind: CoinTxnKind.withdrawalProcessed,
-        paymentMethod: 'Bank Transfer ···$bankLast4',
-        createdAt: now,
-        updatedAt: now,
-        reference: _reference(now),
+        status: _mapWithdrawalStatus(request.status),
+        paymentMethod: 'Bank Transfer',
+        createdAt: request.createdAt,
+        reference: request.id,
+        isLocal: true,
       ),
     );
   }
 
-  /// Stand-in reference for client-side optimistic rows. Backend rows use
-  /// [SkillcoinTransaction.referenceId] via [CoinTxn.fromSkillcoin].
-  static String _reference(DateTime at) =>
-      '1000000000${at.microsecondsSinceEpoch}'.padRight(30, '0').substring(
-        0,
-        30,
-      );
-
   /// Appends a saved withdrawal destination and makes it the new default.
+  /// Call with accounts returned by the backend (carrying an [BankAccount.id]).
   void addBank(BankAccount account) {
     state = state.copyWith(
       banks: [...state.banks, account],
@@ -439,8 +497,9 @@ class WalletNotifier extends Notifier<WalletState> {
     );
   }
 
-  /// Removes a saved bank. If it was the default, the first remaining bank
-  /// (if any) becomes the new default.
+  /// Removes a saved bank from local state. If it was the default, the first
+  /// remaining bank (if any) becomes the new default. (The backend delete is
+  /// `WalletRepository.deleteWithdrawalAccount`; callers run it first.)
   void removeBank(BankAccount account) {
     final banks = state.banks.where((b) => b != account).toList();
     final wasDefault = state.defaultBank == account;
@@ -450,12 +509,13 @@ class WalletNotifier extends Notifier<WalletState> {
       defaultBank: wasDefault
           ? (banks.isEmpty ? null : banks.first)
           : state.defaultBank,
+      remoteWallet: state.remoteWallet,
+      summary: state.summary,
+      fromBackend: state.fromBackend,
     );
   }
 
   void _prepend(CoinTxn txn) {
     state = state.copyWith(transactions: [txn, ...state.transactions]);
   }
-
-
 }

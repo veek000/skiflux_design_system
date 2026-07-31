@@ -54,6 +54,42 @@ void main() {
       expect(row.type, CoinTxnType.withdrawn);
       expect(row.kind, CoinTxnKind.withdrawalProcessed);
     });
+
+    test('does not alias updatedAt to createdAt', () {
+      final withoutUpdate = CoinTxn.fromSkillcoin(
+        SkillcoinTransaction(
+          amount: Decimal.parse('70.00'),
+          transactionType: SkillcoinTransactionType.topup,
+          transactionTypeLabel: 'Top-up',
+          description: 'Wallet top-up',
+          createdAt: DateTime.utc(2026, 7, 1),
+        ),
+      );
+      // The details screen drops the "Updated" row rather than repeating
+      // the created stamp.
+      expect(withoutUpdate.updatedAt, isNull);
+
+      final withUpdate = CoinTxn.fromSkillcoin(
+        SkillcoinTransaction(
+          amount: Decimal.parse('70.00'),
+          transactionType: SkillcoinTransactionType.topup,
+          transactionTypeLabel: 'Top-up',
+          description: 'Wallet top-up',
+          createdAt: DateTime.utc(2026, 7, 1),
+          updatedAt: DateTime.utc(2026, 7, 2),
+        ),
+      );
+      expect(withUpdate.updatedAt, DateTime.utc(2026, 7, 2));
+    });
+  });
+
+  group('wholeCoinFloor', () {
+    test('a spendable balance is floored, never rounded up', () {
+      expect(wholeCoinFloor(Decimal.parse('100.50')), 100);
+      expect(wholeCoinFloor(Decimal.parse('100.99')), 100);
+      expect(wholeCoinFloor(Decimal.parse('100.00')), 100);
+      expect(wholeCoinFloor(Decimal.zero), 0);
+    });
   });
 
   group('WalletFinancialSummary', () {
@@ -150,7 +186,9 @@ void main() {
         'completed': false,
       });
       final m = MissionTask.fromPlatform(t);
-      expect(m.coins, 25);
+      // Rewards stay Decimal end-to-end; display goes through coinsLabel.
+      expect(m.coins, Decimal.parse('25.00'));
+      expect(m.coinsLabel, '25');
       expect(m.claimable, isTrue);
       expect(m.actionLabel, 'Claim');
       expect(m.fromBackend, isTrue);

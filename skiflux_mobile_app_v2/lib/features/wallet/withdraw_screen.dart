@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
@@ -5,18 +8,25 @@ import 'package:skiflux_design_system/skiflux_design_system.dart';
 import '../../shared/error_handling/error_display.dart';
 import '../../shared/error_handling/error_handler.dart';
 import '../../shared/sheets/skiflux_sheet.dart';
-import '../playlists/data/playlists_store.dart';
+import '../playlists/data/playlists_store.dart' show CoinPack, kCoinRateNaira;
 import 'add_bank_sheet.dart';
+import 'data/models/withdrawal_request.dart';
+import 'data/wallet_repository.dart';
 import 'data/wallet_store.dart';
 import 'widgets/coin_widgets.dart';
 
 // Figma: **Profile Flow 09 → 07** (`1256:24896` empty → `1256:24977` filled
 // → `1256:25058` "Withdrawal initiated" sheet) — cash out SkillCoins.
-// Balance banner, coin amount input (min 100 / Max), live conversion
-// summary, withdrawal destination (saved bank + Add Bank Account), notice,
-// pinned Withdraw button.
+//
+// Real money flow: the ceiling is the backend wallet's hold-aware
+// `withdrawable_balance` (Decimal, floored for whole-coin entry), a locked
+// wallet can't withdraw at all, and confirming runs
+// `POST /wallet/withdrawals/request {account_id, amount}`. The success sheet
+// renders only the 201 response's own amount / fee / net figures.
 
-/// Minimum withdrawal per the Figma notice: 100 coins (₦600).
+/// Client-side minimum per the Figma notice: 100 coins. The backend enforces
+/// the real `min_withdrawal_amount`; a rejection surfaces as the withdrawal
+/// modal.
 const int _kMinWithdrawCoins = 100;
 
 class WithdrawScreen extends ConsumerStatefulWidget {
@@ -29,6 +39,16 @@ class WithdrawScreen extends ConsumerStatefulWidget {
 class WithdrawScreenState extends ConsumerState<WithdrawScreen> {
   final _amountController = TextEditingController();
   int _coins = 0;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // The withdrawable ceiling and saved accounts come from the backend.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(walletProvider.notifier).refreshFromBackend();
+    });
+  }
 
   @override
   void dispose() {
@@ -38,11 +58,17 @@ class WithdrawScreenState extends ConsumerState<WithdrawScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final balance = ref.watch(playlistsProvider).skillCoins;
-    final bank = ref.watch(walletProvider).defaultBank;
-    final naira = _coins * kCoinRateNaira;
-    final valid =
-        _coins >= _kMinWithdrawCoins && _coins <= balance && bank != null;
+    final wallet = ref.watch(walletProvider);
+    final bank = wallet.defaultBank;
+    final maxCoins = wallet.wholeWithdrawableCoins;
+    final feeAsync = ref.watch(withdrawalFeePercentProvider);
+    final feePercent = feeAsync.value;
+    final valid = !_busy &&
+        wallet.balanceKnown &&
+        !wallet.isLocked &&
+        _coins >= _kMinWithdrawCoins &&
+        _coins <= maxCoins &&
+        bank?.id != null;
 
     return Scaffold(
       backgroundColor: SkifluxColors.backgroundPrimary,
@@ -64,7 +90,21 @@ class WithdrawScreenState extends ConsumerState<WithdrawScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
                 children: [
-                  CoinBalanceCard(coins: balance),
+                  if (wallet.balanceKnown)
+                    CoinBalanceCard(coins: wallet.wholeCoins)
+                  else if (wallet.loading)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(SkifluxSpacing.spaceL),
+                        child: CircularProgressIndicator(),
+                      ),
+                    )
+                  else
+                    _balanceUnavailable(),
+                  if (wallet.isLocked) ...[
+                    const SizedBox(height: SkifluxSpacing.spaceL),
+                    _lockedBanner(),
+                  ],
                   const SizedBox(height: SkifluxSpacing.spaceL),
                   Text(
                     'Amount to withdraw (coins)',
@@ -73,20 +113,11 @@ class WithdrawScreenState extends ConsumerState<WithdrawScreen> {
                     ),
                   ),
                   const SizedBox(height: SkifluxSpacing.spaceS),
-                  _amountField(balance),
+                  _amountField(),
                   const SizedBox(height: SkifluxSpacing.spaceXs),
-                  _minMaxRow(balance),
+                  _minMaxRow(maxCoins),
                   const SizedBox(height: SkifluxSpacing.spaceL),
-                  CoinSummaryCard(
-                    rows: [
-                      CoinSummaryRow('Coins to withdraw', '$_coins'),
-                      const CoinSummaryRow('Rate', '1 coin = ₦$kCoinRateNaira'),
-                    ],
-                    totalLabel: 'You Receive',
-                    total:
-                        '₦${CoinPack.thousands(naira)}'
-                        '${naira == 0 ? '.0' : ''}',
-                  ),
+                  _summaryCard(feePercent),
                   const SizedBox(height: SkifluxSpacing.spaceL),
                   Text(
                     'Withdrawal destination',
@@ -97,18 +128,20 @@ class WithdrawScreenState extends ConsumerState<WithdrawScreen> {
                   const SizedBox(height: SkifluxSpacing.spaceL),
                   _DestinationCard(bank: bank, onAddBank: _addBank),
                   const SizedBox(height: SkifluxSpacing.spaceL),
-                  _notice(),
+                  _notice(feePercent),
                 ],
               ),
             ),
             Padding(
               padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
               child: SkifluxButton(
-                label: valid
-                    ? 'Withdraw ₦${CoinPack.thousands(naira)}'
-                    : 'Enter amount to withdraw',
+                label: _busy
+                    ? 'Submitting request…'
+                    : valid
+                        ? 'Withdraw $_coins coins'
+                        : 'Enter amount to withdraw',
                 expanded: true,
-                onPressed: valid ? () => withdraw(naira) : null,
+                onPressed: valid ? withdraw : null,
               ),
             ),
           ],
@@ -117,8 +150,44 @@ class WithdrawScreenState extends ConsumerState<WithdrawScreen> {
     );
   }
 
+  /// Conversion summary. Coin figures are exact; the naira line is an
+  /// estimate (≈) — the authoritative fee/net come from the backend response.
+  Widget _summaryCard(Decimal? feePercent) {
+    final amount = Decimal.fromInt(_coins);
+    Decimal? feeEstimate;
+    Decimal? netEstimate;
+    if (feePercent != null) {
+      feeEstimate = (amount * feePercent / Decimal.fromInt(100))
+          .toDecimal(scaleOnInfinitePrecision: 2);
+      netEstimate = amount - feeEstimate;
+    }
+    final receiveCoins = netEstimate ?? amount;
+    final approxNaira =
+        (receiveCoins * Decimal.fromInt(kCoinRateNaira));
+    return CoinSummaryCard(
+      rows: [
+        CoinSummaryRow('Coins to withdraw', '$_coins'),
+        if (feePercent != null)
+          CoinSummaryRow(
+            'Fee (${CoinPack.thousandsOf(feePercent)}%)',
+            '≈ −${CoinPack.thousandsOf(feeEstimate!)}',
+          )
+        else
+          const CoinSummaryRow('Fee', 'Confirmed on submission'),
+        CoinSummaryRow(
+          'Estimated value',
+          '≈ ₦${CoinPack.thousandsOf(approxNaira)}',
+        ),
+      ],
+      totalLabel: 'You Receive',
+      total:
+          '${feePercent != null ? '≈ ' : ''}'
+          '${CoinPack.thousandsOf(receiveCoins)} coins',
+    );
+  }
+
   /// Pill input with the coin glyph leading and "Coins" trailing label.
-  Widget _amountField(int balance) {
+  Widget _amountField() {
     return SkifluxInputField(
       controller: _amountController,
       hintText: '0',
@@ -143,12 +212,14 @@ class WithdrawScreenState extends ConsumerState<WithdrawScreen> {
     );
   }
 
-  /// "Min: 100 coins" · "Max" (fills the field with the full balance).
-  Widget _minMaxRow(int balance) {
+  /// "Min: 100 coins" · withdrawable ceiling · "Max" (fills the field with
+  /// the real withdrawable whole-coin balance).
+  Widget _minMaxRow(int maxCoins) {
     return Row(
       children: [
         Text(
-          'Min: $_kMinWithdrawCoins coins',
+          'Min: $_kMinWithdrawCoins coins · '
+          'Withdrawable: ${CoinPack.thousands(maxCoins)}',
           style: SkifluxTypography.bodyP11Regular.copyWith(
             color: SkifluxColors.contentTertiary,
           ),
@@ -156,8 +227,8 @@ class WithdrawScreenState extends ConsumerState<WithdrawScreen> {
         const Spacer(),
         GestureDetector(
           onTap: () {
-            _amountController.text = '$balance';
-            setState(() => _coins = balance);
+            _amountController.text = '$maxCoins';
+            setState(() => _coins = maxCoins);
           },
           child: Text(
             'Max',
@@ -170,8 +241,72 @@ class WithdrawScreenState extends ConsumerState<WithdrawScreen> {
     );
   }
 
-  /// Notice-subtle info banner: processing time + minimum.
-  Widget _notice() {
+  Widget _balanceUnavailable() {
+    return Container(
+      padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
+      decoration: BoxDecoration(
+        color: SkifluxColors.backgroundNegativeSubtle,
+        borderRadius: SkifluxRadii.borderL,
+      ),
+      child: Column(
+        children: [
+          Text(
+            "We couldn't load your balance. Withdrawals need a live "
+            'balance check.',
+            textAlign: TextAlign.center,
+            style: SkifluxTypography.bodyP10Regular.copyWith(
+              color: SkifluxColors.contentSecondary,
+            ),
+          ),
+          const SizedBox(height: SkifluxSpacing.spaceS),
+          SkifluxButton(
+            label: 'Retry',
+            size: SkifluxButtonSize.s,
+            type: SkifluxButtonType.secondary,
+            onPressed: () =>
+                ref.read(walletProvider.notifier).refreshFromBackend(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _lockedBanner() {
+    return Container(
+      padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
+      decoration: BoxDecoration(
+        color: SkifluxColors.backgroundNegativeSubtle,
+        borderRadius: SkifluxRadii.borderL,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            RemixIcons.lock_2_fill,
+            size: SkifluxUnit.u20,
+            color: SkifluxColors.contentNegative,
+          ),
+          const SizedBox(width: SkifluxSpacing.spaceS),
+          Expanded(
+            child: Text(
+              'Your wallet is locked, so withdrawals are unavailable. '
+              'Contact support for help.',
+              style: SkifluxTypography.bodyP10Regular.copyWith(
+                color: SkifluxColors.contentSecondary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Notice-subtle info banner: processing time + minimum + fee honesty.
+  Widget _notice(Decimal? feePercent) {
+    final feeLine = feePercent == null
+        ? 'The exact processing fee is applied by the backend and shown '
+          'in your confirmation.'
+        : 'A ${CoinPack.thousandsOf(feePercent)}% processing fee applies.';
     return Container(
       padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
       decoration: BoxDecoration(
@@ -190,8 +325,7 @@ class WithdrawScreenState extends ConsumerState<WithdrawScreen> {
           Expanded(
             child: Text(
               'Withdrawals are processed within 24 hours. Minimum '
-              'withdrawal is $_kMinWithdrawCoins coins '
-              '(₦${CoinPack.thousands(_kMinWithdrawCoins * kCoinRateNaira)}).',
+              'withdrawal is $_kMinWithdrawCoins coins. $feeLine',
               style: SkifluxTypography.bodyP10Regular.copyWith(
                 color: SkifluxColors.contentSecondary,
               ),
@@ -207,30 +341,40 @@ class WithdrawScreenState extends ConsumerState<WithdrawScreen> {
     if (account != null && mounted) setState(() {});
   }
 
-  Future<void> withdraw(int naira) async {
+  /// Submits the real withdrawal request. Success UI only on the 201, and it
+  /// renders the response's own figures.
+  Future<void> withdraw() async {
     try {
-      final balance = ref.read(playlistsProvider).skillCoins;
-      final bank = ref.read(walletProvider).defaultBank;
+      final wallet = ref.read(walletProvider);
+      final bank = wallet.defaultBank;
       final coins = _coins;
-      if (bank == null || coins < _kMinWithdrawCoins || coins > balance) {
+      final accountId = bank?.id;
+      if (accountId == null ||
+          !wallet.balanceKnown ||
+          wallet.isLocked ||
+          coins < _kMinWithdrawCoins ||
+          coins > wallet.wholeWithdrawableCoins) {
         throw const SkifluxFailure(SkifluxErrorKind.skillCoinWithdrawal);
       }
-      // Deduct from the shared wallet + record the ledger entry.
-      ref.read(playlistsProvider.notifier).withdraw(coins);
-      ref
-          .read(walletProvider.notifier)
-          .recordWithdrawal(coins, naira, bank.last4);
+      setState(() => _busy = true);
+      final request = await ref
+          .read(walletRepositoryProvider)
+          .requestWithdrawal(
+            accountId: accountId,
+            amount: Decimal.fromInt(coins),
+          );
       if (!mounted) return;
-      await showWithdrawalSuccessSheet(
-        context,
-        coins: coins,
-        naira: naira,
-        bank: bank,
-      );
+      setState(() => _busy = false);
+      // Ledger row from the backend's own response; then re-read the wallet
+      // so the hold-adjusted balances replace the local mirror.
+      ref.read(walletProvider.notifier).recordWithdrawalRequest(request);
+      unawaited(ref.read(walletProvider.notifier).refreshFromBackend());
+      await showWithdrawalSuccessSheet(context, request: request, bank: bank!);
       if (!mounted) return;
       Navigator.of(context).pop();
     } catch (e, st) {
       if (!mounted) return;
+      setState(() => _busy = false);
       await ErrorDisplay.show(context, ref, e, stackTrace: st);
     }
   }
@@ -346,35 +490,29 @@ class _DestinationCard extends ConsumerWidget {
 }
 
 /// "Withdrawal initiated" sheet (`1256:25058`): headerless card — green
-/// check circle, title, routing copy, amount/deducted/new-balance summary,
-/// Done.
+/// check circle, title, routing copy, and a summary built from the 201
+/// response's own amount / fee / net figures. Naira is an estimate (≈).
 Future<void> showWithdrawalSuccessSheet(
   BuildContext context, {
-  required int coins,
-  required int naira,
+  required WithdrawalRequest request,
   required BankAccount bank,
 }) {
   return showSkifluxSheet<void>(
     context: context,
-    builder: (_) =>
-        _WithdrawalSuccessSheet(coins: coins, naira: naira, bank: bank),
+    builder: (_) => _WithdrawalSuccessSheet(request: request, bank: bank),
   );
 }
 
 class _WithdrawalSuccessSheet extends ConsumerWidget {
-  const _WithdrawalSuccessSheet({
-    required this.coins,
-    required this.naira,
-    required this.bank,
-  });
+  const _WithdrawalSuccessSheet({required this.request, required this.bank});
 
-  final int coins;
-  final int naira;
+  final WithdrawalRequest request;
   final BankAccount bank;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final balance = ref.watch(playlistsProvider).skillCoins;
+    final netCoins = request.netAmount;
+    final approxNaira = netCoins * Decimal.fromInt(kCoinRateNaira);
     return SkifluxSheetShell(
       title: '',
       showHeader: false,
@@ -407,7 +545,7 @@ class _WithdrawalSuccessSheet extends ConsumerWidget {
             ),
             const SizedBox(height: SkifluxSpacing.spaceS),
             Text(
-              'Withdrawal initiated',
+              'Withdrawal requested',
               textAlign: TextAlign.center,
               style: SkifluxTypography.headingH7Bold.copyWith(
                 color: SkifluxColors.contentPrimary,
@@ -415,7 +553,8 @@ class _WithdrawalSuccessSheet extends ConsumerWidget {
             ),
             const SizedBox(height: SkifluxSpacing.spaceXs),
             Text(
-              '₦${CoinPack.thousands(naira)} is on its way to your '
+              '${CoinPack.thousandsOf(netCoins)} coins '
+              '(≈ ₦${CoinPack.thousandsOf(approxNaira)}) are headed to your '
               '${bank.bankName} account ending in ${bank.last4}. This '
               'usually takes up to 24 hours.',
               textAlign: TextAlign.center,
@@ -427,11 +566,22 @@ class _WithdrawalSuccessSheet extends ConsumerWidget {
             CoinSummaryCard(
               filled: true,
               rows: [
-                CoinSummaryRow('Amount', '₦${CoinPack.thousands(naira)}'),
-                CoinSummaryRow('Coins deducted', '-$coins'),
+                CoinSummaryRow(
+                  'Coins withdrawn',
+                  '-${CoinPack.thousandsOf(request.amount)}',
+                ),
+                if (request.fee != null)
+                  CoinSummaryRow(
+                    'Fee',
+                    '-${CoinPack.thousandsOf(request.fee!)}',
+                  ),
+                CoinSummaryRow(
+                  'You receive',
+                  '${CoinPack.thousandsOf(netCoins)} coins',
+                ),
               ],
               totalLabel: 'New balance',
-              totalCoins: balance,
+              totalCoins: ref.watch(walletProvider).wholeCoins,
             ),
             const SizedBox(height: SkifluxSpacing.spaceXl),
             SkifluxButton(

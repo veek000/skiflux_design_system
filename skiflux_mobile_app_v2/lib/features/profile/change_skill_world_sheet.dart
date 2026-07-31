@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/error_handling/error_display.dart';
 import '../../shared/sheets/skiflux_sheet.dart';
 import 'data/skill_world_store.dart';
 
@@ -12,8 +13,13 @@ const double _iconBadgeSize = 30;
 
 /// Figma: **Profile Flow 16** (`1256:24173`) — "Change SkillWorld", opened from
 /// the gradient world pill on My Profile. Header + explainer line, then one
-/// bordered card per [SkillWorld] with a trailing radio. There is no CTA in the
-/// frame: picking a card commits the change and closes the sheet.
+/// bordered card per available [SkillWorld] with a trailing radio. There is no
+/// CTA in the frame: picking a card commits the change and closes the sheet.
+///
+/// The card list is the enum filtered by the public `GET /skillworlds`
+/// catalogue, and a pick persists through `PATCH /me/update` — the sheet
+/// closes on the server's 2xx (or instantly for the signed-out demo); a
+/// failure rolls the pill back and surfaces via [ErrorDisplay].
 Future<void> showChangeSkillWorldSheet(BuildContext context) {
   return showSkifluxSheet(
     context: context,
@@ -21,12 +27,48 @@ Future<void> showChangeSkillWorldSheet(BuildContext context) {
   );
 }
 
-class _ChangeSkillWorldSheet extends ConsumerWidget {
+class _ChangeSkillWorldSheet extends ConsumerStatefulWidget {
   const _ChangeSkillWorldSheet();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ChangeSkillWorldSheet> createState() =>
+      _ChangeSkillWorldSheetState();
+}
+
+class _ChangeSkillWorldSheetState
+    extends ConsumerState<_ChangeSkillWorldSheet> {
+  bool _saving = false;
+
+  Future<void> _pick(SkillWorld world) async {
+    if (_saving) return;
+    // Same world: nothing to persist — mirror the old tap-to-close feel.
+    if (world == ref.read(skillWorldProvider)) {
+      Navigator.of(context).pop();
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await ref.read(skillWorldProvider.notifier).selectAndPersist(world);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } catch (e, st) {
+      // Selection already rolled back by the notifier.
+      if (!mounted) return;
+      setState(() => _saving = false);
+      await ErrorDisplay.show(context, ref, e, stackTrace: st);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final selected = ref.watch(skillWorldProvider);
+    // Backend-driven availability; while loading (or on failure) the full
+    // enum shows so the sheet is never empty.
+    final options = ref.watch(skillWorldOptionsProvider);
+    final worlds = switch (options) {
+      AsyncData(:final value) => value,
+      _ => SkillWorld.values,
+    };
     return SkifluxSheetShell(
       title: 'Change SkillWorld',
       child: ListView(
@@ -43,16 +85,13 @@ class _ChangeSkillWorldSheet extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: SkifluxSpacing.spaceL),
-          for (final world in SkillWorld.values) ...[
-            if (world != SkillWorld.values.first)
+          for (final world in worlds) ...[
+            if (world != worlds.first)
               const SizedBox(height: SkifluxSpacing.spaceS),
             _WorldCard(
               world: world,
               selected: world == selected,
-              onTap: () {
-                ref.read(skillWorldProvider.notifier).select(world);
-                Navigator.of(context).pop();
-              },
+              onTap: _saving ? null : () => _pick(world),
             ),
           ],
         ],
@@ -71,7 +110,9 @@ class _WorldCard extends StatelessWidget {
 
   final SkillWorld world;
   final bool selected;
-  final VoidCallback onTap;
+
+  /// Null while a save is in flight — taps are ignored until it settles.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -136,7 +177,7 @@ class _WorldCard extends StatelessWidget {
               SkifluxRadio<SkillWorld>(
                 value: world,
                 groupValue: selected ? world : null,
-                onChanged: (_) => onTap(),
+                onChanged: (_) => onTap?.call(),
               ),
             ],
           ),

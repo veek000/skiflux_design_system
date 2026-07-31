@@ -6,64 +6,52 @@ import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/sheets/share_sheet.dart';
 import '../../shared/toast/skiflux_toast.dart';
+import '../../shared/widgets/load_failure.dart';
 
 // Figma: **Public User Profile view Screen** (`3092:14632`).
 // Learner profile (not creator): league pill, XP / rank / tasks stats card
 // with contact row, Skills / Badges / Completed Task sections. Opened from
 // search Users and comments.
 
+/// Another learner's profile, from `GET /users/{id}` / `/users/by-username/{u}`
+/// (spec schema `PublicUserProfile`).
+///
+/// Nothing is defaulted to a sample value. Every field the payload can omit is
+/// nullable or empty, because a stat cell reading "8 Task Done" is
+/// indistinguishable from a real 8 — the previous defaults (league Novice, xp
+/// 350, rank 12, 8 tasks, a demo email and three sample skills) rendered as
+/// though they were this person's.
 class PublicUserProfile {
   const PublicUserProfile({
     required this.name,
     required this.username,
     this.initials,
-    this.league = 'Novice',
-    this.xp = 350,
-    this.leaderboardRank = 12,
-    this.tasksDone = 8,
-    this.email = 'hello@skiflux.app',
-    this.skills = const ['Web Design', 'Mobile App Development', 'Marketing'],
-    this.badges = const [
-      ProfileBadgeItem(
-        'First Task',
-        'assets/badges/badge_first_task_completed.svg',
-      ),
-      ProfileBadgeItem('3 Day Streak', 'assets/badges/badge_3_days_streak.svg'),
-      ProfileBadgeItem('Top Learner', 'assets/badges/badge_top_learner.svg'),
-    ],
-    this.completedTasks = const [
-      CompletedTaskItem(
-        kind: 'Project',
-        title: 'SaaS landing page design',
-        meta: 'Submitted Mar 2025 · Verified',
-        actionLabel: 'Open in browser',
-      ),
-      CompletedTaskItem(
-        kind: 'Assessment',
-        title: 'Design principles & theory',
-        meta: 'Completed Jan 2025 · Verified',
-        score: 88,
-        band: 'Distinction',
-        bandDetail: 'Top Performance band · 80–100',
-        passed: true,
-      ),
-      CompletedTaskItem(
-        kind: 'Project',
-        title: 'Design system starter kit',
-        meta: 'Submitted Feb 2025 · Verified',
-        actionLabel: 'View Submission',
-      ),
-    ],
+    this.avatarUrl,
+    this.league,
+    this.xp,
+    this.leaderboardRank,
+    this.tasksDone,
+    this.email,
+    this.skills = const [],
+    this.badges = const [],
+    this.completedTasks = const [],
   });
 
   final String name;
   final String username;
   final String? initials;
-  final String league;
-  final int xp;
-  final int leaderboardRank;
-  final int tasksDone;
-  final String email;
+  final String? avatarUrl;
+
+  /// `current_level` — the league pill. Null when the payload omits it.
+  final String? league;
+  final int? xp;
+  final int? leaderboardRank;
+  final int? tasksDone;
+
+  /// Deliberately absent from the spec's `PublicUserProfile` — see the contact
+  /// row in `_Header`, which hides itself rather than inventing an address.
+  final String? email;
+
   final List<String> skills;
   final List<ProfileBadgeItem> badges;
   final List<CompletedTaskItem> completedTasks;
@@ -77,15 +65,6 @@ class PublicUserProfile {
       return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
     }
     return name.isEmpty ? '?' : name[0].toUpperCase();
-  }
-
-  /// Demo users used by search / comments.
-  // TODO(backend, blocking): replace PublicUserProfile.demo() and hardcoded defaults with real user profile data fetched from backend — expects: {name: String, username: String, initials: String?, league: String, xp: int, leaderboardRank: int, tasksDone: int, email: String, skills: List<String>, badges: List<{label: String, assetUrl: String}>, completedTasks: List<{kind: String, title: String, meta: String, actionLabel: String, score: int?, band: String?, bandDetail: String?, passed: bool?}>}
-  static PublicUserProfile demo({
-    String name = 'Amara Design',
-    String username = 'amara',
-  }) {
-    return PublicUserProfile(name: name, username: username);
   }
 }
 
@@ -130,11 +109,42 @@ class PublicUserProfileScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncProfile = ref.watch(publicUserProfileProvider(username));
-    
+
     return asyncProfile.when(
-      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (e, st) => const Scaffold(body: Center(child: Text('Failed to load profile'))),
+      loading: () => _shell(
+        context,
+        const Center(child: CircularProgressIndicator()),
+      ),
+      // Real failure panel with retry — a 404/timeout used to read as a bare
+      // "Failed to load profile" with no way forward.
+      error: (e, st) => _shell(
+        context,
+        LoadFailure(
+          error: e,
+          title: "We couldn't load this profile",
+          onRetry: () =>
+              ref.read(publicUserProfileProvider(username).notifier).retry(),
+        ),
+      ),
       data: (profile) => _PublicUserProfileView(profile: profile),
+    );
+  }
+
+  /// Loading/error keep the same top bar as the loaded view, so back and
+  /// share don't vanish while the request is in flight.
+  Widget _shell(BuildContext context, Widget body) {
+    return Scaffold(
+      backgroundColor: SkifluxColors.backgroundPrimary,
+      appBar: SkifluxTopNavBar(
+        label: 'Profile',
+        labelStyle: SkifluxTypography.headingH8Bold,
+        leading: IconButton(
+          padding: EdgeInsets.zero,
+          icon: const Icon(RemixIcons.arrow_left_s_line),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
+      body: body,
     );
   }
 }
@@ -213,26 +223,31 @@ class _PublicUserProfileView extends StatelessWidget {
             ),
           ),
           const SizedBox(height: SkifluxSpacing.spaceL),
-          _SectionCard(
-            icon: RemixIcons.clipboard_fill,
-            title: 'Completed Task',
-            // Figma pill reads "8 Badges" — copy slip; real task count used.
-            countLabel: '${profile.tasksDone} Tasks',
-            child: ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: profile.completedTasks.length,
-              itemBuilder: (context, i) {
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (i > 0) const SizedBox(height: SkifluxSpacing.spaceL),
-                    _CompletedTaskCard(item: profile.completedTasks[i]),
-                  ],
-                );
-              },
+          // Hidden entirely until the backend exposes a completed-task list —
+          // an empty "0 Tasks" card reads as "this learner has done nothing",
+          // which is a claim we cannot make.
+          if (profile.completedTasks.isNotEmpty) ...[
+            _SectionCard(
+              icon: RemixIcons.clipboard_fill,
+              title: 'Completed Task',
+              // Figma pill reads "8 Badges" — copy slip; real task count used.
+              countLabel: '${profile.completedTasks.length} Tasks',
+              child: ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: profile.completedTasks.length,
+                itemBuilder: (context, i) {
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (i > 0) const SizedBox(height: SkifluxSpacing.spaceL),
+                      _CompletedTaskCard(item: profile.completedTasks[i]),
+                    ],
+                  );
+                },
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -270,7 +285,9 @@ class _Header extends StatelessWidget {
           ),
         ),
         const SizedBox(height: SkifluxSpacing.spaceS),
-        // League pill — Novice + medal (3092:14644).
+        // League pill — Novice + medal (3092:14644). Hidden when the payload
+        // carries no `current_level`: a league is a claim about this learner.
+        if (profile.league case final league?)
         Container(
           padding: const EdgeInsets.all(SkifluxSpacing.spaceXs),
           decoration: BoxDecoration(
@@ -291,7 +308,7 @@ class _Header extends StatelessWidget {
               ),
               const SizedBox(width: SkifluxSpacing.spaceXs),
               Text(
-                profile.league,
+                league,
                 style: SkifluxTypography.uiButtonSmall.copyWith(
                   color: SkifluxColors.contentBrand,
                 ),
@@ -315,67 +332,81 @@ class _Header extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  _StatCell(value: '${profile.xp}', label: 'XP'),
+                  // An em dash where a number is unknown — "0 XP" would be a
+                  // statement about this learner, and a wrong one.
+                  _StatCell(value: _stat(profile.xp), label: 'XP'),
                   _vDivider(),
                   _StatCell(
-                    value: '#${profile.leaderboardRank}',
+                    value: profile.leaderboardRank == null
+                        ? '—'
+                        : '#${profile.leaderboardRank}',
                     label: 'Leaderboard',
                   ),
                   _vDivider(),
-                  _StatCell(value: '${profile.tasksDone}', label: 'Task Done'),
+                  _StatCell(value: _stat(profile.tasksDone), label: 'Task Done'),
                 ],
               ),
-              const SizedBox(height: SkifluxSpacing.spaceS),
               // Contact row — top hairline inside the card (3092:14676):
               // mail icon + email (Nav Item, Creato Medium 14) + Contact.
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: SkifluxSpacing.spaceS,
-                ),
-                child: Container(
-                  padding: const EdgeInsets.only(top: SkifluxSpacing.spaceS),
-                  decoration: const BoxDecoration(
-                    border: Border(
-                      top: BorderSide(
-                        color: SkifluxColors.contentSecondaryInverse,
-                        width: SkifluxBorderWidth.xs,
-                      ),
-                    ),
+              // The spec omits `email` from the public profile, so this hides
+              // rather than showing a placeholder address next to a live
+              // "Contact" button.
+              if (profile.email case final email?) ...[
+                const SizedBox(height: SkifluxSpacing.spaceS),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: SkifluxSpacing.spaceS,
                   ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        RemixIcons.mail_fill,
-                        size: SkifluxIcons.sizeS,
-                        color: SkifluxColors.contentPrimary,
-                      ),
-                      const SizedBox(width: SkifluxSpacing.spaceS),
-                      Expanded(
-                        child: Text(
-                          profile.email,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: SkifluxTypography.uiNavItem.copyWith(
-                            color: SkifluxColors.contentPrimary,
-                          ),
+                  child: Container(
+                    padding: const EdgeInsets.only(top: SkifluxSpacing.spaceS),
+                    decoration: const BoxDecoration(
+                      border: Border(
+                        top: BorderSide(
+                          color: SkifluxColors.contentSecondaryInverse,
+                          width: SkifluxBorderWidth.xs,
                         ),
                       ),
-                      SkifluxButton(
-                        label: 'Contact',
-                        size: SkifluxButtonSize.s,
-                        onPressed: () =>
-                            SkifluxToast.info(context, 'Messaging coming soon'),
-                      ),
-                    ],
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          RemixIcons.mail_fill,
+                          size: SkifluxIcons.sizeS,
+                          color: SkifluxColors.contentPrimary,
+                        ),
+                        const SizedBox(width: SkifluxSpacing.spaceS),
+                        Expanded(
+                          child: Text(
+                            email,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: SkifluxTypography.uiNavItem.copyWith(
+                              color: SkifluxColors.contentPrimary,
+                            ),
+                          ),
+                        ),
+                        SkifluxButton(
+                          label: 'Contact',
+                          size: SkifluxButtonSize.s,
+                          onPressed: () => SkifluxToast.info(
+                            context,
+                            'Messaging coming soon',
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
+              ],
             ],
           ),
         ),
       ],
     );
   }
+
+  /// A count, or an em dash when the payload didn't carry one.
+  static String _stat(int? value) => value?.toString() ?? '—';
 
   Widget _vDivider() {
     return Container(

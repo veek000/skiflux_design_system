@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/error_handling/error_display.dart';
+import '../../shared/toast/skiflux_toast.dart';
 import '../playlists/playlist_screen.dart';
 import '../profile/profile_screen.dart';
 import '../profile/public_user_profile_screen.dart';
+import '../subscriptions/data/subscriptions_store.dart';
 import 'data/search_index.dart';
 import 'search_result_widgets.dart';
 
@@ -12,7 +16,7 @@ import 'search_result_widgets.dart';
 ///
 /// The Figma copy says "6 result for" — a slip; the header computes the real
 /// total and pluralizes properly.
-class SearchResultsScreen extends StatefulWidget {
+class SearchResultsScreen extends ConsumerStatefulWidget {
   const SearchResultsScreen({
     super.key,
     required this.results,
@@ -23,10 +27,11 @@ class SearchResultsScreen extends StatefulWidget {
   final SearchCategory initialTab;
 
   @override
-  State<SearchResultsScreen> createState() => _SearchResultsScreenState();
+  ConsumerState<SearchResultsScreen> createState() =>
+      _SearchResultsScreenState();
 }
 
-class _SearchResultsScreenState extends State<SearchResultsScreen> {
+class _SearchResultsScreenState extends ConsumerState<SearchResultsScreen> {
   late SearchCategory _tab = widget.initialTab;
   late final TextEditingController _queryController = TextEditingController(
     text: widget.results.query,
@@ -40,18 +45,43 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
     super.dispose();
   }
 
+  /// `GET /creators/{id}` takes the creator UUID from the search payload.
   void _openCreatorProfile(PersonResult person) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => ProfileScreen(creatorId: person.username)));
+    if (person.id.isEmpty) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ProfileScreen(creatorId: person.id),
+      ),
+    );
   }
 
+  /// `GET /users/by-username/{username}` — no username, nothing to open.
   void _openUserProfile(PersonResult person) {
+    if (person.username.isEmpty) return;
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => PublicUserProfileScreen(username: person.username),
       ),
     );
+  }
+
+  Future<void> _followCreator(PersonResult person) async {
+    try {
+      await ref.read(subscriptionsProvider.notifier).subscribe(
+            SubscribedCreator(
+              id: person.id,
+              name: person.name,
+              username: person.username,
+              initials:
+                  person.name.isEmpty ? '?' : person.name[0].toUpperCase(),
+            ),
+          );
+      if (!mounted) return;
+      SkifluxToast.success(context, 'Subscribed to ${person.name}');
+    } catch (e, st) {
+      if (!mounted) return;
+      await ErrorDisplay.show(context, ref, e, stackTrace: st);
+    }
   }
 
   @override
@@ -143,20 +173,14 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
           EpisodeResultCard(episode: e, onTap: () {}),
       ],
       SearchCategory.creators => [
-        for (final c in _results.creators)
-          PersonResultRow(
-            person: c,
-            actionLabel: 'Follow',
-            onAction: () {},
-            onTap: () => _openCreatorProfile(c),
-          ),
+        for (final c in _results.creators) _creatorRow(c),
       ],
       SearchCategory.users => [
         for (final u in _results.users)
           PersonResultRow(
             person: u,
             actionLabel: 'View Profile',
-            onAction: () => _openUserProfile(u),
+            onAction: u.username.isEmpty ? null : () => _openUserProfile(u),
             onTap: () => _openUserProfile(u),
           ),
       ],
@@ -173,18 +197,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
 
     if (items.isEmpty) {
       return Center(
-        child: SkifluxEmptyState(
-          icon: Image.asset(
-            'assets/images/search_x_fill.png',
-            package: 'skiflux_design_system',
-            width: SkifluxSpacing.space4xl,
-            height: SkifluxSpacing.space4xl,
-          ),
-          title: 'Nothing found',
-          message:
-              'No ${_tab.label.toLowerCase()} match "${_results.query}". '
-              'Try a different term.',
-        ),
+        child: _emptyState(),
       );
     }
 
@@ -193,6 +206,34 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
       itemCount: items.length,
       separatorBuilder: (_, _) => const SizedBox(height: SkifluxSpacing.spaceL),
       itemBuilder: (_, i) => items[i],
+    );
+  }
+
+  /// Creator row with a live Follow action mirroring the overview screen.
+  Widget _creatorRow(PersonResult c) {
+    final followed = ref
+        .watch(subscriptionsProvider)
+        .isSubscribed(c.id.isNotEmpty ? c.id : c.username);
+    return PersonResultRow(
+      person: c,
+      actionLabel: followed ? 'Following' : 'Follow',
+      onAction: followed || c.id.isEmpty ? null : () => _followCreator(c),
+      onTap: () => _openCreatorProfile(c),
+    );
+  }
+
+  Widget _emptyState() {
+    return SkifluxEmptyState(
+      icon: Image.asset(
+        'assets/images/search_x_fill.png',
+        package: 'skiflux_design_system',
+        width: SkifluxSpacing.space4xl,
+        height: SkifluxSpacing.space4xl,
+      ),
+      title: 'Nothing found',
+      message:
+          'No ${_tab.label.toLowerCase()} match "${_results.query}". '
+          'Try a different term.',
     );
   }
 }

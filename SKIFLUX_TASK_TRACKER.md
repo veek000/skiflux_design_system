@@ -1,6 +1,6 @@
 # Skiflux Mobile App — Task Tracker
 
-> Last updated: 2026-07-28 (login connection failure diagnosed and fixed; button loading spinner + app-wide offline bar landed; social sign-in implemented and now credential-blocked rather than code-blocked)
+> Last updated: 2026-07-31 (large backend-integration sweep: all money flows real — episode purchase, top-up, withdrawals, cards; follow/comments/view-tracking/learning-tasks/notification-prefs wired; real logout + cold-start session restore; prod config repointed at the working Railway origin; OpenAPI spec copied to repo root `SkiFlux_API.yaml`; tags 32 → 23)
 > Status legend: ✅ Done &nbsp;|&nbsp; 🔄 In progress / prompt sent, awaiting report &nbsp;|&nbsp; ⏸ Blocked &nbsp;|&nbsp; ⬜ Not started
 > Model legend: model recommendations reflect cost/capability routing established this project — override as needed based on actual task complexity.
 
@@ -29,7 +29,7 @@ This is a live tracking document. Update status markers as tasks complete. Do no
 | 10 | List rendering audit | ✅ | 8 real issues fixed across 6 files, 10 false positives correctly left alone |
 | 11 | Font asset audit | ✅ | **Decision: keep all 22 fonts, no removals** (future-build flexibility) |
 | 12 | Adopt `freezed` for backend-integration models | ✅ | DeepSeek's output was NOT freezed (dev-prerelease codegen bug) — remediated 2026-07-26: all 7 models rebuilt as real freezed 3.2.5 models, Decimal money fields. Spec-alignment follow-up closed 2026-07-27 (withdrawable_balance as JSON number → `DecimalFromNumConverter`, `cancelled` status, SkillcoinTransaction label/status/13-type enum w/ unknown fallback, PlatformTask `is_active`); 16 smoke tests vs doc + spec payloads |
-| 13 | Backend integration tagging (`BACKEND_INTEGRATION.md`) | ✅ | 32 tags as of 2026-07-28 (27 blocking, 5 minor), down from 49 — doc auto-generated |
+| 13 | Backend integration tagging (`BACKEND_INTEGRATION.md`) | ✅ | 23 tags as of 2026-07-31 (13 blocking, 10 minor), down from 32 — inventory regenerated via the documented grep |
 | 14 | Wallet & Settings feature audit | ✅ | Riverpod/design-system/disposal all clean; 4 error-handling gaps found |
 | 15 | Error handling wired into 4 money-adjacent flows | ✅ | + real validation logic added + tests proving each path fires |
 | 16 | App icon + notification icon | ✅ | Adaptive icon fixed (safe-zone foreground + white background), verified via real build |
@@ -51,9 +51,9 @@ This is a live tracking document. Update status markers as tasks complete. Do no
 | 23 | P7 — Interactive OTP boxes | ⏸ | Backend-blocked (no real OTP verification yet) |
 | 24 | P8 — Wire `ErrorDisplay` into remaining auth submit paths + replace `startsWith` string-matching error classification with typed field | ⬜ | |
 | 25 | Transition guards on `authFlowProvider.show()` | ⬜ | Optional — demo-appropriate scope discussed, not yet sent. Revisit once real backend auth session state exists |
-| 26 | Splash screen: Lottie JSON animation | 🔄 | First DeepSeek attempt failed (task was over-bundled with Figma-fidelity work) — retry as its own tightly-scoped, detailed DeepSeek prompt, separate from #28's Figma work |
+| 26 | Splash screen: Lottie JSON animation | ✅ | First DeepSeek attempt failed (task was over-bundled with Figma-fidelity work) — retry as its own tightly-scoped, detailed DeepSeek prompt, separate from #28's Figma work |
 | 27 | Post-splash video screen (bundled 2.7MB local video + poster frame) | 🔄 | Same batch as #26 — DeepSeek, own scoped prompt |
-| 28 | Onboarding/Terms/Privacy — rebuild to match 3 Figma nodes | 🔄 | Routed to Claude Code (Figma-accurate work) |
+| 28 | Onboarding/Terms/Privacy — rebuild to match 3 Figma nodes | ✅ | Routed to Claude Code (Figma-accurate work) |
 | 29 | Google/Apple sign-in implementation | ⏸ | Code complete 2026-07-28 (see #44) — now blocked on OAuth credentials, not on code |
 | 30 | Task submission confirmation → bottom sheet (was centered `Dialog`) | ✅ | Done 2026-07-26 via `showSuccessSheet` direct swap; test asserts sheet present / Dialog absent |
 | 30a | Biometric login implementation (Face ID / fingerprint) | ✅ | Done + fully verified 2026-07-26: `FlutterFragmentActivity` swap landed, `USE_BIOMETRIC` in manifest, Riverpod 3.x `.valueOrNull` compile error fixed, clean `flutter build apk --debug` passed. **Note**: spec has NO biometric session-exchange endpoint — `POST /me/biometrics/toggle` stores preference only; verification is on-device by design (see mapping). Figma deviation ("Login with Password" secondary styling) still undecided. |
@@ -64,8 +64,8 @@ This is a live tracking document. Update status markers as tasks complete. Do no
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 31 | **Home screen full-screen video redesign** | ⬜ | This is the real scope behind the original "video feed prototype" Phase 3 item — `PageView.builder`, vertical scroll, one-video-at-a-time. Everything below (32, 33) lives inside this redesign. Grok (state) + Claude Code (visual) |
-| 32 | Video description: truncate 2 lines + "View More" → detail modal | ⬜ | Reuse `playlist_description_sheet.dart` pattern. Sequence after #31. Confirmed 2026-07-26: `video_feed_card.dart` DOES show a description, hard-truncated at `maxLines: 1` with ellipsis |
+| 31 | **Home screen full-screen video redesign** | ✅ | This is the real scope behind the original "video feed prototype" Phase 3 item — `PageView.builder`, vertical scroll, one-video-at-a-time. Everything below (32, 33) lives inside this redesign. Grok (state) + Claude Code (visual) |
+| 32 | Video description: truncate 2 lines + "View More" → detail modal | ✅ | Reuse `playlist_description_sheet.dart` pattern. Sequence after #31. Confirmed 2026-07-26: `video_feed_card.dart` DOES show a description, hard-truncated at `maxLines: 1` with ellipsis |
 | 33 | Follow/unfollow `+` button on creator avatar (conditional on subscription state) | ⬜ | Reads from `subscriptionsProvider` |
 | 34 | Download progress notification (Netflix-style, system tray) | ⏸ | **Double-blocked**: (1) no real downloads system exists yet — backend "Downloads management" unbuilt, (2) needs own scoping — foreground service + `flutter_local_notifications`, nontrivial. Do not start until downloads system is itself scoped. |
 | 35 | Native OS file/image picker — avatar upload (`edit_profile_screen.dart`, `image_picker`) + task submission file upload (`submission_task_screen.dart`, `file_picker`) | ✅ | Done + build-verified 2026-07-26. Camera+gallery source sheet, no new Android permissions (by design), iOS plist strings added (needs Mac to verify), 10MB cap + graceful denial/cancel. Backend upload wiring separate (real endpoint now known: multipart `PATCH /me/update {avatar}`). |
@@ -80,58 +80,61 @@ This is a live tracking document. Update status markers as tasks complete. Do no
 - `withdrawal-flows.md` — full wallet/withdrawal spec (hold/payout pipeline, fees, Paystack + Stripe Connect)
 - `payment-flows.md` — top-ups, saved cards, webhooks
 - `platform-tasks.md` — full missions spec (status lifecycle, UI decision tree)
-- Full OpenAPI spec (`SkiFlux API.yaml` = `SkiFlux API (1).yaml`, MD5-identical) — cross-referenced against `BACKEND_INTEGRATION.md`'s tags; **re-run 2026-07-26 against all 49 current tags** (spec unchanged since first run). Where the OpenAPI spec and the flow .md docs conflict (e.g. `withdrawable_balance` type), treat the spec as authoritative until the backend dev says otherwise — flagged in PROJECT.md.
+- Full OpenAPI spec (`SkiFlux API.yaml` = `SkiFlux API (1).yaml`, MD5-identical) — cross-referenced against `BACKEND_INTEGRATION.md`'s tags; **re-run 2026-07-26 against all 49 current tags**. Where the OpenAPI spec and the flow .md docs conflict (e.g. `withdrawable_balance` type), treat the spec as authoritative until the backend dev says otherwise — flagged in PROJECT.md. **2026-07-31: the spec now lives at repo root `SkiFlux_API.yaml`** (copied from Downloads; the repo copy is the working reference from here on). The spec has grown since the first runs — several formerly-blocked Tier 4 items now exist (creator profile, public user profile, watch-history delete) and are wired.
 
 ### Tier 1 — Ready to build now, no blockers
 
 | # | Task | Status | Model |
 |---|------|--------|-------|
 | 35 | Auth integration (login/signup/token refresh) | ✅ | Claude — done 2026-07-28. Network foundation (dio client + auth/refresh interceptors, `flutter_secure_storage` token store, `ApiRepository`/`ApiException` failure mapping onto `SkifluxErrorKind`) + `AuthRepository` covering login, signup, OTP verify/resend, forgot/reset password, both mobile social endpoints, logout blacklist. Response shape isolated in `AuthTokens.fromJson` (one file to change when 61b is answered). Social buttons still inert — native `id_token` needs a new dependency, awaiting sign-off. |
-| 36 | Wallet + Withdrawal integration | ⬜ | Grok |
-| 37 | Platform Tasks (missions) integration | ⬜ | DeepSeek V4 Pro |
-| 38 | Thumbnail URL wiring (playlists/subscriptions/profile/creator/search — all reuse `Episode.thumbnail_url`) | ⬜ | DeepSeek V4 Flash |
-| 39 | Profile auth gate (token-presence check) | ⬜ | DeepSeek V4 Flash |
+| 36 | Wallet + Withdrawal integration | ✅ | Done 2026-07-31 (writes; reads landed 2026-07-28). All previously fake money flows are real: top-up `initiate → external checkout → verify → wallet refresh` (client-side coin minting deleted); withdrawals with real bank list + server-side account-name verification (hardcoded 6-bank list and fake "Amara Design" verification deleted), fee/net from the 201 response, real `withdrawable_balance` ceiling (floored), `is_locked` gates the button; cards via hosted `POST /wallet/cards/add` — raw PAN/CVV entry UI deleted (PCI); balances read the real Decimal wallet; fabricated transaction references removed (local rows pending-only until the backend ledger replaces them). External checkout links open via `external_link.dart` clipboard fallback — `url_launcher` still awaiting dependency sign-off |
+| 37 | Platform Tasks (missions) integration | ✅ | Done 2026-07-31 (repository landed 2026-07-28). Missions refresh on every Tasks-tab open (was once per login); failed claims roll back and surface a modal (were marked Done anyway); successful claim refreshes missions + wallet; link tasks open their external URL; rewards display exact Decimals |
+| 38 | Thumbnail URL wiring (playlists/subscriptions/profile/creator/search — all reuse `Episode.thumbnail_url`) | 🔄 | Subscriptions episode cards use payload thumbnail URLs (2026-07-31); playlists catalogue + profile rails still demo-seeded — their thumbnail tags remain |
+| 39 | Profile auth gate (token-presence check) | ✅ | Done 2026-07-31 — session-gated honesty app-wide (no demo seeds for signed-in users on profile/notifications/comments) plus cold-start session restore: splash resolves a stored session → biometric gate or straight into the app (no more marketing carousel for returning users) |
 
 ### Tier 2 — Shape mismatches, fixable via adapter/translation layer (no backend dev action needed)
 
 | # | Task | Status | Model | Approach |
 |---|------|--------|-------|----------|
 | 40 | Streaks adapter | ⬜ | DeepSeek V4 Pro | Map `current_streak_count`→`streak` etc.; UI change optional if surfacing new `milestone` sub-fields |
-| 41 | Wallet transactions adapter | ⬜ | DeepSeek V4 Pro | Map `transaction_type`→`CoinTxnKind`, Decimal parsing |
-| 42 | Comments adapter | ⬜ | DeepSeek V4 Pro | Flatten nested author/body to match backend's flat fields |
-| 43 | Search adapter | ⬜ | DeepSeek V4 Pro | Map `seasons`→`playlists` concept, flatten nested `creator` |
+| 41 | Wallet transactions adapter | ✅ | Done 2026-07-31 — `UserWallet`/`SavedCard`/`SkillcoinTransaction` spec-aligned, codegen re-run; `ApiRepository.guard` now also catches `TypeError`/`ArgumentError` |
+| 42 | Comments adapter | ✅ | Done 2026-07-31 — `GET /episodes/{id}/comments` + `POST /episodes/comment` with spec body `{episode_id, text}`, flat field parsing, voice-note upload, optimistic post with rollback + surfaced errors (was silently swallowed), real counts |
+| 43 | Search adapter | ✅ | Done 2026-07-31 — 300ms debounce, stale-response guard, inline (non-modal) errors |
 
 ### Tier 3 — Real backend features not yet wired into the app
 
 | # | Task | Status | Model | Notes |
 |---|------|--------|-------|-------|
 | 44 | Social sign-in (Google/Apple) wiring | ⏸ | Grok | **Code complete 2026-07-28**, now credential-blocked. Native `id_token` flow implemented in `social_auth.dart` and posted to `/auth/social/mobile/{google,apple}`. Each button hides itself rather than failing when its prerequisite is missing, so the blockers are visible at setup rather than at runtime: **(a)** Google needs a real `GOOGLE_SERVER_CLIENT_ID` (the backend's Web OAuth client) + `GOOGLE_IOS_CLIENT_ID` in `config/env/dev.json`, plus both debug and release Android SHA-1s registered in the Google Cloud project; **(b)** iOS additionally needs `CFBundleURLSchemes` in `Info.plist` filled with the REVERSED_CLIENT_ID (left an empty placeholder on purpose — a wrong value fails at runtime, an empty one fails at setup); **(c)** Apple is gated to iOS/macOS until a Service ID + registered https redirect URI exist for the Android web fallback (tagged minor in `BACKEND_INTEGRATION.md`); **(d)** `Runner.entitlements` + the pbxproj `CODE_SIGN_ENTITLEMENTS` wiring were authored on Windows and need a Mac to verify, and the capability still has to be enabled on the App ID in the developer portal. |
-| 45 | Biometric toggle wiring | ⬜ | DeepSeek V4 Flash | **UI already exists** — just needs `POST /me/biometrics/toggle` connection |
+| 45 | Biometric toggle wiring | ✅ | DeepSeek V4 Flash | Closed 2026-07-31 — cold-start race fixed (`SettingsNotifier.ready` hydration future); the gate now honors the stored preference |
 | 46 | Stripe Connect withdrawal path | ⬜ | Claude Code | Genuinely new UI — hosted-redirect flow, app currently only has bank-form UI |
 | 47 | Wallet financial summary display | ⬜ | DeepSeek V4 Flash | Optional — bonus endpoint data |
-| 48 | Notification preferences wiring to settings | ⬜ | DeepSeek V4 Flash | |
+| 48 | Notification preferences wiring to settings | ✅ | DeepSeek V4 Flash | Done 2026-07-31 — `GET/PATCH /me/notification-preferences` with optimistic toggle + rollback + SharedPreferences offline cache (toggles previously reset every launch) |
 | 49 | Platform task progress-bar UI | ⬜ | DeepSeek V4 Flash | Backend already tracks `progress_current`/`progress_target` |
-| 50 | Withdrawal fee/net-amount display before confirm | ⬜ | DeepSeek V4 Flash | |
-| 51 | Push notifications (FCM) — client setup | ⏸ | Grok | Blocked on Firebase project + config files (`google-services.json`, `GoogleService-Info.plist`). Recommend: backend dev owns Firebase project + send-side logic; mobile owns receive/display + device-token registration (check if `POST /me/devices` is the registration endpoint) |
+| 50 | Withdrawal fee/net-amount display before confirm | ✅ | Done 2026-07-31 inside #36 — fee/net taken from the `POST /wallet/withdrawals/request` 201 response | |
+| 51 | Push notifications (FCM) — client setup | ⏸ | Grok | Device registration via `POST /me/devices` landed 2026-07-28. Still open (product decisions, 2026-07-31): when to ask for notification permission, and notification tap routing (also blocked on the untyped `NotificationItem.data` payload — see 52). iOS side blocked on Apple Developer membership (APNs) |
 
 ### Tier 4 — Blocked, needs backend dev action
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 52 | Notifications response shape | ⏸ | Endpoint exists, response body undocumented |
+| 52 | Notifications response shape | ✅ | List wired 2026-07-31 (session-gated, error + retry states). Remaining backend ask: `NotificationItem.data` is typed `{}` — tap routing stays blocked until the per-type payload is documented (tag in `notifications_repository.dart`) |
 | 53 | Leaderboard response shape | ⏸ | Same issue |
-| 54 | Learning Tasks/Quiz submission mapping | ⏸ | Two endpoints, field names don't map cleanly — needs real conversation, possibly own reference doc |
-| 55 | Coin pack pricing endpoint | ⏸ | No mobile-facing endpoint exists |
-| 56 | Public user profile endpoint | ⏸ | Only admin-only version exists |
-| 57 | Downloads management API | ⏸ | Nothing exists — confirm intentional client-only vs. missing |
-| 58 | Watch-history delete endpoint | ⏸ | Read-only currently (re-verified 2026-07-26: only GET exists) |
+| 54 | Learning Tasks/Quiz submission mapping | ✅ | Done 2026-07-31 — `GET /episodes/watched/tasks` + `GET /me/submissions` + `POST /episodes/task/submit` (JSON link submission, multipart file upload, assessment answers keyed by question UUID); grading vs real `pass_score_percent`; `accepted_proof_types` drives the file-type allowlist (23-extension hardcode retired) |
+| 55 | Coin pack pricing endpoint | ⏸ | Still no mobile-facing endpoint (re-checked 2026-07-31). Top-up flow itself is wired; packs remain client-side fallback pricing until this exists |
+| 56 | Public user profile endpoint | ✅ | Now exists in spec — `GET /users/by-username/{username}` wired 2026-07-31; all fabricated fallback data (xp 350, rank 12, fake badges/tasks) removed, honest states. Residual backend asks: completed-task list, documented stat-field shapes, email/contact gating decision (tags in `public_user_profile_provider.dart`) |
+| 57 | Downloads management API | ⏸ | Nothing exists — confirm intentional client-only vs. missing. Note 2026-07-31: no client pipeline exists either; the storage figure shown is fake |
+| 58 | Watch-history delete endpoint | ✅ | Now exists in spec — `DELETE /me/watch-history/{episode_id}` + clear-all wired 2026-07-31, optimistic with rollback (stale "no endpoint" TODOs deleted) |
 | 59 | Share/deep-link generation endpoint | ⏸ | Confirm intentional client-side vs. missing |
-| 60 | Remaining settings persistence (auto-play, download quality, Wi-Fi-only, language, watch-history toggle, recommendations) | ⏸ | No endpoints yet |
+| 60 | Remaining settings persistence (auto-play, download quality, Wi-Fi-only, language, watch-history toggle, recommendations) | 🔄 | Persisted locally as of 2026-07-31, but three are not yet *consulted*: auto-play and Wi-Fi-only are stored and ignored, and app language is not wired to `MaterialApp`'s locale. Download quality still needs multi-rendition support (`BACKEND_INTEGRATION.md` Tier 4 §4). Skill-world selection is fully real — `GET /skillworlds` feeds the picker, `PATCH /me/update` persists it. New `SkifluxErrorKind.settingsSaveFailed` (toast) covers save failures |
 | 61 | Auto-caption generation pipeline (Whisper API) | ⏸ | Architectural decision, not started |
-| 61a | Transaction dispute endpoint (`transaction_details_screen.dart` "report" action) | ⏸ | New tag 2026-07-26 — no dispute/support-ticket-create endpoint in spec (only ticket *rating* exists) |
+| 61a | Transaction dispute endpoint (`transaction_details_screen.dart` "report" action) | ⏸ | New tag 2026-07-26, re-confirmed absent 2026-07-31 — no dispute/support-ticket-create endpoint in spec (only ticket *rating* exists) |
+| 61e | Episode report endpoint (`more_menu_sheet.dart` "report" action) | ⏸ | New tag 2026-07-31 — `POST /comments/{id}/report/` exists for comments, but there is no episode-level equivalent |
+| 61f | Per-creator notification mode | ⏸ | Re-confirmed absent 2026-07-31 — `/me/notification-preferences` is app-wide, cannot be scoped per followed creator. See `BACKEND_INTEGRATION.md` Tier 4 §2 for the recommended three-state shape |
+| 61g | Viewer-facing creator catalogue (episodes/seasons) | ⏸ | `GET /creators/{creator_id}` now exists and is wired, but there is still no viewer-facing episodes/seasons listing, so playlists/seasons stay demo-seeded — and **episode purchase 404s on demo ids** until the catalogue is backend-driven |
 | 61b | Auth + profile response bodies undocumented | ⏸ | `POST /auth/login`, `/auth/signup`, `/auth/token/refresh`, social logins, and `GET /me/profile` all have description-only responses in the spec (no schema). Descriptions promise access/refresh tokens and the full profile payload — need documented shapes before Tier 1 auth/profile integration hardens |
 | 61c | Per-user episode purchase state | ⏸ | `Episode` schema has no `is_purchased`/unlocked field — app can't tell locked vs unlocked paid episodes from the list responses. Needs a field or a purchases-list endpoint |
-| 61d | Badge artwork + playlist cover URLs | ⏸ | `Badge` has no image/asset URL (app renders badge art); learner-facing `Season` exposes `cover_image_public_id` (Cloudinary id) but not a ready URL (creator-side `SeasonPerformance` has `cover_image_url`) |
+| 61d | Badge artwork + playlist cover URLs | ⏸ | `Badge` has no image/asset URL (app renders badge art); learner-facing `Season` exposes `cover_image_public_id` (Cloudinary id) but not a ready URL (creator-side `SeasonPerformance` has `cover_image_url`). 2026-07-31: badges endpoint corrected to `/me/badges`, parsing made tolerant, catalogue join hardened — the art still matches on name (minor tag in `badge_catalogue.dart`) |
 
 ### `BACKEND_REQUESTS.md` generation
 | # | Task | Status | Notes |
@@ -207,3 +210,5 @@ This is a live tracking document. Update status markers as tasks complete. Do no
 - [ ] Fill `CFBundleURLSchemes` in `ios/Runner/Info.plist` with the REVERSED_CLIENT_ID once the iOS OAuth client exists
 - [ ] Register an Apple Service ID + https redirect URI (needed only for Sign in with Apple on Android), and enable the Sign in with Apple capability on the App ID in the developer portal
 - [ ] On a Mac: verify `Runner.entitlements` and the `CODE_SIGN_ENTITLEMENTS` pbxproj entries build and sign correctly (authored from Windows, unverified)
+- [ ] Approve the `url_launcher` dependency (or pick an alternative) — external checkout and mission links currently use a clipboard fallback (`lib/shared/utils/external_link.dart`; the swap point is documented in the file)
+- [ ] Apple Developer membership — blocks iOS Firebase/APNs setup

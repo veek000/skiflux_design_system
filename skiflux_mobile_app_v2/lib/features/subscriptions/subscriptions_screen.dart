@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/sheets/skiflux_sheet.dart';
+import '../../shared/widgets/load_failure.dart';
 import '../../shared/widgets/video_feed_card.dart';
+import '../home/data/home_feed_store.dart';
 import '../notifications/notifications_screen.dart';
 import '../playlists/playlist_screen.dart';
 import '../profile/profile_screen.dart';
@@ -30,7 +32,7 @@ class _SubscriptionsBodyState extends ConsumerState<SubscriptionsBody> {
 
   @override
   Widget build(BuildContext context) {
-    final creators = ref.watch(subscriptionsProvider).creators;
+    final subs = ref.watch(subscriptionsProvider);
     return Column(
       children: [
         SubscriptionsTopBar(
@@ -42,16 +44,32 @@ class _SubscriptionsBodyState extends ConsumerState<SubscriptionsBody> {
             MaterialPageRoute(builder: (_) => const NotificationsScreen()),
           ),
         ),
-        Expanded(
-          child: creators.isEmpty
-              ? const _SubscriptionsEmptyState()
-              : _SubscriptionsFeed(
-                  creators: creators,
-                  filter: _filter,
-                  onFilterChanged: (picked) => setState(() => _filter = picked),
-                ),
-        ),
+        Expanded(child: _body(subs)),
       ],
+    );
+  }
+
+  /// Loading → spinner; failure → retry panel; loaded-empty → the real empty
+  /// state. Sample creators used to fill the failure case, which read as a
+  /// subscription list the user never built.
+  Widget _body(SubscriptionsState subs) {
+    if (subs.creators.isEmpty) {
+      if (subs.isLoading) {
+        return const Center(child: CircularProgressIndicator());
+      }
+      if (subs.error != null) {
+        return LoadFailure(
+          error: subs.error!,
+          title: "We couldn't load your subscriptions",
+          onRetry: () => ref.read(subscriptionsProvider.notifier).refresh(),
+        );
+      }
+      return const _SubscriptionsEmptyState();
+    }
+    return _SubscriptionsFeed(
+      creators: subs.creators,
+      filter: _filter,
+      onFilterChanged: (picked) => setState(() => _filter = picked),
     );
   }
 }
@@ -543,9 +561,15 @@ class _CreatorChannelHeader extends StatelessWidget {
           borderRadius: SkifluxRadii.borderPill,
           child: InkWell(
             borderRadius: SkifluxRadii.borderPill,
-            onTap: () => Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => ProfileScreen(creatorId: creator.username))),
+            // `GET /creators/{id}` takes the UUID off the follow payload;
+            // rows without one (shouldn't happen post-load) can't navigate.
+            onTap: creator.id.isEmpty
+                ? null
+                : () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => ProfileScreen(creatorId: creator.id),
+                      ),
+                    ),
             child: Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: SkifluxSpacing.spaceS,
@@ -624,10 +648,7 @@ class EpisodePlayerSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final media = MediaQuery.of(context);
-    final creatorName = ref
-        .watch(subscriptionsProvider)
-        .creatorOf(episode)
-        .name;
+    final creator = ref.watch(subscriptionsProvider).creatorOf(episode);
     return Material(
       color: SkifluxColors.backgroundPrimary,
       borderRadius: const BorderRadius.vertical(
@@ -650,11 +671,40 @@ class EpisodePlayerSheet extends ConsumerWidget {
                   SkifluxSpacing.spaceL,
                   SkifluxSpacing.spaceL + media.padding.bottom,
                 ),
-                child: VideoFeedCard(
-                  epTag: episode.epTag,
-                  title: episode.title,
-                  description: creatorName,
-                ),
+                // A real feed item when the row came from the backend, so the
+                // player streams the episode and like/save/comments/track-view
+                // post against its real UUID. Legacy synthetic rows (no id)
+                // fall back to chrome-only rendering.
+                child: episode.id.isEmpty
+                    ? VideoFeedCard(
+                        epTag: episode.epTag,
+                        title: episode.title,
+                        description: creator.name,
+                      )
+                    : VideoFeedCard(
+                        item: HomeFeedItem(
+                          type:
+                              episode.videoUrl != null &&
+                                      episode.videoUrl!.isNotEmpty
+                                  ? FeedContentType.video
+                                  : FeedContentType.image,
+                          epTag: episode.epTag,
+                          title: episode.title,
+                          description: episode.description.isNotEmpty
+                              ? episode.description
+                              : creator.name,
+                          coverAsset: 'assets/home_video_cover.png',
+                          coverUrl: episode.thumbnailUrl,
+                          videoUrl: episode.videoUrl,
+                          creatorName: creator.name,
+                          creatorUsername: creator.username,
+                          creatorInitials: creator.initials,
+                          episodeId: episode.id,
+                          creatorId: episode.creatorId.isEmpty
+                              ? null
+                              : episode.creatorId,
+                        ),
+                      ),
               ),
             ),
           ],

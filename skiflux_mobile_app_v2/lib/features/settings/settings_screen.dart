@@ -1,9 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/error_handling/error_display.dart';
 import '../../shared/sheets/confirm_sheet.dart';
 import '../../shared/toast/skiflux_toast.dart';
+import '../auth/auth_flow.dart';
+import '../auth/data/auth_store.dart';
+import '../profile/data/profile_store.dart';
 import '../wallet/wallet_screen.dart';
 import 'app_language_screen.dart';
 import 'bank_accounts_screen.dart';
@@ -27,6 +33,12 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
+    // Real handle when the profile has loaded; plain "Edit profile" while it
+    // hasn't (or the load failed) rather than someone else's hardcoded name.
+    final handle = ref.watch(meProfileProvider).value?.handle ?? '';
+    final profileSubtitle = handle.isEmpty
+        ? 'Edit profile'
+        : '$handle · Edit profile';
 
     return Scaffold(
       backgroundColor: SkifluxColors.backgroundPrimary,
@@ -53,7 +65,7 @@ class SettingsScreen extends ConsumerWidget {
                   iconBackground: SkifluxColors.brand100,
                   iconColor: SkifluxColors.contentBrand,
                   title: 'Profile',
-                  subtitle: '@amara · Edit profile',
+                  subtitle: profileSubtitle,
                   onTap: () => _push(context, const EditProfileScreen()),
                 ),
                 SettingsTile(
@@ -174,7 +186,7 @@ class SettingsScreen extends ConsumerWidget {
                   iconColor: SkifluxColors.contentNegative,
                   title: 'Log out',
                   titleColor: SkifluxColors.contentNegative,
-                  onTap: () => _logOut(context),
+                  onTap: () => _logOut(context, ref),
                 ),
               ],
             ),
@@ -191,7 +203,13 @@ class SettingsScreen extends ConsumerWidget {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
   }
 
-  Future<void> _logOut(BuildContext context) async {
+  /// Confirm, then the real sign-out: `POST /auth/logout` + keychain clear via
+  /// [AuthFlowNotifier.signOut], then the navigation stack is reset to the
+  /// auth flow root so no signed-in screen survives behind the back gesture.
+  ///
+  /// The toast this used to show was theatre — it announced a log-out while
+  /// the token pair stayed in the keychain and every screen kept working.
+  Future<void> _logOut(BuildContext context, WidgetRef ref) async {
     final confirmed = await showConfirmSheet(
       context,
       title: 'Log out?',
@@ -201,9 +219,28 @@ class SettingsScreen extends ConsumerWidget {
       confirmLabel: 'Log out',
       icon: RemixIcons.logout_box_fill,
     );
-    if (confirmed == true && context.mounted) {
-      SkifluxToast.info(context, 'You have been logged out');
+    if (confirmed != true || !context.mounted) return;
+    try {
+      // Ends locally signed out even when the server call fails (the
+      // repository swallows that case); anything else — an unwritable
+      // keychain, say — means the session did NOT end, so it surfaces and
+      // navigation stays put.
+      await ref.read(authFlowProvider.notifier).signOut();
+    } catch (error, stackTrace) {
+      if (!context.mounted) return;
+      await ErrorDisplay.show(context, ref, error, stackTrace: stackTrace);
+      return;
     }
+    if (!context.mounted) return;
+    // The previous account's profile must not flash for the next one.
+    ref.invalidate(meProfileProvider);
+    SkifluxToast.info(context, 'You have been logged out');
+    unawaited(
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute<void>(builder: (_) => const AuthFlow()),
+        (route) => false,
+      ),
+    );
   }
 }
 

@@ -151,6 +151,31 @@ class AuthRepository extends ApiRepository {
     authenticated: false,
   );
 
+  /// `POST /auth/change-password` — signed-in change, current password known.
+  ///
+  /// Authenticated (the only path here besides [logout] that is): the spec
+  /// secures it with bearer auth alone, so the default interceptor header is
+  /// exactly right and `authenticated: false` must NOT be passed. 200 with no
+  /// documented body on success.
+  ///
+  /// [SkifluxErrorKind.settingsSaveFailed] rather than
+  /// [SkifluxErrorKind.authFailed]: this is not a sign-in, and the authFailed
+  /// modal's "We couldn't sign you in" copy would be wrong on the Change
+  /// Password screen.
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+    required String confirmNewPassword,
+  }) => post<void>(
+    AuthEndpoints.changePassword,
+    body: AuthRequests.changePassword(
+      currentPassword: currentPassword,
+      newPassword: newPassword,
+      confirmNewPassword: confirmNewPassword,
+    ),
+    kind: SkifluxErrorKind.settingsSaveFailed,
+  );
+
   /// `POST /auth/social/mobile/google` — [idToken] comes from the native SDK.
   Future<AuthTokens> googleSignIn({required String idToken}) => _authenticate(
     AuthEndpoints.googleMobile,

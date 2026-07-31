@@ -1,7 +1,13 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/error_handling/error_display.dart';
+import '../../shared/error_handling/error_handler.dart';
+import '../../shared/utils/external_link.dart';
+import '../../shared/widgets/load_failure.dart';
 import '../notifications/notifications_screen.dart';
 import '../search/search_screen.dart';
 import '../subscriptions/subscriptions_screen.dart';
@@ -28,6 +34,36 @@ class _TasksBodyState extends ConsumerState<TasksBody> {
   LearningTaskStatus? _filter;
 
   @override
+  void initState() {
+    super.initState();
+    // Missions otherwise load exactly once, at login; re-sync both sections
+    // every time the Tasks tab opens so the lists can't go stale.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(ref.read(tasksProvider.notifier).refreshFromBackend());
+    });
+  }
+
+  /// Mission CTA tap — async-aware: link missions open their destination
+  /// first, the write runs with the card in a pending state, and a failure
+  /// surfaces via [ErrorDisplay] instead of silently flipping to Done.
+  Future<void> _onMissionAction(MissionTask mission) async {
+    if (mission.shouldOpenExternalLink) {
+      final uri = Uri.tryParse(mission.externalUrl!);
+      if (uri != null) {
+        await openExternalUrl(context, uri);
+      }
+    }
+    if (!mounted) return;
+    try {
+      await ref.read(tasksProvider.notifier).completeMission(mission.id);
+    } catch (e, st) {
+      if (!mounted) return;
+      await ErrorDisplay.show(context, ref, e, stackTrace: st);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final tasks = ref.watch(tasksProvider);
     final notifier = ref.read(tasksProvider.notifier);
@@ -51,15 +87,8 @@ class _TasksBodyState extends ConsumerState<TasksBody> {
         const SizedBox(height: SkifluxSpacing.spaceL),
         Expanded(
           child: switch (_segment) {
-            0 => _LearningList(
-              state: tasks,
-              filter: _filter,
-              onFilter: (f) => setState(() => _filter = f),
-            ),
-            1 => _MissionList(
-              state: tasks,
-              onComplete: notifier.completeMission,
-            ),
+            0 => _learningSection(tasks, notifier),
+            1 => _missionSection(tasks, notifier),
             _ => _MarketplaceEmpty(
               onKeepLearning: () => setState(() => _segment = 0),
             ),
@@ -67,6 +96,68 @@ class _TasksBodyState extends ConsumerState<TasksBody> {
         ),
       ],
     );
+  }
+
+  /// Learning tab body honouring where the list came from: signed-in users
+  /// get a loader, an error+retry, or the honest empty state — never seeds.
+  Widget _learningSection(TasksState tasks, TasksNotifier notifier) {
+    switch (tasks.learningSource) {
+      case TaskSectionSource.loading:
+        return const Center(child: CircularProgressIndicator());
+      case TaskSectionSource.error:
+        return LoadFailure(
+          error: const SkifluxFailure(SkifluxErrorKind.contentLoadFailed),
+          title: "We couldn't load your tasks",
+          onRetry: () => unawaited(notifier.refreshLearningFromBackend()),
+        );
+      case TaskSectionSource.seed:
+      case TaskSectionSource.live:
+        if (tasks.learning.isEmpty) {
+          return const SkifluxEmptyState(
+            icon: Icon(
+              RemixIcons.task_fill,
+              size: SkifluxEmptyState.iconSize,
+              color: SkifluxColors.contentBrand,
+            ),
+            title: 'No tasks yet',
+            message:
+                'Watch episodes to unlock their tasks — complete them to '
+                'earn SkillCoins and XP.',
+          );
+        }
+        return _LearningList(
+          state: tasks,
+          filter: _filter,
+          onFilter: (f) => setState(() => _filter = f),
+        );
+    }
+  }
+
+  Widget _missionSection(TasksState tasks, TasksNotifier notifier) {
+    switch (tasks.missionsSource) {
+      case TaskSectionSource.loading:
+        return const Center(child: CircularProgressIndicator());
+      case TaskSectionSource.error:
+        return LoadFailure(
+          error: const SkifluxFailure(SkifluxErrorKind.contentLoadFailed),
+          title: "We couldn't load your missions",
+          onRetry: () => unawaited(notifier.refreshMissionsFromBackend()),
+        );
+      case TaskSectionSource.seed:
+      case TaskSectionSource.live:
+        if (tasks.missions.isEmpty) {
+          return const SkifluxEmptyState(
+            icon: Icon(
+              RemixIcons.flag_fill,
+              size: SkifluxEmptyState.iconSize,
+              color: SkifluxColors.contentBrand,
+            ),
+            title: 'No missions right now',
+            message: 'New missions will show up here — check back soon.',
+          );
+        }
+        return _MissionList(state: tasks, onComplete: _onMissionAction);
+    }
   }
 }
 
@@ -369,20 +460,24 @@ class _LearningTaskCard extends StatelessWidget {
             _TaskFeedbackBanner(feedback: task.feedback!),
           ],
           const SizedBox(height: SkifluxSpacing.spaceS),
-          // Rewards + CTA
+          // Rewards + CTA. Chips hide when the API declared no reward —
+          // and a fractional reward renders exactly ("+2.50", never "+3").
           Row(
             children: [
-              _RewardChip(
-                icon: RemixIcons.copper_coin_fill,
-                label: '+${task.coins}',
-                color: SkifluxColors.contentNotice,
-              ),
-              const SizedBox(width: SkifluxSpacing.spaceM),
-              _RewardChip(
-                icon: RemixIcons.flashlight_fill,
-                label: '+${task.xp} XP',
-                color: SkifluxColors.contentBrand,
-              ),
+              if (task.hasCoinReward)
+                _RewardChip(
+                  icon: RemixIcons.copper_coin_fill,
+                  label: '+${task.coinsLabel}',
+                  color: SkifluxColors.contentNotice,
+                ),
+              if (task.hasCoinReward && task.hasXpReward)
+                const SizedBox(width: SkifluxSpacing.spaceM),
+              if (task.hasXpReward)
+                _RewardChip(
+                  icon: RemixIcons.flashlight_fill,
+                  label: '+${task.xp} XP',
+                  color: SkifluxColors.contentBrand,
+                ),
               const Spacer(),
               _CardActionButton(
                 label: task.actionLabel,
@@ -622,7 +717,7 @@ class _MissionList extends StatelessWidget {
   const _MissionList({required this.state, required this.onComplete});
 
   final TasksState state;
-  final ValueChanged<String> onComplete;
+  final ValueChanged<MissionTask> onComplete;
 
   static const _icons = <String, IconData>{
     'instagram': RemixIcons.instagram_fill,
@@ -653,7 +748,7 @@ class _MissionCard extends StatelessWidget {
   const _MissionCard({required this.mission, required this.onComplete});
 
   final MissionTask mission;
-  final ValueChanged<String> onComplete;
+  final ValueChanged<MissionTask> onComplete;
 
   @override
   Widget build(BuildContext context) {
@@ -705,25 +800,29 @@ class _MissionCard extends StatelessWidget {
                 const SizedBox(height: SkifluxSpacing.spaceXs),
                 Row(
                   children: [
-                    const Icon(
-                      RemixIcons.copper_coin_fill,
-                      size: SkifluxIcons.sizeS,
-                      color: SkifluxColors.contentNoticeBold,
-                    ),
-                    const SizedBox(width: SkifluxSpacing.space2xs),
-                    Text(
-                      '+${mission.coins}',
-                      style: SkifluxTypography.uiButtonSmall.copyWith(
+                    if (mission.hasCoinReward) ...[
+                      const Icon(
+                        RemixIcons.copper_coin_fill,
+                        size: SkifluxIcons.sizeS,
                         color: SkifluxColors.contentNoticeBold,
                       ),
-                    ),
+                      const SizedBox(width: SkifluxSpacing.space2xs),
+                      Text(
+                        // Decimal-exact: a 2.50-coin mission reads "+2.50".
+                        '+${mission.coinsLabel}',
+                        style: SkifluxTypography.uiButtonSmall.copyWith(
+                          color: SkifluxColors.contentNoticeBold,
+                        ),
+                      ),
+                    ],
                     const Spacer(),
                     SkifluxButton(
                       label: mission.completed ? 'Done' : mission.actionLabel,
                       size: SkifluxButtonSize.s,
-                      onPressed: mission.completed
+                      loading: mission.pending,
+                      onPressed: mission.completed || mission.pending
                           ? null
-                          : () => onComplete(mission.id),
+                          : () => onComplete(mission),
                     ),
                   ],
                 ),

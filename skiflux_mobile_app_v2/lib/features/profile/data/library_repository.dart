@@ -67,6 +67,20 @@ class LibraryRepository extends ApiRepository {
     body: {'episode_id': episodeId},
     kind: SkifluxErrorKind.likeCommentReactionFailed,
   );
+
+  /// `DELETE /me/watch-history/{episode_id}` — removes one episode from the
+  /// history (204). Same lightweight-row-write kind as the toggles; there is
+  /// no dedicated history-delete error kind.
+  Future<void> deleteWatchHistoryEntry(String episodeId) => delete(
+    '/me/watch-history/$episodeId',
+    kind: SkifluxErrorKind.likeCommentReactionFailed,
+  );
+
+  /// `DELETE /me/watch-history` — clears the entire history.
+  Future<void> clearWatchHistory() => delete(
+    '/me/watch-history',
+    kind: SkifluxErrorKind.likeCommentReactionFailed,
+  );
 }
 
 final libraryRepositoryProvider = Provider<LibraryRepository>(

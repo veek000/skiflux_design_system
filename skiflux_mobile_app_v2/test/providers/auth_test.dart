@@ -6,7 +6,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:skiflux_mobile_app_v2/features/auth/data/auth_repository.dart';
 import 'package:skiflux_mobile_app_v2/features/auth/data/auth_store.dart';
 import 'package:skiflux_mobile_app_v2/features/auth/data/biometric_store.dart';
+import 'package:skiflux_mobile_app_v2/features/profile/data/profile_repository.dart';
 import 'package:skiflux_mobile_app_v2/features/settings/data/settings_store.dart';
+import 'package:skiflux_mobile_app_v2/shared/data/session_email_store.dart';
 import 'package:skiflux_mobile_app_v2/shared/error_handling/error_handler.dart';
 import 'package:skiflux_mobile_app_v2/shared/network/api_exception.dart';
 import 'package:skiflux_mobile_app_v2/shared/network/token_store.dart';
@@ -507,6 +509,191 @@ void main() {
       expect(state.signInError, 'This password is too common.');
     });
   });
+
+  group('completeOnboarding (the wizard payload actually leaves the device)', () {
+    ({ProviderContainer container, _FakeProfileRepository repo}) withProfileRepo({
+      SkifluxFailure? failure,
+    }) {
+      final repo = _FakeProfileRepository(failure: failure);
+      final c = ProviderContainer(
+        overrides: [profileRepositoryProvider.overrideWithValue(repo)],
+      );
+      addTearDown(c.dispose);
+      return (container: c, repo: repo);
+    }
+
+    test('maps every wizard goal label onto its spec wire enum', () {
+      expect(
+        AuthFlowNotifier.goalWireValues,
+        {
+          'Build a verified portfolio': 'build_portfolio',
+          'Learn a new technical skill': 'learn_skill',
+          'Earn income through tasks': 'earn_income',
+          'Network with creators': 'network',
+        },
+      );
+    });
+
+    test('maps skillworld labels by lowercasing — including AI', () {
+      expect(AuthFlowNotifier.skillworldWireValue('Design'), 'design');
+      expect(AuthFlowNotifier.skillworldWireValue('Entrepreneur'), 'entrepreneur');
+      expect(AuthFlowNotifier.skillworldWireValue('AI'), 'ai');
+    });
+
+    test('POSTs username, mapped goal/skillworld and the avatar path', () async {
+      final env = withProfileRepo();
+      final notifier = env.container.read(authFlowProvider.notifier);
+      notifier.setUsername(' veek ');
+      notifier.setGoal('Earn income through tasks');
+      notifier.setSkillworld('AI');
+      notifier.setAvatarPath('/tmp/avatar.png');
+
+      await notifier.completeOnboarding();
+
+      final call = env.repo.onboardings.single;
+      expect(call.username, 'veek');
+      expect(call.goal, ['earn_income']);
+      expect(call.skillworld, ['ai']);
+      expect(call.avatarPath, '/tmp/avatar.png');
+      expect(env.container.read(authFlowProvider).submitting, isFalse);
+    });
+
+    test('a rejection rethrows, resets submitting, and keeps the answers', () async {
+      // The Welcome frame has no inline error slot, so the failure is the
+      // caller's to surface — and the user must stay put with everything they
+      // typed intact so the same tap can be retried.
+      final env = withProfileRepo(
+        failure: const SkifluxFailure(SkifluxErrorKind.taskSubmission),
+      );
+      final notifier = env.container.read(authFlowProvider.notifier);
+      notifier.show(AuthStage.welcome);
+      notifier.setUsername('veek');
+      notifier.setGoal('Network with creators');
+      notifier.setSkillworld('Design');
+
+      await expectLater(
+        notifier.completeOnboarding(),
+        throwsA(isA<SkifluxFailure>()),
+      );
+
+      final state = env.container.read(authFlowProvider);
+      expect(state.stage, AuthStage.welcome);
+      expect(state.submitting, isFalse);
+      expect(state.username, 'veek');
+      expect(state.goal, 'Network with creators');
+      expect(state.skillworld, 'Design');
+    });
+  });
+
+  group('signOut', () {
+    test('clears the cached session email alongside the tokens', () async {
+      // SessionEmailStore.clear() existed but was never called: after a
+      // sign-out the biometric frame would greet the *next* account with the
+      // previous account's address.
+      final repo = _SignOutRecordingRepository();
+      final c = ProviderContainer(
+        overrides: [authRepositoryProvider.overrideWithValue(repo)],
+      );
+      addTearDown(c.dispose);
+      final emailStore = c.read(sessionEmailStoreProvider);
+      await emailStore.write('veek@nexacorp.io');
+
+      await c.read(authFlowProvider.notifier).signOut();
+
+      expect(repo.logoutCalls, 1);
+      expect(await emailStore.read(), isNull);
+      expect(c.read(authFlowProvider).stage, AuthStage.signIn);
+    });
+  });
+
+  group('resolveColdStart (session restore at the splash)', () {
+    test('no session → the marketing carousel, as before', () async {
+      expect(
+        await AuthFlowNotifier.resolveColdStart(
+          hasSession: () async => false,
+          settingsReady: () async {},
+          biometricLoginEnabled: () => true,
+          availableMode: () async => BiometricMode.fingerprint,
+        ),
+        ColdStartDestination.marketingOnboarding,
+      );
+    });
+
+    test('session + preference off → straight into the app', () async {
+      expect(
+        await AuthFlowNotifier.resolveColdStart(
+          hasSession: () async => true,
+          settingsReady: () async {},
+          biometricLoginEnabled: () => false,
+          availableMode: () async => BiometricMode.fingerprint,
+        ),
+        ColdStartDestination.enterApp,
+      );
+    });
+
+    test('session + preference on + capable device → the biometric gate', () async {
+      expect(
+        await AuthFlowNotifier.resolveColdStart(
+          hasSession: () async => true,
+          settingsReady: () async {},
+          biometricLoginEnabled: () => true,
+          availableMode: () async => BiometricMode.face,
+        ),
+        ColdStartDestination.biometricGate,
+      );
+    });
+
+    test('session + preference on but nothing enrolled → into the app', () async {
+      expect(
+        await AuthFlowNotifier.resolveColdStart(
+          hasSession: () async => true,
+          settingsReady: () async {},
+          biometricLoginEnabled: () => true,
+          availableMode: () async => null,
+        ),
+        ColdStartDestination.enterApp,
+      );
+    });
+
+    test('the preference is read only after settings hydration completes', () async {
+      // The cold-start race this fix is about: hydration flips the value
+      // after build, so an unawaited read would see the default false.
+      var biometricOn = false;
+      expect(
+        await AuthFlowNotifier.resolveColdStart(
+          hasSession: () async => true,
+          settingsReady: () async => biometricOn = true,
+          biometricLoginEnabled: () => biometricOn,
+          availableMode: () async => BiometricMode.fingerprint,
+        ),
+        ColdStartDestination.biometricGate,
+      );
+    });
+
+    test('an unreadable keychain degrades to the marketing carousel', () async {
+      expect(
+        await AuthFlowNotifier.resolveColdStart(
+          hasSession: () async => throw Exception('keychain unavailable'),
+          settingsReady: () async {},
+          biometricLoginEnabled: () => true,
+          availableMode: () async => BiometricMode.fingerprint,
+        ),
+        ColdStartDestination.marketingOnboarding,
+      );
+    });
+
+    test('a biometrics probe that throws degrades to the app, never a wedge', () async {
+      expect(
+        await AuthFlowNotifier.resolveColdStart(
+          hasSession: () async => true,
+          settingsReady: () async {},
+          biometricLoginEnabled: () => true,
+          availableMode: () async => throw Exception('plugin missing'),
+        ),
+        ColdStartDestination.enterApp,
+      );
+    });
+  });
 }
 
 /// Records the reset flow's calls, and fails them all when [failure] is set.
@@ -550,6 +737,48 @@ class _FakeAuthRepository extends AuthRepository {
     final f = failure ?? resetFailure;
     if (f != null) throw f;
     resets.add((email: email, otp: otp, password: newPassword));
+  }
+}
+
+/// Records `signOut`'s repository call without touching the keychain or the
+/// network — the real logout would hit both platform channels under test.
+class _SignOutRecordingRepository extends _FakeAuthRepository {
+  var logoutCalls = 0;
+
+  @override
+  Future<void> logout() async {
+    logoutCalls++;
+  }
+}
+
+/// Records what `completeOnboarding` would have POSTed, or fails it.
+class _FakeProfileRepository extends ProfileRepository {
+  _FakeProfileRepository({this.failure}) : super(Dio());
+
+  final SkifluxFailure? failure;
+  final List<
+      ({
+        String username,
+        List<String> goal,
+        List<String> skillworld,
+        String? avatarPath,
+      })> onboardings = [];
+
+  @override
+  Future<void> completeOnboarding({
+    required String username,
+    required List<String> goal,
+    required List<String> skillworld,
+    String? avatarPath,
+  }) async {
+    final f = failure;
+    if (f != null) throw f;
+    onboardings.add((
+      username: username,
+      goal: goal,
+      skillworld: skillworld,
+      avatarPath: avatarPath,
+    ));
   }
 }
 

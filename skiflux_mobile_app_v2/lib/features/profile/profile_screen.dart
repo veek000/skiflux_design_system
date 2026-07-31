@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/error_handling/error_display.dart';
 import '../../shared/sheets/share_sheet.dart';
 import '../../shared/toast/skiflux_toast.dart';
+import '../../shared/widgets/load_failure.dart';
 import '../../shared/widgets/playlist_deck.dart';
 import '../home/sheets/episode_unlock_sheet.dart';
 import '../home/sheets/notify_settings_sheet.dart';
@@ -17,6 +19,10 @@ import 'data/creator_profile_provider.dart';
 ///
 /// Top nav, creator header (Subscribe / Notify), Recent | Playlists tabs,
 /// pill filter group, and episode cards (Completed / Unlocked / Locked).
+///
+/// [creatorId] is the backend creator **UUID** — `GET /creators/{id}` takes
+/// no username. Subscribe runs the real follow toggle through
+/// [subscriptionsProvider]; there is no local subscribed flag.
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({
     super.key,
@@ -32,11 +38,46 @@ class ProfileScreen extends ConsumerStatefulWidget {
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   int _tabIndex = 0;
   int _pillIndex = 0;
-  bool _subscribed = false;
+
+  /// Notify preference is device-local only — the spec has no per-creator
+  /// notification endpoint, so this is never claimed to sync.
   NotifyPreference _notify = NotifyPreference.personalized;
 
   static const _pills = ['All', 'UI', 'Code', 'Motion', 'Brand'];
-  // TODO(backend, blocking): replace hardcoded creator profile identity (name, handle, avatar initials) with real creator data from backend — expects: {name: String, handle: String, initials: String, subscribed: bool, notifyPreference: NotifyPreference}
+
+  Future<void> _toggleFollow(CreatorProfile profile, bool subscribed) async {
+    final notifier = ref.read(subscriptionsProvider.notifier);
+    try {
+      if (subscribed) {
+        await notifier.unsubscribe(
+          SubscribedCreator(
+            id: profile.id,
+            name: profile.name,
+            username: profile.username,
+            initials: profile.initials,
+          ),
+        );
+        if (!mounted) return;
+        SkifluxToast.success(context, 'Unsubscribed');
+      } else {
+        await notifier.subscribe(
+          SubscribedCreator(
+            id: profile.id,
+            name: profile.name,
+            username: profile.username,
+            initials: profile.initials,
+          ),
+        );
+        if (!mounted) return;
+        SkifluxToast.success(context, 'Subscribed to ${profile.name}');
+      }
+      // The payload's is_following / followers_count are now stale.
+      ref.invalidate(creatorProfileProvider(widget.creatorId));
+    } catch (e, st) {
+      if (!mounted) return;
+      await ErrorDisplay.show(context, ref, e, stackTrace: st);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -61,51 +102,61 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         top: false,
         child: ref.watch(creatorProfileProvider(widget.creatorId)).when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, st) => const Center(child: Text('Failed to load')),
-          data: (profile) => ListView(
-            padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
-            children: [
-              _ProfileHeader(
-                profile: profile,
-                subscribed: _subscribed,
-                onSubscribe: () {
-                  setState(() => _subscribed = !_subscribed);
-                  SkifluxToast.success(
-                    context,
-                    _subscribed ? 'Subscribed to ${profile.name}' : 'Unsubscribed',
-                  );
-                },
-                onNotify: () async {
-                  final next = await showNotifySettingsSheet(
-                    context,
-                    current: _notify,
-                  );
-                  if (next == null || !context.mounted) return;
-                  setState(() => _notify = next);
-                  final message = '${next.toastTitle}\n${next.toastBody}';
-                  // Off → info; activated prefs → success confirmation.
-                  if (next == NotifyPreference.none) {
-                    SkifluxToast.info(context, message);
-                  } else {
-                    SkifluxToast.success(context, message);
-                  }
-                },
-              ),
-            const SizedBox(height: SkifluxSpacing.spaceL),
-            _Tabs(
-              index: _tabIndex,
-              onChanged: (i) => setState(() => _tabIndex = i),
-            ),
-            const SizedBox(height: SkifluxSpacing.spaceL),
-            if (_tabIndex == 0) ...[
-              _pillGroup(),
-              const SizedBox(height: SkifluxSpacing.spaceL),
-              ..._recentEpisodes(context),
-            ] else ...[
-              _playlistTile(context),
-            ],
-          ],
-        ),
+          error: (e, st) => LoadFailure(
+            error: e,
+            title: "We couldn't load this profile",
+            onRetry: () => ref
+                .read(creatorProfileProvider(widget.creatorId).notifier)
+                .retry(),
+          ),
+          data: (profile) {
+            final subs = ref.watch(subscriptionsProvider);
+            // Follow list loaded → membership is the truth (it reflects
+            // optimistic toggles instantly); otherwise the profile payload's
+            // own is_following.
+            final subscribed = subs.hasLoaded
+                ? subs.isSubscribed(
+                    profile.id.isNotEmpty ? profile.id : profile.username,
+                  )
+                : profile.isFollowing;
+            return ListView(
+              padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
+              children: [
+                _ProfileHeader(
+                  profile: profile,
+                  subscribed: subscribed,
+                  onSubscribe: () => _toggleFollow(profile, subscribed),
+                  onNotify: () async {
+                    final next = await showNotifySettingsSheet(
+                      context,
+                      current: _notify,
+                    );
+                    if (next == null || !context.mounted) return;
+                    setState(() => _notify = next);
+                    // Honest scope: nothing syncs — the backend has no
+                    // per-creator notification preference endpoint.
+                    SkifluxToast.info(
+                      context,
+                      '${next.toastTitle} (saved on this device only)',
+                    );
+                  },
+                ),
+                const SizedBox(height: SkifluxSpacing.spaceL),
+                _Tabs(
+                  index: _tabIndex,
+                  onChanged: (i) => setState(() => _tabIndex = i),
+                ),
+                const SizedBox(height: SkifluxSpacing.spaceL),
+                if (_tabIndex == 0) ...[
+                  _pillGroup(),
+                  const SizedBox(height: SkifluxSpacing.spaceL),
+                  ..._recentEpisodes(context),
+                ] else ...[
+                  _playlistTile(context),
+                ],
+              ],
+            );
+          },
         ),
       ),
     );

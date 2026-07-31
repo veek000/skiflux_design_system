@@ -1,8 +1,9 @@
 /// Encrypted persistence for the auth token pair.
 ///
-/// Backed by `flutter_secure_storage` — iOS Keychain, Android
-/// EncryptedSharedPreferences. Deliberately NOT `shared_preferences`, which is
-/// plaintext and would leave a refresh token readable on a rooted device.
+/// Backed by `flutter_secure_storage` — iOS Keychain; on Android (10.x) values
+/// are AES-encrypted with a Keystore-wrapped key, always. Deliberately NOT
+/// `shared_preferences`, which is plaintext and would leave a refresh token
+/// readable on a rooted device.
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -59,8 +60,9 @@ class TokenStore {
   Future<bool> hasSession() async => await read() != null;
 }
 
-/// Android needs EncryptedSharedPreferences opted into explicitly; without it
-/// the plugin falls back to plain SharedPreferences on older API levels.
+/// flutter_secure_storage 10.x encrypts unconditionally on Android (AES via
+/// Keystore-wrapped keys) — the old EncryptedSharedPreferences opt-in is gone,
+/// so the default [AndroidOptions] here already means encrypted at rest.
 final secureStorageProvider = Provider<FlutterSecureStorage>(
   (ref) => const FlutterSecureStorage(
     aOptions: AndroidOptions(),

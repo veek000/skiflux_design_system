@@ -285,7 +285,7 @@ void main() {
       );
     });
 
-    test('hide removes one entry, clear removes all', () async {
+    test('remove drops the row and DELETEs the entry', () async {
       final repo = _FakeLibraryRepository(
         history: [
           _entry('ep-1', '2026-07-28T09:00:00Z'),
@@ -295,12 +295,67 @@ void main() {
       final c = withRepo(repo);
       final history = await c.read(watchHistoryProvider.future);
 
-      c.read(watchHistoryProvider.notifier).hide(history.first);
+      await c.read(watchHistoryProvider.notifier).remove(history.first);
+
       expect(c.read(watchHistoryProvider).value!.map((e) => e.episode.id),
           ['ep-2']);
+      expect(repo.historyDeletes, ['ep-1']);
+    });
 
-      c.read(watchHistoryProvider.notifier).clear();
+    test('a failed remove puts the row back and rethrows', () async {
+      final repo = _FakeLibraryRepository(
+        history: [_entry('ep-1', '2026-07-28T09:00:00Z')],
+        failHistoryDelete: true,
+      );
+      final c = withRepo(repo);
+      final history = await c.read(watchHistoryProvider.future);
+
+      await expectLater(
+        c.read(watchHistoryProvider.notifier).remove(history.first),
+        throwsA(isA<Exception>()),
+      );
+      // The list must not claim a server state that never happened.
+      expect(c.read(watchHistoryProvider).value, hasLength(1));
+    });
+
+    test('clearAll wipes the list and DELETEs the whole history', () async {
+      final repo = _FakeLibraryRepository(
+        history: [
+          _entry('ep-1', '2026-07-28T09:00:00Z'),
+          _entry('ep-2', '2026-07-27T09:00:00Z'),
+        ],
+      );
+      final c = withRepo(repo);
+      await c.read(watchHistoryProvider.future);
+
+      await c.read(watchHistoryProvider.notifier).clearAll();
+
       expect(c.read(watchHistoryProvider).value, isEmpty);
+      expect(repo.historyClears, 1);
+    });
+
+    test('a failed clearAll restores the list and rethrows', () async {
+      final repo = _FakeLibraryRepository(
+        history: [_entry('ep-1', '2026-07-28T09:00:00Z')],
+        failHistoryDelete: true,
+      );
+      final c = withRepo(repo);
+      await c.read(watchHistoryProvider.future);
+
+      await expectLater(
+        c.read(watchHistoryProvider.notifier).clearAll(),
+        throwsA(isA<Exception>()),
+      );
+      expect(c.read(watchHistoryProvider).value, hasLength(1));
+    });
+
+    test('clearAll on an already-empty history skips the API', () async {
+      final repo = _FakeLibraryRepository(history: const []);
+      final c = withRepo(repo);
+      await c.read(watchHistoryProvider.future);
+
+      await c.read(watchHistoryProvider.notifier).clearAll();
+      expect(repo.historyClears, 0);
     });
   });
 }
@@ -321,6 +376,7 @@ class _FakeLibraryRepository extends LibraryRepository {
     this.history = const [],
     this.fail = false,
     this.failToggle = false,
+    this.failHistoryDelete = false,
   }) : super(Dio());
 
   final List<LibraryEpisode> liked;
@@ -328,10 +384,13 @@ class _FakeLibraryRepository extends LibraryRepository {
   final List<WatchHistoryEntry> history;
   final bool fail;
   final bool failToggle;
+  final bool failHistoryDelete;
 
   int likedCalls = 0;
+  int historyClears = 0;
   final List<String> likeToggles = [];
   final List<String> saveToggles = [];
+  final List<String> historyDeletes = [];
 
   @override
   Future<List<LibraryEpisode>> getLiked({int? pageSize, String? skillworld}) async {
@@ -366,6 +425,18 @@ class _FakeLibraryRepository extends LibraryRepository {
   Future<void> toggleSave(String episodeId) async {
     if (failToggle) throw Exception('rejected');
     saveToggles.add(episodeId);
+  }
+
+  @override
+  Future<void> deleteWatchHistoryEntry(String episodeId) async {
+    if (failHistoryDelete) throw Exception('rejected');
+    historyDeletes.add(episodeId);
+  }
+
+  @override
+  Future<void> clearWatchHistory() async {
+    if (failHistoryDelete) throw Exception('rejected');
+    historyClears++;
   }
 }
 

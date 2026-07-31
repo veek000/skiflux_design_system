@@ -7,14 +7,19 @@ import '../subscriptions/subscriptions_screen.dart';
 import 'data/tasks_store.dart';
 
 /// Combined SkillCoins + XP chip (Figma Task Details reward pill).
+///
+/// Rewards render from the task's [Decimal] coin value (a 2.50-coin task
+/// shows "+2.50", never "+3"). Live tasks whose payload carried no reward
+/// hide the corresponding chip — the pill never promises a number the
+/// backend didn't state — and collapse entirely when both are absent.
 class TaskRewardPill extends StatelessWidget {
-  const TaskRewardPill({super.key, required this.coins, required this.xp});
+  const TaskRewardPill({super.key, required this.task});
 
-  final int coins;
-  final int xp;
+  final LearningTask task;
 
   @override
   Widget build(BuildContext context) {
+    if (!task.hasAnyReward) return const SizedBox.shrink();
     // Align left so the grey pill hugs content (ListView would otherwise
     // stretch a bare Container to full width).
     return Align(
@@ -31,31 +36,36 @@ class TaskRewardPill extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              RemixIcons.copper_coin_fill,
-              size: SkifluxIcons.sizeS,
-              color: SkifluxColors.contentNoticeBold,
-            ),
-            const SizedBox(width: SkifluxSpacing.space2xs),
-            Text(
-              '+$coins SkillCoins',
-              style: SkifluxTypography.uiInputContent.copyWith(
+            if (task.hasCoinReward) ...[
+              const Icon(
+                RemixIcons.copper_coin_fill,
+                size: SkifluxIcons.sizeS,
                 color: SkifluxColors.contentNoticeBold,
               ),
-            ),
-            const SizedBox(width: SkifluxSpacing.spaceS),
-            const Icon(
-              RemixIcons.flashlight_fill,
-              size: SkifluxIcons.sizeS,
-              color: SkifluxColors.contentBrand,
-            ),
-            const SizedBox(width: SkifluxSpacing.space2xs),
-            Text(
-              '+$xp XP',
-              style: SkifluxTypography.uiInputContent.copyWith(
+              const SizedBox(width: SkifluxSpacing.space2xs),
+              Text(
+                '+${task.coinsLabel} SkillCoins',
+                style: SkifluxTypography.uiInputContent.copyWith(
+                  color: SkifluxColors.contentNoticeBold,
+                ),
+              ),
+            ],
+            if (task.hasCoinReward && task.hasXpReward)
+              const SizedBox(width: SkifluxSpacing.spaceS),
+            if (task.hasXpReward) ...[
+              const Icon(
+                RemixIcons.flashlight_fill,
+                size: SkifluxIcons.sizeS,
                 color: SkifluxColors.contentBrand,
               ),
-            ),
+              const SizedBox(width: SkifluxSpacing.space2xs),
+              Text(
+                '+${task.xp} XP',
+                style: SkifluxTypography.uiInputContent.copyWith(
+                  color: SkifluxColors.contentBrand,
+                ),
+              ),
+            ],
           ],
         ),
       ),

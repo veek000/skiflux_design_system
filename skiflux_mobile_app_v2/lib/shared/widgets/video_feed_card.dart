@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../features/home/data/episodes_repository.dart';
 import '../../features/home/data/home_feed_store.dart';
 import '../../features/home/sheets/comments_sheet.dart';
 import '../../features/home/sheets/more_menu_sheet.dart';
 import '../../features/playlists/playlist_menu_sheet.dart';
+import '../../features/profile/data/library_store.dart';
+import '../error_handling/error_display.dart';
 import '../sheets/description_sheet.dart';
 import '../sheets/share_sheet.dart';
 
@@ -19,7 +23,17 @@ import '../sheets/share_sheet.dart';
 ///   no progress bar.
 ///
 /// Chrome (EP chip, title, description, rail) is identical for both types.
-class VideoFeedCard extends StatefulWidget {
+///
+/// Like and save post to the real toggles (`POST /episodes/like` /
+/// `/episodes/save`) via [feedEngagementProvider]: optimistic flip, rollback
+/// and an error toast on failure. Counts are the payload's counts plus this
+/// session's delta; when the source carried no count, no number is shown —
+/// the rail used to render a hardcoded 120 under every icon.
+///
+/// Playback also feeds a throttled `POST /episodes/track-view` (about every
+/// 10s plus a final post when the page changes), which is what keeps watch
+/// history and continue-watching real. Telemetry failures stay silent.
+class VideoFeedCard extends ConsumerStatefulWidget {
   const VideoFeedCard({
     super.key,
     this.item,
@@ -54,13 +68,14 @@ class VideoFeedCard extends StatefulWidget {
   final bool isActive;
 
   @override
-  State<VideoFeedCard> createState() => _VideoFeedCardState();
+  ConsumerState<VideoFeedCard> createState() => _VideoFeedCardState();
 }
 
-class _VideoFeedCardState extends State<VideoFeedCard> {
+class _VideoFeedCardState extends ConsumerState<VideoFeedCard> {
   VideoPlayerController? _controller;
   var _ready = false;
   var _initFailed = false;
+  ViewTracker? _viewTracker;
 
   HomeFeedItem get _item =>
       widget.item ??
@@ -80,6 +95,7 @@ class _VideoFeedCardState extends State<VideoFeedCard> {
   void initState() {
     super.initState();
     _startControllerIfNeeded();
+    _startViewTrackerIfNeeded();
   }
 
   @override
@@ -89,14 +105,39 @@ class _VideoFeedCardState extends State<VideoFeedCard> {
     final newUrl = _item.videoUrl;
     final oldType = oldWidget.item?.type ?? oldWidget.contentType;
     final newType = _item.type;
+    final oldEpisodeId = oldWidget.item?.episodeId;
     if (oldUrl != newUrl || oldType != newType) {
       _disposeController();
       _startControllerIfNeeded();
-      return;
+    }
+    if (oldEpisodeId != _item.episodeId) {
+      _viewTracker?.dispose();
+      _viewTracker = null;
+      _startViewTrackerIfNeeded();
     }
     if (oldWidget.isActive != widget.isActive) {
       _syncPlayPause();
+      // Page swiped away — post the final position now, not in 10 seconds.
+      if (!widget.isActive) _viewTracker?.flush();
     }
+  }
+
+  void _startViewTrackerIfNeeded() {
+    final episodeId = _item.episodeId;
+    if (episodeId == null || episodeId.isEmpty || !_item.hasPlayableVideo) {
+      return;
+    }
+    final repository = ref.read(episodesRepositoryProvider);
+    _viewTracker = ViewTracker(
+      episodeId: episodeId,
+      totalSeconds: _item.durationSeconds,
+      post: (id, {required watchDurationSeconds, required completed}) =>
+          repository.trackView(
+            id,
+            watchDurationSeconds: watchDurationSeconds,
+            completed: completed,
+          ),
+    );
   }
 
   Future<void> _startControllerIfNeeded() async {
@@ -132,6 +173,10 @@ class _VideoFeedCardState extends State<VideoFeedCard> {
 
   void _onControllerTick() {
     if (!mounted) return;
+    final c = _controller;
+    if (c != null && c.value.isInitialized && c.value.isPlaying) {
+      _viewTracker?.onProgress(c.value.position, c.value.duration);
+    }
     // Rebuild for progress bar; VideoPlayer also paints via its own Texture.
     setState(() {});
   }
@@ -158,6 +203,8 @@ class _VideoFeedCardState extends State<VideoFeedCard> {
 
   @override
   void dispose() {
+    _viewTracker?.dispose();
+    _viewTracker = null;
     final c = _controller;
     _controller = null;
     c?.removeListener(_onControllerTick);
@@ -324,7 +371,7 @@ class _VideoFeedCardState extends State<VideoFeedCard> {
                     ),
                   ),
                   const SizedBox(width: SkifluxSpacing.spaceS),
-                  _ActionRail(item.episodeId ?? ''),
+                  _ActionRail(item: item),
                 ],
               ),
             ),
@@ -422,33 +469,83 @@ class _FeedDescription extends StatelessWidget {
   }
 }
 
-class _ActionRail extends StatelessWidget {
-  const _ActionRail(this.episodeId);
-  final String episodeId;
+class _ActionRail extends ConsumerWidget {
+  const _ActionRail({required this.item});
+
+  final HomeFeedItem item;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final episodeId = item.episodeId ?? '';
+    final hasEpisode = episodeId.isNotEmpty;
+
+    // Base state = membership in the loaded /me/liked / /me/saved pages
+    // (`Episode` has counts but no is_liked/is_saved); session toggles win.
+    final engagement = ref.watch(feedEngagementProvider)[episodeId];
+    final likedList = ref.watch(likedEpisodesProvider).value;
+    final savedList = ref.watch(savedEpisodesProvider).value;
+    final baseLiked =
+        hasEpisode && (likedList?.any((e) => e.id == episodeId) ?? false);
+    final baseSaved =
+        hasEpisode && (savedList?.any((e) => e.id == episodeId) ?? false);
+    final liked = engagement?.liked ?? baseLiked;
+    final saved = engagement?.saved ?? baseSaved;
+
+    Future<void> toggle(Future<bool> Function(String) action) async {
+      try {
+        await action(episodeId);
+      } catch (e, st) {
+        if (!context.mounted) return;
+        await ErrorDisplay.show(context, ref, e, stackTrace: st);
+      }
+    }
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const _LikeButton(initialCount: 120),
+        _LikeButton(
+          liked: liked,
+          count: engagedCount(item.likeCount, base: baseLiked, now: liked),
+          onTap: hasEpisode
+              ? () =>
+                  toggle(ref.read(feedEngagementProvider.notifier).toggleLike)
+              : null,
+        ),
         const SizedBox(height: SkifluxSpacing.spaceS),
         _ActionItem(
           icon: RemixIcons.chat_3_fill,
-          count: '120',
-          onTap: () => showCommentsSheet(context, episodeId),
+          count: _railCount(item.commentCount),
+          onTap: hasEpisode
+              ? () => showCommentsSheet(context, episodeId)
+              : null,
         ),
         const SizedBox(height: SkifluxSpacing.spaceS),
-        const _ActionItem(icon: RemixIcons.bookmark_fill, count: '120'),
+        _ActionItem(
+          icon: RemixIcons.bookmark_fill,
+          iconColor: saved
+              ? SkifluxColors.contentBrand
+              : SkifluxColors.contentPrimaryInverse,
+          count: _railCount(
+            engagedCount(item.saveCount, base: baseSaved, now: saved),
+          ),
+          onTap: hasEpisode
+              ? () =>
+                  toggle(ref.read(feedEngagementProvider.notifier).toggleSave)
+              : null,
+        ),
         const SizedBox(height: SkifluxSpacing.spaceS),
         _ActionItem(
           icon: RemixIcons.share_forward_fill,
-          count: '120',
+          // No share count exists on the Episode payload; show none.
+          count: '',
           onTap: () => showShareSheet(context),
         ),
         const SizedBox(height: SkifluxSpacing.spaceS),
         GestureDetector(
-          onTap: () => showMoreMenuSheet(context),
+          onTap: () => showMoreMenuSheet(
+            context,
+            episodeId: hasEpisode ? episodeId : null,
+          ),
           child: const Icon(
             RemixIcons.more_fill,
             size: SkifluxUnit.u32,
@@ -458,13 +555,23 @@ class _ActionRail extends StatelessWidget {
       ],
     );
   }
+
+  /// Compact rail label; empty when the payload carried no count.
+  static String _railCount(int? count) {
+    if (count == null) return '';
+    if (count >= 1000000) return '${(count / 1000000).toStringAsFixed(1)}M';
+    if (count >= 1000) return '${(count / 1000).toStringAsFixed(1)}k';
+    return '$count';
+  }
 }
 
 /// Like control — heart pops (elastic scale) and fills red when liked.
 class _LikeButton extends StatefulWidget {
-  const _LikeButton({required this.initialCount});
+  const _LikeButton({required this.liked, required this.count, this.onTap});
 
-  final int initialCount;
+  final bool liked;
+  final int? count;
+  final VoidCallback? onTap;
 
   @override
   State<_LikeButton> createState() => _LikeButtonState();
@@ -487,7 +594,13 @@ class _LikeButtonState extends State<_LikeButton>
     ),
   ]).animate(_controller);
 
-  bool _liked = false;
+  @override
+  void didUpdateWidget(covariant _LikeButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.liked && widget.liked) {
+      _controller.forward(from: 0);
+    }
+  }
 
   @override
   void dispose() {
@@ -495,18 +608,10 @@ class _LikeButtonState extends State<_LikeButton>
     super.dispose();
   }
 
-  void _toggle() {
-    setState(() => _liked = !_liked);
-    if (_liked) {
-      _controller.forward(from: 0);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final count = widget.initialCount + (_liked ? 1 : 0);
     return GestureDetector(
-      onTap: _toggle,
+      onTap: widget.onTap,
       child: Column(
         children: [
           RepaintBoundary(
@@ -515,19 +620,21 @@ class _LikeButtonState extends State<_LikeButton>
               child: Icon(
                 RemixIcons.heart_3_fill,
                 size: SkifluxUnit.u32,
-                color: _liked
+                color: widget.liked
                     ? SkifluxColors.contentNegative
                     : SkifluxColors.contentPrimaryInverse,
               ),
             ),
           ),
-          const SizedBox(height: SkifluxSpacing.spaceXs),
-          Text(
-            '$count',
-            style: SkifluxTypography.uiBadgeTagSmall.copyWith(
-              color: SkifluxColors.contentPrimaryInverse,
+          if (widget.count != null) ...[
+            const SizedBox(height: SkifluxSpacing.spaceXs),
+            Text(
+              _ActionRail._railCount(widget.count),
+              style: SkifluxTypography.uiBadgeTagSmall.copyWith(
+                color: SkifluxColors.contentPrimaryInverse,
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -535,11 +642,17 @@ class _LikeButtonState extends State<_LikeButton>
 }
 
 class _ActionItem extends StatelessWidget {
-  const _ActionItem({required this.icon, required this.count, this.onTap});
+  const _ActionItem({
+    required this.icon,
+    required this.count,
+    this.onTap,
+    this.iconColor = SkifluxColors.contentPrimaryInverse,
+  });
 
   final IconData icon;
   final String count;
   final VoidCallback? onTap;
+  final Color iconColor;
 
   @override
   Widget build(BuildContext context) {
@@ -547,18 +660,16 @@ class _ActionItem extends StatelessWidget {
       onTap: onTap,
       child: Column(
         children: [
-          Icon(
-            icon,
-            size: SkifluxUnit.u32,
-            color: SkifluxColors.contentPrimaryInverse,
-          ),
-          const SizedBox(height: SkifluxSpacing.spaceXs),
-          Text(
-            count,
-            style: SkifluxTypography.uiBadgeTagSmall.copyWith(
-              color: SkifluxColors.contentPrimaryInverse,
+          Icon(icon, size: SkifluxUnit.u32, color: iconColor),
+          if (count.isNotEmpty) ...[
+            const SizedBox(height: SkifluxSpacing.spaceXs),
+            Text(
+              count,
+              style: SkifluxTypography.uiBadgeTagSmall.copyWith(
+                color: SkifluxColors.contentPrimaryInverse,
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );

@@ -36,8 +36,11 @@ class StreakDay {
   final int? number;
 }
 
-/// One tracked Sun–Sat week. [start] is the week's Sunday; the label
-/// follows Figma's `start – start+7` convention ("May 20th - 27th").
+/// One tracked Sun–Sat week. [start] is the week's Sunday; the label spans
+/// the actual 7 tracked days, start through start+6 ("May 20th - 26th").
+/// (Figma's sample label is authored as an 8-day `start+7` span — a slip the
+/// computed label deliberately does not reproduce; the server's
+/// [labelOverride] wins whenever it is present anyway.)
 class StreakWeek {
   StreakWeek(this.start, this.days, {this.labelOverride});
 
@@ -51,11 +54,12 @@ class StreakWeek {
   /// Whether this week is the demo "current" week ([currentStart]).
   bool isCurrentFor(DateTime currentStart) => sameDay(start, currentStart);
 
-  /// Figma pill label, e.g. "May 20th - 27th" / "Apr 29th - May 6th".
+  /// Week-range pill label, e.g. "May 20th - 26th" / "Apr 29th - May 5th".
   String get label {
     final override = labelOverride;
     if (override != null && override.isNotEmpty) return override;
-    final end = start.add(const Duration(days: 7));
+    // Sunday + 6 = Saturday: the last day this tracker actually shows.
+    final end = start.add(const Duration(days: 6));
     final sameMonth = start.month == end.month;
     final from = '${_months[start.month - 1]} ${_ordinal(start.day)}';
     final to = sameMonth

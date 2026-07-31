@@ -25,6 +25,9 @@ _SkillcoinTransaction _$SkillcoinTransactionFromJson(
   ),
   id: json['id'] as String?,
   referenceId: json['reference_id'] as String?,
+  updatedAt: json['updated_at'] == null
+      ? null
+      : DateTime.parse(json['updated_at'] as String),
 );
 
 Map<String, dynamic> _$SkillcoinTransactionToJson(
@@ -39,6 +42,7 @@ Map<String, dynamic> _$SkillcoinTransactionToJson(
   'status': _$SkillcoinTransactionStatusEnumMap[instance.status],
   'id': instance.id,
   'reference_id': instance.referenceId,
+  'updated_at': instance.updatedAt?.toIso8601String(),
 };
 
 const _$SkillcoinTransactionTypeEnumMap = {

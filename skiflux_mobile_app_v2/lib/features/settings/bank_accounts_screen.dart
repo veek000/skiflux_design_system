@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/error_handling/error_display.dart';
 import '../../shared/sheets/success_sheet.dart';
 import '../../shared/toast/skiflux_toast.dart';
 import '../wallet/add_bank_sheet.dart';
+import '../wallet/data/wallet_repository.dart';
 import '../wallet/data/wallet_store.dart';
 import 'widgets/settings_tile.dart';
 
@@ -64,10 +66,7 @@ class BankAccountsScreen extends ConsumerWidget {
                           size: SkifluxIcons.sizeM,
                           color: SkifluxColors.contentNegative,
                         ),
-                        onPressed: () {
-                          ref.read(walletProvider.notifier).removeBank(bank);
-                          SkifluxToast.info(context, 'Bank account removed');
-                        },
+                        onPressed: () => _removeBank(context, ref, bank),
                       ),
                     ),
                 ],
@@ -91,6 +90,30 @@ class BankAccountsScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  /// Deletes the account on the backend first; the local row only disappears
+  /// (and the toast only fires) once the server has confirmed. Accounts that
+  /// never reached the backend (no [BankAccount.id]) are removed locally.
+  Future<void> _removeBank(
+    BuildContext context,
+    WidgetRef ref,
+    BankAccount bank,
+  ) async {
+    try {
+      final id = bank.id;
+      if (id != null) {
+        await ref.read(walletRepositoryProvider).deleteWithdrawalAccount(id);
+      }
+      ref.read(walletProvider.notifier).removeBank(bank);
+      if (context.mounted) {
+        SkifluxToast.info(context, 'Bank account removed');
+      }
+    } catch (e, st) {
+      if (context.mounted) {
+        await ErrorDisplay.show(context, ref, e, stackTrace: st);
+      }
+    }
   }
 
   Future<void> _addBank(BuildContext context, WidgetRef ref) async {

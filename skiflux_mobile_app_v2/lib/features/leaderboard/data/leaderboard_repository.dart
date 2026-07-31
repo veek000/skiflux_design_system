@@ -8,9 +8,9 @@ import 'models/leaderboard_row.dart';
 
 /// Learner rankings — `GET /me/leaderboard`.
 ///
-/// Reads the body by hand rather than through [getList]: the endpoint's
-/// standing fields (`current_user_rank`, `better_than_percent`) sit *beside*
-/// the rows, and [ApiRepository.getPage] keeps only DRF's pagination keys.
+/// Reads the body by hand rather than through [getList]: the learner's own
+/// standing (`my_position`) sits *beside* the rows, and
+/// [ApiRepository.getPage] keeps only DRF's pagination keys.
 class LeaderboardRepository extends ApiRepository {
   const LeaderboardRepository(super.dio);
 
@@ -37,42 +37,36 @@ class LeaderboardRepository extends ApiRepository {
     return parseBody(response.data);
   });
 
-  /// Assembles a [LeaderboardPage] from a bare row array *or* an envelope
-  /// carrying the current user's standing alongside the rows.
+  /// Assembles a [LeaderboardPage] from the documented `LeaderboardResponse`
+  /// — `{count, next, previous, my_position, results}` — or from a bare row
+  /// array, which carries rows but no standing.
+  ///
+  /// Note there is **no** "better than N%" field anywhere in the response; the
+  /// store derives that from the rank and [LeaderboardPage.totalCount]. Asking
+  /// for one was dropped when the schema landed.
   ///
   /// Public so provider tests can exercise the shape handling without Dio.
-  // TODO(backend, blocking): document the `GET /me/leaderboard` response body —
-  // the spec declares 200 "Leaderboard retrieved." with no schema, so the
-  // fields below are inferred from BACKEND_AI_BUILD_SPEC.md §0.4 — expects:
-  // {current_user_rank: int, better_than_percent: int, results: List<{rank: int,
-  // first_name: String, last_name: String, username: String,
-  // avatar_url: String?, xp: int}>}
   static LeaderboardPage parseBody(Object? data) {
     final rows = [
       for (final raw in _rowsIn(data))
         if (raw is Map) parseRow(Map<String, dynamic>.from(raw)),
     ];
 
-    // A bare array carries no standing fields; only an envelope does.
+    // A bare array carries neither standing nor total; only an envelope does.
     final envelope = data is Map ? Map<String, dynamic>.from(data) : null;
     final inner = envelope?['data'];
     final standing = inner is Map
         ? Map<String, dynamic>.from(inner)
         : envelope;
 
+    final position = standing?['my_position'] ?? standing?['me'];
+
     return LeaderboardPage(
       rows: rows,
-      currentRank: _int(standing, const [
-        'current_user_rank',
-        'current_rank',
-        'my_rank',
-        'rank',
-      ]),
-      betterThanPercent: _int(standing, const [
-        'better_than_percent',
-        'better_than_percentage',
-        'percentile',
-      ]),
+      myPosition: position is Map
+          ? parseRow(Map<String, dynamic>.from(position))
+          : null,
+      totalCount: _int(standing, const ['count', 'total', 'total_count']),
     );
   }
 
@@ -133,9 +127,14 @@ class LeaderboardRepository extends ApiRepository {
         'image_url',
       ]),
       xp: _int(merged, const ['xp', 'total_xp', 'xp_total', 'points']) ?? 0,
+      currentLevel: _string(merged, const [
+        'current_level',
+        'level',
+        'league',
+      ]),
       isCurrentUser: _bool(merged, const [
-        'is_current_user',
         'is_me',
+        'is_current_user',
         'is_self',
         'is_you',
       ]),

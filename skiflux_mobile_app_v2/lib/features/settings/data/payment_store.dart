@@ -1,68 +1,86 @@
+/// Saved payment cards for the Payment Methods frame (`1256:19943`), backed
+/// by the wallet card vault (`GET /wallet/cards`).
+///
+/// The demo in-memory card list is gone: cards exist only as the backend's
+/// masked [SavedCard] records (gateway token + brand + last4 — never a PAN).
+/// Signed out there is nothing to fetch, so the list resolves empty; a failed
+/// request stays an `AsyncError` so the screen offers a retry instead of
+/// quietly showing sample cards.
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
-// Saved payment cards for the Payment Methods frame (`1256:19943`) — the
-// debit/credit cards used to buy SkillCoins. No real card vault yet; this is a
-// session-local Riverpod store seeded with the two cards shown in the frame.
-// TODO(backend, blocking): replace with tokenized cards from the payment processor (never store PANs) — expects: {cards: List<{brand: String, last4: String, expiry: String}>}
+import '../../../shared/network/token_store.dart';
+import '../../wallet/data/cards_repository.dart';
+import '../../wallet/data/models/saved_card.dart';
 
-/// Card network — picks the row's scheme logo.
-enum CardBrand {
-  visa('Visa'),
-  mastercard('Mastercard'),
-  verve('Verve');
+export '../../wallet/data/models/saved_card.dart' show SavedCard;
 
-  const CardBrand(this.label);
+/// Display adapters for the freezed [SavedCard] — row title, subtitle, and
+/// scheme logo, derived only from backend-provided masked metadata.
+extension SavedCardDisplay on SavedCard {
+  /// "Mastercard ending in 8810" (brand falls back to the card type or a
+  /// generic label when the gateway omitted it).
+  String get title => '$brandLabel ending in $last4';
 
-  final String label;
-}
-
-@immutable
-class SavedCard {
-  const SavedCard({
-    required this.brand,
-    required this.last4,
-    required this.expiry,
-  });
-
-  final CardBrand brand;
-  final String last4;
-
-  /// "MM/YY".
-  final String expiry;
-
-  /// "Mastercard ending in 8810".
-  String get title => '${brand.label} ending in $last4';
-
-  /// "Expires 09/27".
-  String get subtitle => 'Expires $expiry';
-
-  /// Figma `1256:20596` puts the scheme's own logo in the badge — Mastercard
-  /// and Verve use the filled mark, Visa the line mark.
-  IconData get logo => switch (brand) {
-    CardBrand.visa => RemixIcons.visa_line,
-    CardBrand.mastercard => RemixIcons.mastercard_fill,
-    CardBrand.verve => RemixIcons.bank_card_fill,
-  };
-}
-
-final paymentCardsProvider =
-    NotifierProvider<PaymentCardsNotifier, List<SavedCard>>(
-      PaymentCardsNotifier.new,
-    );
-
-class PaymentCardsNotifier extends Notifier<List<SavedCard>> {
-  @override
-  List<SavedCard> build() {
-    return const [
-      SavedCard(brand: CardBrand.mastercard, last4: '8810', expiry: '09/27'),
-      SavedCard(brand: CardBrand.visa, last4: '4242', expiry: '03/26'),
-    ];
+  /// "Expires 09/27" — dropped by callers when the gateway omitted expiry.
+  String? get subtitle {
+    if (expMonth.isEmpty || expYear.isEmpty) return null;
+    final year = expYear.length == 4 ? expYear.substring(2) : expYear;
+    return 'Expires ${expMonth.padLeft(2, '0')}/$year';
   }
 
-  void addCard(SavedCard card) => state = [...state, card];
+  String get brandLabel {
+    if (cardBrand.trim().isNotEmpty) {
+      final b = cardBrand.trim();
+      return b[0].toUpperCase() + b.substring(1);
+    }
+    return cardType.trim().isNotEmpty ? cardType.trim() : 'Card';
+  }
 
-  void removeCard(SavedCard card) =>
-      state = state.where((c) => c != card).toList();
+  /// Figma `1256:20596` puts the scheme's own logo in the badge — Mastercard
+  /// uses the filled mark, Visa the line mark, anything else the generic
+  /// card glyph.
+  IconData get logo {
+    final b = cardBrand.toLowerCase();
+    if (b.contains('visa')) return RemixIcons.visa_line;
+    if (b.contains('master')) return RemixIcons.mastercard_fill;
+    return RemixIcons.bank_card_fill;
+  }
+}
+
+/// `GET /wallet/cards`.
+final savedCardsProvider =
+    AsyncNotifierProvider<SavedCardsNotifier, List<SavedCard>>(
+      SavedCardsNotifier.new,
+    );
+
+class SavedCardsNotifier extends AsyncNotifier<List<SavedCard>> {
+  @override
+  Future<List<SavedCard>> build() => _load();
+
+  Future<List<SavedCard>> _load() async {
+    if (!await ref.read(tokenStoreProvider).hasSession()) return const [];
+    return ref.read(cardsRepositoryProvider).getMyCards();
+  }
+
+  Future<void> refresh() async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(_load);
+  }
+
+  /// `DELETE /wallet/cards/{id}` — optimistic removal with rollback, so a
+  /// failed delete never leaves the list lying about what the vault holds.
+  Future<void> remove(SavedCard card) async {
+    final before = state.value ?? const <SavedCard>[];
+    state = AsyncData(before.where((c) => c.id != card.id).toList());
+    try {
+      await ref.read(cardsRepositoryProvider).deleteCard(card.id);
+    } catch (_) {
+      state = AsyncData(before);
+      rethrow;
+    }
+  }
 }

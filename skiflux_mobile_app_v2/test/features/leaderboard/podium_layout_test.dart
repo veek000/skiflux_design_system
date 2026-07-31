@@ -47,8 +47,11 @@ final _page = LeaderboardPage(
     _row(3, first: 'Amara', last: 'Design'),
     for (var rank = 4; rank <= 12; rank++) _row(rank),
   ],
-  currentRank: 12,
-  betterThanPercent: 60,
+  myPosition: _row(12),
+  // 12 rows loaded out of a 128-learner board — the gap is deliberate, so the
+  // standing pill's percentage is computed against the population rather than
+  // the page.
+  totalCount: 128,
 );
 
 /// The podium entries, in place order, as the screen derives them.
@@ -262,10 +265,11 @@ void main() {
     await _pumpAt(tester, 393);
 
     // The "#12" used to be a constant in a seeded cast; it now comes from the
-    // payload's `current_user_rank`.
+    // payload's `my_position`.
     expect(find.text('#12'), findsOneWidget);
+    // Derived — no field carries it. 12th of 128 beats 116 of the other 127.
     expect(
-      find.text('You are doing better than 60% of other participants'),
+      find.text('You are doing better than 91% of other participants'),
       findsOneWidget,
     );
   });

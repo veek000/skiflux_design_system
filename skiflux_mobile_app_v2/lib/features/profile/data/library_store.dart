@@ -107,20 +107,35 @@ class WatchHistoryNotifier extends AsyncNotifier<List<WatchHistoryEntry>> {
     state = await AsyncValue.guard(_load);
   }
 
-  /// Hides one entry for this session only.
-  ///
-  // TODO(backend, blocking): no endpoint deletes a watch-history entry — the
-  // row reappears on the next fetch — expects: DELETE /me/watch-history/{id}
-  void hide(WatchHistoryEntry entry) {
+  /// Removes one entry — optimistic, backed by
+  /// `DELETE /me/watch-history/{episode_id}`. A failed delete puts the row
+  /// back and rethrows so the screen can say so (same contract as [unlike]).
+  Future<void> remove(WatchHistoryEntry entry) async {
     final before = state.value ?? const <WatchHistoryEntry>[];
     state = AsyncData(
       before.where((e) => e.episode.id != entry.episode.id).toList(),
     );
+    try {
+      await ref
+          .read(libraryRepositoryProvider)
+          .deleteWatchHistoryEntry(entry.episode.id);
+    } catch (_) {
+      state = AsyncData(before);
+      rethrow;
+    }
   }
 
-  /// Hides every entry for this session only.
-  ///
-  // TODO(backend, blocking): no endpoint clears watch history — the list comes
-  // back on the next fetch — expects: DELETE /me/watch-history
-  void clear() => state = const AsyncData([]);
+  /// Clears the whole history — optimistic, backed by
+  /// `DELETE /me/watch-history`; restores the list and rethrows on failure.
+  Future<void> clearAll() async {
+    final before = state.value ?? const <WatchHistoryEntry>[];
+    if (before.isEmpty) return;
+    state = const AsyncData([]);
+    try {
+      await ref.read(libraryRepositoryProvider).clearWatchHistory();
+    } catch (_) {
+      state = AsyncData(before);
+      rethrow;
+    }
+  }
 }

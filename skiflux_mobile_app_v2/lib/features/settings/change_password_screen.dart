@@ -1,21 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/error_handling/error_display.dart';
 import '../../shared/sheets/success_sheet.dart';
+import '../auth/data/auth_repository.dart';
 
 // Figma: **Settings → Change Password** (`1256:21189`) — Current / Create New /
 // Confirm New password fields with a strength meter, over a pinned "Update
-// Password" button. Success shows the "Password Updated Successfully" sheet
-// (`1256:21136`).
+// Password" button. The button POSTs `/auth/change-password`; the "Password
+// Updated Successfully" sheet (`1256:21136`) is shown only after the server
+// says 2xx, and a rejection surfaces through ErrorDisplay with the fields
+// left intact for a retry.
 
-class ChangePasswordScreen extends StatefulWidget {
+class ChangePasswordScreen extends ConsumerStatefulWidget {
   const ChangePasswordScreen({super.key});
 
   @override
-  State<ChangePasswordScreen> createState() => _ChangePasswordScreenState();
+  ConsumerState<ChangePasswordScreen> createState() =>
+      _ChangePasswordScreenState();
 }
 
-class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
+class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
   final _current = TextEditingController();
   final _next = TextEditingController();
   final _confirm = TextEditingController();
@@ -23,6 +29,10 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   /// Per-field reveal state behind the trailing eye icon Figma puts on every
   /// password field.
   final _revealed = <TextEditingController, bool>{};
+
+  /// A request is in flight — the button shows its spinner and refuses a
+  /// second tap that would double-submit.
+  var _submitting = false;
 
   @override
   void dispose() {
@@ -55,6 +65,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   }
 
   bool get _canSubmit =>
+      !_submitting &&
       _current.text.isNotEmpty &&
       _next.text.length >= 8 &&
       _next.text == _confirm.text;
@@ -106,6 +117,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
               child: SkifluxButton(
                 label: 'Update Password',
                 expanded: true,
+                loading: _submitting,
                 onPressed: _canSubmit ? _update : null,
               ),
             ),
@@ -145,7 +157,27 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     );
   }
 
+  /// `POST /auth/change-password`. The success sheet appears only after the
+  /// server accepted the change; any rejection (wrong current password, weak
+  /// new one, no connection) surfaces via ErrorDisplay and leaves the form as
+  /// typed so the user can fix and resubmit.
   Future<void> _update() async {
+    if (_submitting) return;
+    setState(() => _submitting = true);
+    try {
+      await ref.read(authRepositoryProvider).changePassword(
+        currentPassword: _current.text,
+        newPassword: _next.text,
+        confirmNewPassword: _confirm.text,
+      );
+    } catch (error, stackTrace) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      await ErrorDisplay.show(context, ref, error, stackTrace: stackTrace);
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _submitting = false);
     await showSuccessSheet(
       context,
       title: 'Password Updated Successfully',

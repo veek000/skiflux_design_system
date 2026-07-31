@@ -65,17 +65,9 @@ class SecurityScreen extends ConsumerWidget {
                     onChanged: notifier.setBiometricLogin,
                   ),
                 ),
-                SettingsTile(
-                  icon: RemixIcons.shield_keyhole_fill,
-                  iconBackground: SkifluxColors.brand100,
-                  iconColor: SkifluxColors.contentBrand,
-                  title: 'Two-Factor Authentication',
-                  subtitle: 'Require an SMS code to login',
-                  trailing: SkifluxSwitch(
-                    value: settings.twoFactorAuth,
-                    onChanged: notifier.setTwoFactorAuth,
-                  ),
-                ),
+                // Two-Factor Authentication (Figma `1256:20691`) is not drawn:
+                // the spec has no learner 2FA endpoints, so the switch could
+                // only pretend. Restore the row when the backend ships it.
               ],
             ),
           ],

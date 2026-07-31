@@ -15,12 +15,15 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$UserWallet {
 
- String get id;@DecimalConverter() Decimal get balance;/// Non-withdrawable registration bonus.
-@DecimalConverter() Decimal get bonusBalance;/// Returned by the API already hold-aware (balance − bonus_balance −
+ String get id;/// Optional in the spec — absent reads as zero via the converter.
+@_DecimalOrZeroConverter() Decimal get balance;/// Non-withdrawable registration bonus. Optional in the spec — absent
+/// reads as zero via the converter.
+@_DecimalOrZeroConverter() Decimal get bonusBalance;/// Returned by the API already hold-aware (balance − bonus_balance −
 /// active_holds) — trusted as sent, never recomputed client-side.
 /// Spec quirk: this one arrives as a JSON *number* (`format: double`),
 /// not a decimal string like the other money fields.
 @DecimalFromNumConverter() Decimal get withdrawableBalance;/// Locked wallets have an effective withdrawable balance of zero.
+/// Optional in the spec — absent reads as unlocked.
  bool get isLocked; DateTime get updatedAt; bool get isPlatformWallet;
 /// Create a copy of UserWallet
 /// with the given fields replaced by the non-null parameter values.
@@ -54,7 +57,7 @@ abstract mixin class $UserWalletCopyWith<$Res>  {
   factory $UserWalletCopyWith(UserWallet value, $Res Function(UserWallet) _then) = _$UserWalletCopyWithImpl;
 @useResult
 $Res call({
- String id,@DecimalConverter() Decimal balance,@DecimalConverter() Decimal bonusBalance,@DecimalFromNumConverter() Decimal withdrawableBalance, bool isLocked, DateTime updatedAt, bool isPlatformWallet
+ String id,@_DecimalOrZeroConverter() Decimal balance,@_DecimalOrZeroConverter() Decimal bonusBalance,@DecimalFromNumConverter() Decimal withdrawableBalance, bool isLocked, DateTime updatedAt, bool isPlatformWallet
 });
 
 
@@ -165,7 +168,7 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id, @DecimalConverter()  Decimal balance, @DecimalConverter()  Decimal bonusBalance, @DecimalFromNumConverter()  Decimal withdrawableBalance,  bool isLocked,  DateTime updatedAt,  bool isPlatformWallet)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id, @_DecimalOrZeroConverter()  Decimal balance, @_DecimalOrZeroConverter()  Decimal bonusBalance, @DecimalFromNumConverter()  Decimal withdrawableBalance,  bool isLocked,  DateTime updatedAt,  bool isPlatformWallet)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _UserWallet() when $default != null:
 return $default(_that.id,_that.balance,_that.bonusBalance,_that.withdrawableBalance,_that.isLocked,_that.updatedAt,_that.isPlatformWallet);case _:
@@ -186,7 +189,7 @@ return $default(_that.id,_that.balance,_that.bonusBalance,_that.withdrawableBala
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id, @DecimalConverter()  Decimal balance, @DecimalConverter()  Decimal bonusBalance, @DecimalFromNumConverter()  Decimal withdrawableBalance,  bool isLocked,  DateTime updatedAt,  bool isPlatformWallet)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id, @_DecimalOrZeroConverter()  Decimal balance, @_DecimalOrZeroConverter()  Decimal bonusBalance, @DecimalFromNumConverter()  Decimal withdrawableBalance,  bool isLocked,  DateTime updatedAt,  bool isPlatformWallet)  $default,) {final _that = this;
 switch (_that) {
 case _UserWallet():
 return $default(_that.id,_that.balance,_that.bonusBalance,_that.withdrawableBalance,_that.isLocked,_that.updatedAt,_that.isPlatformWallet);case _:
@@ -206,7 +209,7 @@ return $default(_that.id,_that.balance,_that.bonusBalance,_that.withdrawableBala
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id, @DecimalConverter()  Decimal balance, @DecimalConverter()  Decimal bonusBalance, @DecimalFromNumConverter()  Decimal withdrawableBalance,  bool isLocked,  DateTime updatedAt,  bool isPlatformWallet)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id, @_DecimalOrZeroConverter()  Decimal balance, @_DecimalOrZeroConverter()  Decimal bonusBalance, @DecimalFromNumConverter()  Decimal withdrawableBalance,  bool isLocked,  DateTime updatedAt,  bool isPlatformWallet)?  $default,) {final _that = this;
 switch (_that) {
 case _UserWallet() when $default != null:
 return $default(_that.id,_that.balance,_that.bonusBalance,_that.withdrawableBalance,_that.isLocked,_that.updatedAt,_that.isPlatformWallet);case _:
@@ -221,20 +224,23 @@ return $default(_that.id,_that.balance,_that.bonusBalance,_that.withdrawableBala
 @JsonSerializable()
 
 class _UserWallet implements UserWallet {
-  const _UserWallet({required this.id, @DecimalConverter() required this.balance, @DecimalConverter() required this.bonusBalance, @DecimalFromNumConverter() required this.withdrawableBalance, required this.isLocked, required this.updatedAt, this.isPlatformWallet = false});
+  const _UserWallet({required this.id, @_DecimalOrZeroConverter() required this.balance, @_DecimalOrZeroConverter() required this.bonusBalance, @DecimalFromNumConverter() required this.withdrawableBalance, this.isLocked = false, required this.updatedAt, this.isPlatformWallet = false});
   factory _UserWallet.fromJson(Map<String, dynamic> json) => _$UserWalletFromJson(json);
 
 @override final  String id;
-@override@DecimalConverter() final  Decimal balance;
-/// Non-withdrawable registration bonus.
-@override@DecimalConverter() final  Decimal bonusBalance;
+/// Optional in the spec — absent reads as zero via the converter.
+@override@_DecimalOrZeroConverter() final  Decimal balance;
+/// Non-withdrawable registration bonus. Optional in the spec — absent
+/// reads as zero via the converter.
+@override@_DecimalOrZeroConverter() final  Decimal bonusBalance;
 /// Returned by the API already hold-aware (balance − bonus_balance −
 /// active_holds) — trusted as sent, never recomputed client-side.
 /// Spec quirk: this one arrives as a JSON *number* (`format: double`),
 /// not a decimal string like the other money fields.
 @override@DecimalFromNumConverter() final  Decimal withdrawableBalance;
 /// Locked wallets have an effective withdrawable balance of zero.
-@override final  bool isLocked;
+/// Optional in the spec — absent reads as unlocked.
+@override@JsonKey() final  bool isLocked;
 @override final  DateTime updatedAt;
 @override@JsonKey() final  bool isPlatformWallet;
 
@@ -271,7 +277,7 @@ abstract mixin class _$UserWalletCopyWith<$Res> implements $UserWalletCopyWith<$
   factory _$UserWalletCopyWith(_UserWallet value, $Res Function(_UserWallet) _then) = __$UserWalletCopyWithImpl;
 @override @useResult
 $Res call({
- String id,@DecimalConverter() Decimal balance,@DecimalConverter() Decimal bonusBalance,@DecimalFromNumConverter() Decimal withdrawableBalance, bool isLocked, DateTime updatedAt, bool isPlatformWallet
+ String id,@_DecimalOrZeroConverter() Decimal balance,@_DecimalOrZeroConverter() Decimal bonusBalance,@DecimalFromNumConverter() Decimal withdrawableBalance, bool isLocked, DateTime updatedAt, bool isPlatformWallet
 });
 
 

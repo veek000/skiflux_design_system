@@ -71,6 +71,24 @@ abstract class ApiRepository {
         cause: error,
         stackTrace: stackTrace,
       );
+    } on TypeError catch (error, stackTrace) {
+      // Same contract-mismatch case as FormatException, reached through a
+      // hard cast (`json['x'] as String`) in generated fromJson code instead
+      // of an explicit throw. Without this catch the raw TypeError escapes
+      // the repository layer, violating the class contract above.
+      throw SkifluxFailure(
+        kind ?? fallbackKind,
+        cause: error,
+        stackTrace: stackTrace,
+      );
+    } on ArgumentError catch (error, stackTrace) {
+      // e.g. enum `byName` / DateTime.parse on an unexpected wire value —
+      // still a payload-shape failure, not a transport one.
+      throw SkifluxFailure(
+        kind ?? fallbackKind,
+        cause: error,
+        stackTrace: stackTrace,
+      );
     }
   }
 

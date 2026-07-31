@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 import 'package:timeago/timeago.dart' as timeago;
 
+import '../../shared/error_handling/error_handler.dart';
+import '../../shared/widgets/load_failure.dart';
 import 'data/notifications_store.dart';
 
 // Figma: **Notification Flow** (`1256:28688`) — Notifications screen
@@ -93,14 +95,30 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
               onSelected: (index) => setState(() => _tabIndex = index),
             ),
           ),
-          Expanded(
-            child: notifications.isEmpty
-                ? const _EmptyState()
-                : _NotificationList(notifications: notifications),
-          ),
+          Expanded(child: _body(notifier, notifications)),
         ],
       ),
     );
+  }
+
+  /// Signed-in honesty states: loader while the first fetch runs, error +
+  /// retry when it failed — the demo seed is never behind either of them.
+  Widget _body(
+    NotificationsNotifier notifier,
+    List<AppNotification> notifications,
+  ) {
+    if (notifications.isEmpty && notifier.loadFailed) {
+      return LoadFailure(
+        error: const SkifluxFailure(SkifluxErrorKind.contentLoadFailed),
+        title: "We couldn't load your notifications",
+        onRetry: () => unawaited(notifier.refreshFromBackend()),
+      );
+    }
+    if (notifications.isEmpty && notifier.loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (notifications.isEmpty) return const _EmptyState();
+    return _NotificationList(notifications: notifications);
   }
 }
 

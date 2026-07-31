@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:lottie/lottie.dart';
@@ -10,6 +11,8 @@ import 'package:skiflux_mobile_app_v2/features/auth/data/auth_store.dart';
 import 'package:skiflux_mobile_app_v2/features/auth/data/biometric_store.dart';
 import 'package:skiflux_mobile_app_v2/features/auth/data/legal_documents.dart';
 import 'package:skiflux_mobile_app_v2/features/settings/data/settings_store.dart';
+import 'package:skiflux_mobile_app_v2/shared/network/auth_tokens.dart';
+import 'package:skiflux_mobile_app_v2/shared/network/token_store.dart';
 
 /// Stands in for the platform plugin, which has no implementation under the
 /// test binding. [mode] null means "this device cannot offer biometrics" —
@@ -24,6 +27,55 @@ class _FakeBiometrics extends BiometricAuthenticator {
 
   @override
   Future<bool> authenticate() async => true;
+}
+
+/// In-memory keychain — flutter_secure_storage has no implementation under
+/// `flutter test`, and the cold-start tests need a device that does / does
+/// not already hold a token pair.
+class _FakeSecureStorage extends FlutterSecureStorage {
+  final Map<String, String> values = {};
+
+  @override
+  Future<String?> read({
+    required String key,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async => values[key];
+
+  @override
+  Future<void> write({
+    required String key,
+    required String? value,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    if (value == null) {
+      values.remove(key);
+    } else {
+      values[key] = value;
+    }
+  }
+
+  @override
+  Future<void> delete({
+    required String key,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    values.remove(key);
+  }
 }
 
 /// Mounts [AuthFlow] already past the splash.
@@ -77,18 +129,145 @@ void main() {
     testWidgets('watchdog advances to onboarding if the animation never ends', (
       tester,
     ) async {
+      // Keychain and biometrics are faked: the real plugins have no
+      // implementation under `flutter test`, and this test is about the
+      // watchdog timer, not the cold-start probes it hands off to.
+      final container = ProviderContainer(
+        overrides: [
+          tokenStoreProvider.overrideWithValue(
+            TokenStore(_FakeSecureStorage()),
+          ),
+          biometricAuthenticatorProvider.overrideWithValue(
+            _FakeBiometrics(null),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
       await tester.pumpWidget(
-        const ProviderScope(child: MaterialApp(home: AuthFlow())),
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: AuthFlow()),
+        ),
       );
       expect(find.byType(LottieBuilder), findsOneWidget);
 
       // Past the 8s ceiling: the splash must hand off even when the
-      // composition never reports completion.
+      // composition never reports completion, resolving the (empty) keychain
+      // to the marketing carousel.
       await tester.pump(const Duration(seconds: 9));
-      await tester.pump(const Duration(milliseconds: 50));
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
 
       expect(find.text('Your CV is officially dead.'), findsOneWidget);
     });
+  });
+
+  group('AuthFlow cold-start session restore', () {
+    /// Mounts [AuthFlow] at the splash with a keychain that either holds a
+    /// token pair or doesn't, then plays the splash out (the 8s watchdog
+    /// guarantees `onFinished` fires even if the composition never completes).
+    Future<ProviderContainer> pumpColdStart(
+      WidgetTester tester, {
+      required bool hasSession,
+      required bool biometricLoginEnabled,
+      BiometricMode? biometrics = BiometricMode.fingerprint,
+    }) async {
+      final storage = _FakeSecureStorage();
+      final tokenStore = TokenStore(storage);
+      if (hasSession) {
+        await tokenStore.write(
+          const AuthTokens(access: 'acc-1', refresh: 'ref-1'),
+        );
+      }
+      final container = ProviderContainer(
+        overrides: [
+          tokenStoreProvider.overrideWithValue(tokenStore),
+          biometricAuthenticatorProvider.overrideWithValue(
+            _FakeBiometrics(biometrics),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      container
+          .read(settingsProvider.notifier)
+          .setBiometricLogin(biometricLoginEnabled);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: AuthFlow()),
+        ),
+      );
+      // Past the watchdog ceiling, then a few short pumps for the async
+      // restore chain (keychain read → settings hydration → gate decision).
+      await tester.pump(const Duration(seconds: 9));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pump(const Duration(milliseconds: 50));
+      return container;
+    }
+
+    testWidgets('no session: the splash still hands off to onboarding', (
+      tester,
+    ) async {
+      await pumpColdStart(
+        tester,
+        hasSession: false,
+        biometricLoginEnabled: true,
+      );
+
+      expect(find.text('Your CV is officially dead.'), findsOneWidget);
+      expect(find.text('Verify Identity'), findsNothing);
+    });
+
+    testWidgets(
+      'session + biometric preference on + capable device: the gate, not the carousel',
+      (tester) async {
+        final container = await pumpColdStart(
+          tester,
+          hasSession: true,
+          biometricLoginEnabled: true,
+        );
+
+        // The marketing carousel never appears for a device that already
+        // holds a session — the gate guards the stored tokens instead.
+        expect(find.text('Verify Identity'), findsOneWidget);
+        expect(find.text('Your CV is officially dead.'), findsNothing);
+        expect(
+          container.read(authFlowProvider).stage,
+          AuthStage.fingerprint,
+        );
+      },
+    );
+
+    testWidgets(
+      '"Switch accounts" on the restored gate still reaches the password form',
+      (tester) async {
+        tester.view.physicalSize = const Size(1080, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() => tester.view.resetPhysicalSize());
+
+        await pumpColdStart(
+          tester,
+          hasSession: true,
+          biometricLoginEnabled: true,
+        );
+        expect(find.text('Verify Identity'), findsOneWidget);
+
+        // The action is a span inside the footer prompt's RichText, so it is
+        // reached by text range rather than by widget.
+        await tester.tapOnText(find.textRange.ofSubstring('Switch accounts'));
+        // Sign-out swallows its (mocked, failing) logout POST, clears the
+        // keychain and lands on the password form — give the chain a few
+        // event-loop turns.
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
+        await tester.pump(const Duration(milliseconds: 200));
+
+        expect(find.text('Email Address'), findsOneWidget);
+        expect(find.text('Sign in'), findsOneWidget);
+      },
+    );
   });
 
   group('AuthFlow onboarding', () {

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lottie/lottie.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/error_handling/error_display.dart';
 import '../../shared/network/token_store.dart';
 import '../../shared/notifications/fcm_service.dart';
 import '../../shared/toast/skiflux_toast.dart';
@@ -61,7 +62,7 @@ class _AuthFlowState extends ConsumerState<AuthFlow> {
   Future<void> _onSocial(Future<bool> Function() signIn) async {
     if (!await signIn()) return;
     if (!mounted) return;
-    _enterApp();
+    _enterAppOrOnboard();
   }
 
   /// Tapped when a provider is offered but cannot complete on this build —
@@ -77,6 +78,28 @@ class _AuthFlowState extends ConsumerState<AuthFlow> {
       context,
       '$provider sign-in is coming soon. Use your email and password for now.',
     );
+  }
+
+  /// Where a fresh sign-in lands: the app, or the wizard it never finished.
+  ///
+  /// `AuthTokenResponse.user.is_onboarded` is the only thing that can tell us —
+  /// an account can be created on one device and signed into on another, and
+  /// the wizard can be abandoned halfway. Without this, such a user reached a
+  /// Home built around a username, goal and skillworld they had never given.
+  ///
+  /// Deliberately *not* `_enterApp`'s job: that also invalidates
+  /// [authFlowProvider], which would wipe the wizard's state the moment we
+  /// entered it.
+  //
+  // TODO(backend, minor): `GET /me/profile` carries no `is_onboarded`, so a
+  // cold start on a stored session cannot make this same decision and goes
+  // straight to Home — expects: is_onboarded: bool on UserProfile
+  void _enterAppOrOnboard() {
+    if (ref.read(authFlowProvider).needsOnboarding) {
+      ref.read(authFlowProvider.notifier).show(AuthStage.claimIdentity);
+      return;
+    }
+    _enterApp();
   }
 
   /// Leaves the flow for the app itself, dropping the auth state on the way so
@@ -104,13 +127,85 @@ class _AuthFlowState extends ConsumerState<AuthFlow> {
 
   /// Onboarding "Login" — branch on settings + capability **before** any
   /// screen. Never password → biometric.
+  ///
+  /// The preference read waits for [SettingsNotifier.ready]: hydration runs
+  /// detached after the notifier's first build, so a synchronous read on a
+  /// cold start always saw the default `false` and the biometric gate never
+  /// showed, whatever the user had chosen.
   Future<void> _onLogin() async {
+    await ref.read(settingsProvider.notifier).ready;
+    if (!mounted) return;
     final biometricOn = ref.read(settingsProvider).biometricLogin;
     await ref.read(authFlowProvider.notifier).enterReturningSignIn(
       biometricLoginEnabled: biometricOn,
       availableMode: () =>
           ref.read(biometricAuthenticatorProvider).availableMode(),
     );
+  }
+
+  /// The splash has played out — decide where this device resumes.
+  ///
+  /// A device that already holds a token pair must not re-run the marketing
+  /// carousel: it either passes the biometric gate (preference on + hardware
+  /// present) or goes straight into the app on the stored session. The stage
+  /// guard runs after every await so a user who already navigated (or a
+  /// second `onFinished` from the watchdog) is never yanked elsewhere.
+  Future<void> _onSplashFinished() async {
+    if (ref.read(authFlowProvider).stage != AuthStage.splash) return;
+    final destination = await AuthFlowNotifier.resolveColdStart(
+      hasSession: () => ref.read(tokenStoreProvider).hasSession(),
+      settingsReady: () => ref.read(settingsProvider.notifier).ready,
+      biometricLoginEnabled: () => ref.read(settingsProvider).biometricLogin,
+      availableMode: () =>
+          ref.read(biometricAuthenticatorProvider).availableMode(),
+    );
+    if (!mounted || ref.read(authFlowProvider).stage != AuthStage.splash) {
+      return;
+    }
+    switch (destination) {
+      case ColdStartDestination.marketingOnboarding:
+        ref.read(authFlowProvider.notifier).show(AuthStage.onboarding);
+      case ColdStartDestination.biometricGate:
+        // Reuses the returning-sign-in path so the cached "Welcome back"
+        // email is loaded and "Switch accounts" / "Login with Password" keep
+        // their existing behaviour.
+        await ref.read(authFlowProvider.notifier).enterReturningSignIn(
+          biometricLoginEnabled: true,
+          availableMode: () =>
+              ref.read(biometricAuthenticatorProvider).availableMode(),
+        );
+      case ColdStartDestination.enterApp:
+        _enterApp();
+    }
+  }
+
+  /// Welcome's "Start Learning" — the wizard's payoff CTA, and the moment the
+  /// collected profile actually leaves the device.
+  ///
+  /// `POST /profile/complete-onboarding/` runs **before** entering the app;
+  /// a rejection surfaces and stays on Welcome so the tap can be retried —
+  /// advancing anyway would silently discard the username, goal, skillworld
+  /// and avatar the user just walked through four screens to provide. On
+  /// success `_enterApp`'s bootstrap re-fetches `GET /me/profile`, so the
+  /// profile screens render the server's copy of what was submitted.
+  Future<void> _onStartLearning() async {
+    final state = ref.read(authFlowProvider);
+    if (state.submitting) return;
+    final world = SkillWorld.fromLabel(state.skillworld);
+    if (world != null) {
+      ref.read(skillWorldProvider.notifier).select(world);
+    }
+    try {
+      await ref.read(authFlowProvider.notifier).completeOnboarding();
+    } catch (error, stackTrace) {
+      if (!mounted) return;
+      await ErrorDisplay.show(context, ref, error, stackTrace: stackTrace);
+      return;
+    }
+    if (!mounted) return;
+    // `_enterApp` → `_bootstrapSessionData` refreshes [meProfileProvider], so
+    // the freshly-onboarded profile is fetched exactly once, not twice.
+    _enterApp();
   }
 
   /// A successful biometric prompt.
@@ -156,9 +251,7 @@ class _AuthFlowState extends ConsumerState<AuthFlow> {
     return switch (state.stage) {
       AuthStage.splash => _SplashScreen(
         onFinished: () {
-          if (ref.read(authFlowProvider).stage == AuthStage.splash) {
-            notifier.show(AuthStage.onboarding);
-          }
+          unawaited(_onSplashFinished());
         },
       ),
       AuthStage.onboarding => OnboardingScreen(
@@ -205,9 +298,10 @@ class _AuthFlowState extends ConsumerState<AuthFlow> {
         submitting: state.submitting,
         onSubmit: (email, password) async {
           // Password path ends at Home — never chains biometric after success.
+          // An account that never finished the wizard goes there first.
           if (!await notifier.signIn(email, password)) return;
           if (!mounted) return;
-          _enterApp();
+          _enterAppOrOnboard();
         },
         onForgot: () => notifier.show(AuthStage.forgottenPassword),
         onSignUp: () => notifier.show(AuthStage.createAccount),
@@ -267,12 +361,9 @@ class _AuthFlowState extends ConsumerState<AuthFlow> {
         onBack: () => notifier.show(AuthStage.whatBringsYouHere),
       ),
       AuthStage.welcome => WelcomeScreen(
+        submitting: state.submitting,
         onStart: () {
-          final world = SkillWorld.fromLabel(state.skillworld);
-          if (world != null) {
-            ref.read(skillWorldProvider.notifier).select(world);
-          }
-          _enterApp();
+          unawaited(_onStartLearning());
         },
       ),
       AuthStage.terms => LegalScreen(
