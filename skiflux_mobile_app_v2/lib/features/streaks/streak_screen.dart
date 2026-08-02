@@ -8,6 +8,7 @@ import 'package:lottie/lottie.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/sheets/share_sheet.dart';
+import '../../shared/widgets/load_failure.dart';
 import 'data/streaks_store.dart';
 import 'milestone_sheet.dart';
 import 'week_picker_sheet.dart';
@@ -16,8 +17,9 @@ import 'week_picker_sheet.dart';
 // Screen 01 (`2231:11212`) = broken streak (0, missed days), 02
 // (`2217:11294`) = active streak 5, 03 (`2259:12919`) = streak 7, 04
 // (`2259:13122`) = 03 + milestone sheet. One parameterized screen renders
-// all variants from [streaksProvider]; the demo data matches 03/04 so the
-// milestone celebration is reachable.
+// all variants from [streaksProvider]. Nothing here is seeded: until
+// `GET /me/streak` answers the screen is a skeleton, and a failed load is a
+// retry rather than someone else's streak.
 
 class StreakScreen extends ConsumerStatefulWidget {
   const StreakScreen({super.key});
@@ -36,8 +38,7 @@ class _StreakScreenState extends ConsumerState<StreakScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      // Real stats first, so the milestone check below tests the user's
-      // actual streak rather than the demo seed's.
+      // The screen has no data at all until this lands.
       await ref.read(streaksProvider.notifier).refreshFromBackend();
       if (!mounted) return;
       // Screen 04: the milestone sheet opens over the screen when a
@@ -49,7 +50,10 @@ class _StreakScreenState extends ConsumerState<StreakScreen> {
   }
 
   Future<void> _pickWeek() async {
+    // No tracked week means nothing to pick between; the pill that opens this
+    // is only drawn once a week exists, so this is belt-and-braces.
     final current = _week ?? ref.read(streaksProvider).currentWeek;
+    if (current == null) return;
     final picked = await showWeekPickerSheet(context, selected: current);
     if (picked != null && mounted) setState(() => _week = picked);
   }
@@ -57,7 +61,6 @@ class _StreakScreenState extends ConsumerState<StreakScreen> {
   @override
   Widget build(BuildContext context) {
     final streaks = ref.watch(streaksProvider);
-    final week = _week ?? streaks.currentWeek;
 
     return Scaffold(
       backgroundColor: SkifluxColors.backgroundPrimary,
@@ -73,24 +76,66 @@ class _StreakScreenState extends ConsumerState<StreakScreen> {
         // 24px spacer mirrors the leading icon to keep the title centered.
         trailing: const SizedBox(width: SkifluxSpacing.spaceXl),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
-        children: [
-          _StreakHero(streak: streaks.streak),
-          const SizedBox(height: SkifluxSpacing.spaceL),
-          _ThisWeekCard(
-            week: week,
-            isCurrent: week.isCurrentFor(streaks.currentWeek.start),
-            onPickWeek: _pickWeek,
+      body: _body(streaks),
+      // Nothing to share until there is a streak to share.
+      bottomNavigationBar: streaks.fromBackend
+          ? _stickyShareButton(context)
+          : null,
+    );
+  }
+
+  Widget _body(StreaksState streaks) {
+    // `fromBackend` gates all three: it is the only thing that says these
+    // numbers are the user's own rather than the zeroes the store starts on.
+    if (!streaks.fromBackend) {
+      if (streaks.loading) return const _StreakSkeleton();
+      final error = streaks.error;
+      if (error != null) {
+        return Padding(
+          padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
+          child: LoadFailure(
+            error: error,
+            title: "We couldn't load your streak",
+            onRetry: () => ref.read(streaksProvider.notifier)
+                .refreshFromBackend(),
           ),
-          const SizedBox(height: SkifluxSpacing.spaceL),
-          _StatCards(
-            bestStreak: streaks.bestStreak,
-            xpEarned: streaks.xpEarned,
+        );
+      }
+    }
+
+    final week = _week ?? streaks.currentWeek;
+    if (week == null) {
+      // Loaded, but the API reported no tracked week — a brand-new account.
+      return const Padding(
+        padding: EdgeInsets.all(SkifluxSpacing.spaceL),
+        child: SkifluxEmptyState(
+          icon: Icon(
+            RemixIcons.fire_fill,
+            size: SkifluxEmptyState.iconSize,
+            color: SkifluxColors.contentBrand,
           ),
-        ],
-      ),
-      bottomNavigationBar: _stickyShareButton(context),
+          title: 'No streak yet',
+          message: 'Finish a lesson today and your streak starts here.',
+        ),
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
+      children: [
+        _StreakHero(streak: streaks.streak),
+        const SizedBox(height: SkifluxSpacing.spaceL),
+        _ThisWeekCard(
+          week: week,
+          isCurrent: week.isCurrentFor(streaks.currentWeek?.start),
+          onPickWeek: _pickWeek,
+        ),
+        const SizedBox(height: SkifluxSpacing.spaceL),
+        _StatCards(
+          bestStreak: streaks.bestStreak,
+          xpEarned: streaks.xpEarned,
+        ),
+      ],
     );
   }
 
@@ -110,8 +155,58 @@ class _StreakScreenState extends ConsumerState<StreakScreen> {
           child: SkifluxButton(
             label: 'Share',
             expanded: true,
-            onPressed: () => showShareSheet(context),
+            onPressed: () => showShareSheet(
+              context,
+              title:
+                  "I'm on a ${ref.read(streaksProvider).streak}-day "
+                  'learning streak on SkiFlux.',
+            ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The page's silhouette while `GET /me/streak` is in flight: the flame and
+/// count block, the week card with its seven day circles, then the two stat
+/// cards. Same geometry as the real content, so nothing shifts on arrival.
+class _StreakSkeleton extends StatelessWidget {
+  const _StreakSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.all(SkifluxSpacing.spaceL),
+      child: SkifluxSkeletonGroup(
+        child: Column(
+          children: [
+            SkifluxSkeleton(
+              width: SkifluxFlame.defaultHeight * 76.884 / 98.001,
+              height: SkifluxFlame.defaultHeight,
+              radius: SkifluxRadii.m,
+            ),
+            SizedBox(height: SkifluxSpacing.spaceM),
+            SkifluxSkeleton.text(width: 72, height: SkifluxUnit.u40),
+            SizedBox(height: SkifluxSpacing.spaceXs),
+            SkifluxSkeleton.text(width: 110),
+            SizedBox(height: SkifluxSpacing.spaceM),
+            SkifluxSkeleton(height: SkifluxUnit.u48, radius: SkifluxRadii.x),
+            SizedBox(height: SkifluxSpacing.spaceL),
+            SkifluxSkeleton(height: 128, radius: SkifluxRadii.x),
+            SizedBox(height: SkifluxSpacing.spaceL),
+            Row(
+              children: [
+                Expanded(
+                  child: SkifluxSkeleton(height: 112, radius: SkifluxRadii.x),
+                ),
+                SizedBox(width: SkifluxSpacing.spaceL),
+                Expanded(
+                  child: SkifluxSkeleton(height: 112, radius: SkifluxRadii.x),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

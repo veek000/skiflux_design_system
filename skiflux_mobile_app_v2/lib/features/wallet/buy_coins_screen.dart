@@ -3,12 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../config/env_config.dart';
 import '../../shared/error_handling/error_display.dart';
 import '../../shared/error_handling/error_handler.dart';
 import '../../shared/sheets/skiflux_sheet.dart';
 import '../../shared/toast/skiflux_toast.dart';
-import '../../shared/utils/external_link.dart';
+import '../../shared/webview/checkout_screen.dart';
+import '../../shared/widgets/loading_skeletons.dart';
 import '../playlists/data/playlists_store.dart';
+import '../settings/data/payment_store.dart';
 import 'data/topup_repository.dart';
 import 'data/wallet_store.dart';
 import 'widgets/coin_widgets.dart';
@@ -31,7 +34,7 @@ class BuyCoinsScreen extends ConsumerStatefulWidget {
 
 class BuyCoinsScreenState extends ConsumerState<BuyCoinsScreen> {
   CoinPack? _selected;
-  bool _cardPayment = true;
+  TopupMethod _method = TopupMethod.card;
 
   /// True while initiate or verify is in flight.
   bool _busy = false;
@@ -39,6 +42,16 @@ class BuyCoinsScreenState extends ConsumerState<BuyCoinsScreen> {
   /// Set after a successful initiate: we handed off to the gateway and are
   /// waiting for the user to finish paying there.
   TopupInitiation? _handOff;
+
+  /// The card a one-tap charge would use — the vault's default, or its first
+  /// entry when none is flagged. Null when the vault is empty or still
+  /// loading, which hides the saved-card option rather than offering one that
+  /// might not resolve.
+  SavedCard? get _defaultCard {
+    final cards = ref.watch(savedCardsProvider).value;
+    if (cards == null || cards.isEmpty) return null;
+    return cards.firstWhere((c) => c.isDefault, orElse: () => cards.first);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -75,7 +88,12 @@ class BuyCoinsScreenState extends ConsumerState<BuyCoinsScreen> {
                   ),
                   const SizedBox(height: SkifluxSpacing.spaceL),
                   ref.watch(coinPacksProvider).when(
-                    loading: () => const Center(child: CircularProgressIndicator()),
+                    // The same two-up grid the packs land in — see the sheet.
+                    loading: () => const CardGridSkeleton(
+                      count: 4,
+                      aspectRatio: 1.1,
+                      padding: EdgeInsets.zero,
+                    ),
                     error: (e, st) => CoinPacksErrorState(
                       onRetry: () => ref.invalidate(coinPacksProvider),
                     ),
@@ -124,9 +142,9 @@ class BuyCoinsScreenState extends ConsumerState<BuyCoinsScreen> {
                   ),
                   const SizedBox(height: SkifluxSpacing.spaceL),
                   PaymentMethodSelector(
-                    cardSelected: _cardPayment,
-                    onChanged: (isCard) =>
-                        setState(() => _cardPayment = isCard),
+                    selected: _method,
+                    savedCard: _defaultCard,
+                    onChanged: (m) => setState(() => _method = m),
                   ),
                   if (pack != null) ...[
                     const SizedBox(height: SkifluxSpacing.spaceL),
@@ -201,30 +219,136 @@ class BuyCoinsScreenState extends ConsumerState<BuyCoinsScreen> {
     );
   }
 
-  /// Starts the real top-up: initiate on the backend, then hand off to the
-  /// gateway's checkout page. Nothing is credited here.
+  /// Starts the real top-up. Nothing is credited here — only `verify` (or the
+  /// charge response's own `successful` status) does that.
+  ///
+  /// The spec gives two shapes:
+  ///
+  ///  * **Hosted checkout** (`POST /wallet/topup/initiate`) for a new card or a
+  ///    bank transfer. `payment_method` narrows what the gateway's page offers
+  ///    (`card` / `bank_transfer` from `PaymentMethodEnum`); the page opens in
+  ///    an in-app WebView and `verify` confirms afterwards.
+  ///  * **Saved card** (`POST /wallet/topup/charge-card`) — "one-tap top-up…
+  ///    no checkout redirect needed". No WebView, no `verify` round trip
+  ///    unless the returned transaction is still pending.
   Future<void> pay(CoinPack? pack) async {
     try {
       if (pack == null) {
         throw const SkifluxFailure(SkifluxErrorKind.coinPurchaseFailed);
       }
+      if (_method == TopupMethod.savedCard) {
+        await _chargeSavedCard(pack);
+        return;
+      }
       setState(() => _busy = true);
       final handOff = await ref.read(topupRepositoryProvider).initiateTopup(
             amountFiat: pack.amountFiatWire,
             currency: 'NGN',
-            paymentMethod: _cardPayment ? 'card' : 'bank_transfer',
+            paymentMethod: _method.wireValue,
+            // "`redirect_url` — where the gateway sends the user afterwards
+            // (your app page)" — payment-flows.md §1.2. The page does not
+            // exist; the WebView intercepts the navigation to it. Sending
+            // nothing (the previous behaviour) left the gateway returning to
+            // the backend's own `PAYMENT_REDIRECT_URL`, which is a web page on
+            // a host the app has no reason to recognise.
+            redirectUrl: EnvConfig.paymentReturnUrl,
           );
       if (!mounted) return;
       setState(() {
         _busy = false;
         _handOff = handOff;
       });
-      await openExternalUrl(context, handOff.checkoutUrl);
+
+      final outcome = await showCheckout(
+        context,
+        checkoutUrl: handOff.checkoutUrl,
+        redirectUrlPrefix: EnvConfig.paymentReturnUrl,
+        // Belt and braces: the gateway appends `?…&tx_ref=…` to whichever
+        // return URL it was actually given, so this still fires if the
+        // backend substituted its own.
+        txRef: handOff.txRef,
+        returnHost: EnvConfig.apiHost,
+        title: 'Buy Skillcoins',
+      );
+      if (!mounted) return;
+      // Reaching the redirect means the gateway finished, not that it
+      // succeeded — `verify` is still the only thing that credits coins. An
+      // abandoned checkout leaves the pending banner so the user can verify
+      // by hand if they did in fact pay.
+      if (outcome == CheckoutOutcome.completed) await _verify();
     } catch (e, st) {
       if (!mounted) return;
       setState(() => _busy = false);
       await ErrorDisplay.show(context, ref, e, stackTrace: st);
     }
+  }
+
+  /// One-tap charge against the stored token. The response is a
+  /// `PaymentTransaction`, and its `status` decides everything: only
+  /// `successful` credits coins, `pending`/`initiated` means the gateway is
+  /// still working (so fall back to the same verify path as hosted checkout),
+  /// and anything else is a failure.
+  Future<void> _chargeSavedCard(CoinPack pack) async {
+    final card = _defaultCard;
+    if (card == null) {
+      throw const SkifluxFailure(SkifluxErrorKind.coinPurchaseFailed);
+    }
+    setState(() => _busy = true);
+    final result = await ref.read(topupRepositoryProvider).chargeCard(
+          amountFiat: pack.amountFiatWire,
+          savedCardId: card.id,
+          currency: 'NGN',
+        );
+    if (!mounted) return;
+
+    final status = result['status']?.toString().toLowerCase();
+    final txRef = result['tx_ref']?.toString();
+
+    if (status == 'successful') {
+      setState(() => _busy = false);
+      await ref.read(walletProvider.notifier).refreshFromBackend();
+      if (!mounted) return;
+      await showPurchaseSuccessSheet(
+        context,
+        pack: pack,
+        coinsCredited: _coinsFrom(result) ?? Decimal.fromInt(pack.coins),
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      return;
+    }
+
+    if ((status == 'pending' || status == 'initiated') &&
+        txRef != null &&
+        txRef.isNotEmpty) {
+      // Same waiting state as an abandoned hosted checkout: the reference is
+      // real, so the user can confirm it rather than paying twice.
+      setState(() {
+        _busy = false;
+        _handOff = TopupInitiation(
+          checkoutUrl: Uri.parse(''),
+          txRef: txRef,
+        );
+      });
+      await _verify();
+      return;
+    }
+
+    setState(() => _busy = false);
+    await ErrorDisplay.show(
+      context,
+      ref,
+      const SkifluxFailure(SkifluxErrorKind.coinPurchaseFailed),
+    );
+  }
+
+  /// Coins actually credited, per the `PaymentTransaction.amount_skillcoins`
+  /// decimal. Null when the field is missing or unparseable — the caller then
+  /// falls back to the pack's own figure rather than showing nothing.
+  Decimal? _coinsFrom(Map<String, dynamic> json) {
+    final raw = json['amount_skillcoins'];
+    if (raw == null) return null;
+    return Decimal.tryParse(raw.toString());
   }
 
   /// Confirms with the backend. Success UI only on a verified payment.

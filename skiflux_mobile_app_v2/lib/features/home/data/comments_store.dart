@@ -19,7 +19,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../../shared/error_handling/error_handler.dart';
+import '../../profile/data/profile_store.dart';
 import 'comments_repository.dart';
+import 'home_feed_store.dart';
 
 class CommentItem {
   const CommentItem({
@@ -53,8 +55,9 @@ class CommentItem {
     return CommentItem(
       id: json['id'] is int ? json['id'] as int : null,
       parentId: json['parent_id'] is int ? json['parent_id'] as int : null,
-      // The schema carries no user_id/username, so ownership is unknowable —
-      // rows from the backend all render as "other" (no Edit/Delete row).
+      // Parsed rows start as "other"; [CommentsNotifier] re-marks the ones it
+      // can attribute to the signed-in user. Ownership is not in the payload,
+      // so it cannot be decided here — see `CommentsNotifier._resolveOwnership`.
       author: SkifluxCommentAuthor.other,
       body: audioUrl != null
           ? SkifluxCommentBody.voicenote
@@ -94,8 +97,9 @@ class CommentItem {
   /// session; drives real waveform playback.
   final String? audioPath;
 
-  /// Remote voice-note URL from the payload. The comment widget can only play
-  /// local files today, so these render as a static voicenote row.
+  /// Remote voice-note URL from the payload. The sheet resolves it to a cached
+  /// local file (`voiceNoteCacheProvider`) before handing it to the player,
+  /// which can only open a path.
   final String? audioUrl;
 
   final String timeLabel;
@@ -108,15 +112,20 @@ class CommentItem {
 
   bool get isReply => parentId != null;
 
-  CommentItem copyWith({int? likeCount, bool? isLiked}) => CommentItem(
+  CommentItem copyWith({
+    int? likeCount,
+    bool? isLiked,
+    SkifluxCommentAuthor? author,
+    String? message,
+  }) => CommentItem(
     id: id,
     parentId: parentId,
-    author: author,
+    author: author ?? this.author,
     body: body,
     authorName: authorName,
     handle: handle,
     avatarUrl: avatarUrl,
-    message: message,
+    message: message ?? this.message,
     audioPath: audioPath,
     audioUrl: audioUrl,
     timeLabel: timeLabel,
@@ -186,10 +195,21 @@ class CommentsState {
 class CommentsNotifier extends Notifier<CommentsState> {
   @override
   CommentsState build() {
+    // The sheet can open before `GET /me/profile` answers, and ownership is
+    // resolved against that profile — so re-resolve when it lands rather than
+    // leaving the user's own comments without Edit/Delete for the session.
+    ref.listen(meProfileProvider, (_, _) {
+      if (state.comments.isEmpty) return;
+      state = state.copyWith(comments: _resolveOwnership(state.comments));
+    });
     return const CommentsState(comments: []);
   }
 
   String? _episodeId;
+
+  /// Backend ids of comments this session posted, so a row the user just wrote
+  /// is theirs beyond doubt even if the name check below cannot prove it.
+  final Set<int> _ownIds = <int>{};
 
   void init(String episodeId) {
     if (_episodeId == episodeId) return;
@@ -215,7 +235,7 @@ class CommentsNotifier extends Notifier<CommentsState> {
           .read(commentsRepositoryProvider)
           .getComments(episodeId);
       if (!ref.mounted) return;
-      final flat = _flatten(page.results);
+      final flat = _resolveOwnership(_flatten(page.results));
       // Rows beyond this page still count toward the header total.
       final beyondPage = page.count - page.results.length;
       state = state.copyWith(
@@ -237,6 +257,72 @@ class CommentsNotifier extends Notifier<CommentsState> {
     return List.unmodifiable([
       for (final comment in topLevel) ...[comment, ...comment.replies],
     ]);
+  }
+
+  /// Decide which rows the signed-in user may edit or delete.
+  ///
+  /// `EpisodeComment` carries no `user_id` and no `is_mine` — only
+  /// `user_first_name` / `user_last_name`. So ownership is *inferred*: a row is
+  /// treated as the user's when this session posted it (its id is in
+  /// [_ownIds]), or when its author name matches the signed-in profile's
+  /// first + last, case-insensitively.
+  ///
+  /// The name match is a heuristic and can be wrong: another learner with the
+  /// same name would see Edit and Delete on their row. The server owns the
+  /// decision — `PATCH`/`DELETE /comments/{id}/` reject a comment the caller
+  /// does not own — and the sheet surfaces that rejection rather than pretending
+  /// the write worked. Guessing *narrow* is the alternative and is worse: it
+  /// hides Edit/Delete from every user for every one of their own comments.
+  //
+  // TODO(backend, minor): ownership is inferred from a display name because the
+  // payload has no identity for the commenter — expects: `is_mine: bool` (or a
+  // `user_id` uuid) on EpisodeComment.
+  List<CommentItem> _resolveOwnership(List<CommentItem> comments) {
+    final profile = ref.read(meProfileProvider).value;
+    final me = profile == null
+        ? ''
+        : '${profile.firstName.trim()} ${profile.lastName.trim()}'
+              .trim()
+              .toLowerCase();
+
+    bool isMine(CommentItem c) {
+      if (c.id != null && _ownIds.contains(c.id)) return true;
+      if (me.isEmpty) return false;
+      return c.authorName.trim().toLowerCase() == me;
+    }
+
+    return List.unmodifiable([
+      for (final c in comments)
+        isMine(c) ? c.copyWith(author: SkifluxCommentAuthor.own) : c,
+    ]);
+  }
+
+  /// Remember the ids that appeared since [before] — the rows a just-completed
+  /// post added. Used after a send so the new comment is unambiguously ours
+  /// even when the name check cannot decide.
+  void _rememberOwnIds(Set<int> before) {
+    for (final c in state.comments) {
+      final id = c.id;
+      if (id != null && !before.contains(id)) _ownIds.add(id);
+    }
+  }
+
+  Set<int> _currentIds() => {
+    for (final c in state.comments)
+      if (c.id != null) c.id!,
+  };
+
+  /// Reload after a send, then claim whatever rows are new as this user's.
+  ///
+  /// The reload itself cannot know: [_resolveOwnership] runs inside [_load]
+  /// with the id set as it was *before* the send. So the ids are diffed
+  /// afterwards and ownership re-applied.
+  Future<void> _loadAndClaimNew() async {
+    final before = _currentIds();
+    await _load();
+    if (!ref.mounted) return;
+    _rememberOwnIds(before);
+    state = state.copyWith(comments: _resolveOwnership(state.comments));
   }
 
   void setComposeState(SkifluxComposeState value) {
@@ -303,7 +389,9 @@ class CommentsNotifier extends Notifier<CommentsState> {
       }
       // Pick up the server row (real id, timestamps) so like/reply work on
       // it. A failed refresh keeps the optimistic row — the post succeeded.
-      unawaited(_load());
+      unawaited(_loadAndClaimNew());
+      // The feed rail's comment_count is a load-time snapshot; move it too.
+      ref.read(feedEngagementProvider.notifier).bumpComments(episodeId, 1);
     } catch (_) {
       if (ref.mounted) {
         state = state.copyWith(
@@ -341,6 +429,11 @@ class CommentsNotifier extends Notifier<CommentsState> {
       await ref
           .read(commentsRepositoryProvider)
           .postVoiceComment(episodeId, path);
+      // Reload so the sent note picks up its server id — without one it can be
+      // neither edited, deleted, liked nor replied to, and reopening the sheet
+      // would drop the local `audioPath` and leave it unplayable.
+      unawaited(_loadAndClaimNew());
+      ref.read(feedEngagementProvider.notifier).bumpComments(episodeId, 1);
     } catch (_) {
       if (ref.mounted) {
         state = state.copyWith(comments: before, totalCount: beforeCount);
@@ -375,6 +468,83 @@ class CommentsNotifier extends Notifier<CommentsState> {
       if (ref.mounted) state = state.copyWith(comments: before);
       rethrow;
     }
+  }
+
+  /// Edit one's own comment (`PATCH /comments/{id}/`) — optimistic text swap
+  /// with rollback. No-ops on rows without a confirmed id.
+  Future<void> editComment(CommentItem comment, String text) async {
+    final id = comment.id;
+    final trimmed = text.trim();
+    if (id == null || trimmed.isEmpty || trimmed == comment.message) return;
+    final before = state.comments;
+    state = state.copyWith(
+      comments: [
+        for (final c in before)
+          if (c.id == id) c.copyWith(message: trimmed) else c,
+      ],
+      composeState: SkifluxComposeState.idle,
+    );
+    try {
+      await ref.read(commentsRepositoryProvider).editComment(id, trimmed);
+    } catch (_) {
+      // Includes the 403 a wrong ownership guess earns; the old text comes
+      // back and the sheet says what happened.
+      if (ref.mounted) state = state.copyWith(comments: before);
+      rethrow;
+    }
+  }
+
+  /// Delete one's own comment (`DELETE /comments/{id}/`) — optimistic removal
+  /// of the row *and* any replies nested under it, with rollback.
+  Future<void> deleteComment(CommentItem comment) async {
+    final id = comment.id;
+    if (id == null) return;
+    final before = state.comments;
+    final beforeCount = state.totalCount;
+    // A deleted parent takes its replies with it, so the header count has to
+    // drop by all of them, not by one.
+    final removed = before
+        .where((c) => c.id == id || c.parentId == id)
+        .length;
+    state = state.copyWith(
+      comments: [
+        for (final c in before)
+          if (c.id != id && c.parentId != id) c,
+      ],
+      totalCount: beforeCount - removed >= 0 ? beforeCount - removed : 0,
+    );
+    try {
+      await ref.read(commentsRepositoryProvider).deleteComment(id);
+      final episodeId = _episodeId;
+      if (episodeId != null && episodeId.isNotEmpty) {
+        ref
+            .read(feedEngagementProvider.notifier)
+            .bumpComments(episodeId, -removed);
+      }
+      _ownIds.remove(id);
+    } catch (_) {
+      if (ref.mounted) {
+        state = state.copyWith(comments: before, totalCount: beforeCount);
+      }
+      rethrow;
+    }
+  }
+
+  /// Report someone else's comment (`POST /comments/{id}/report/`).
+  ///
+  /// [category] is one of the spec's `ReportCommentCategoryEnum` wire values —
+  /// the field is required, so the caller must have asked. Nothing about the
+  /// row changes locally: a report is a message to moderation, and pretending
+  /// the comment went away would be a lie.
+  Future<void> reportComment(
+    CommentItem comment,
+    ReportCommentCategory category,
+  ) async {
+    final id = comment.id;
+    if (id == null) return;
+    await ref
+        .read(commentsRepositoryProvider)
+        .reportComment(id, category.wireValue);
   }
 
   List<CommentItem> _insertAfterParent(

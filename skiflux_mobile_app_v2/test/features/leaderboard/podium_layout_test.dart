@@ -239,14 +239,53 @@ void main() {
         // The regression this pins: the card's top was computed from the
         // podium's natural height, so on a short screen it was positioned
         // below its own bottom edge.
+        //
+        // The card yields before the podium does, so on a short viewport it
+        // shows fewer rows rather than the podium collapsing. Past the card's
+        // floor the whole board scrolls, which puts the header below the fold —
+        // legitimately, so scroll to it first and then hold it to the same bar.
+        // Measured as laid-out height, not as position within the viewport.
+        // Once the board is allowed to scroll on a very short window, "how far
+        // is the header from the bottom of the screen" stops describing
+        // anything — the card can be perfectly tall and still start below the
+        // fold. Its own rect is the thing that has to stay usable.
         final header = _rectOf(tester, find.text('RANK'));
-        final screen = tester.view.physicalSize.height;
+        final list = _rectOf(tester, find.byType(ListView));
 
-        expect(header.bottom, lessThan(screen));
         expect(
-          screen - header.top,
-          greaterThanOrEqualTo(LeaderboardScreen.minRankCardHeight * 0.5),
+          list.bottom - header.top,
+          greaterThanOrEqualTo(LeaderboardScreen.minRankCardFloor),
           reason: 'the rank card was squeezed past its floor',
+        );
+        expect(
+          list.height,
+          greaterThan(0),
+          reason: 'the rank card has no room for a single row',
+        );
+      });
+
+      testWidgets('the podium is not collapsed to fit the card', (
+        tester,
+      ) async {
+        await _pumpAt(tester, view.width, height: view.height);
+
+        // The failure this pins is the one that put the 1st-place XP line on
+        // top of the podium art. The podium used to scale by whatever was left
+        // after reserving 200px for the rank card — unclamped that resolved to
+        // roughly a *tenth* of full size on a 480-tall window, and even once
+        // clamped to 0.72 the labels closed the gap onto the step.
+        //
+        // The podium now never scales at all: the rank table shrinks, and past
+        // its floor the whole board scrolls. So this is an equality, not a
+        // tolerance. Measured against the art's own width, because the SVG
+        // fills the width it is given — a scaled podium is a narrow one.
+        final svg = _rectOf(tester, find.byType(SvgPicture));
+        final available = view.width - SkifluxSpacing.spaceL * 2;
+
+        expect(
+          svg.width,
+          moreOrLessEquals(available, epsilon: 0.5),
+          reason: 'the podium was scaled down to make room for the rank card',
         );
       });
 

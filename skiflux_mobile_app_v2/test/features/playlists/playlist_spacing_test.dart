@@ -7,12 +7,31 @@
 /// is set in one place; this pins that it stays there.
 library;
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
+import 'package:skiflux_mobile_app_v2/features/playlists/data/playlists_store.dart';
+import 'package:skiflux_mobile_app_v2/features/playlists/data/season_providers.dart';
+import 'package:skiflux_mobile_app_v2/features/playlists/data/seasons_repository.dart';
 import 'package:skiflux_mobile_app_v2/features/playlists/playlist_episode_row.dart';
 import 'package:skiflux_mobile_app_v2/features/playlists/playlist_screen.dart';
+
+/// Three rows, so both gaps between them are measurable.
+List<PlaylistEpisode> _episodes() => [
+  for (var i = 1; i <= 3; i++)
+    PlaylistEpisode(
+      id: 'ep-$i',
+      number: i,
+      title: 'Designing tokens that survive a rebrand, part $i',
+      duration: '12:40',
+      coinCost: 0,
+      state: PlaylistEpisodeState.unlocked,
+      viewCount: 22000,
+      createdAt: DateTime(2026, 7, i + 1),
+    ),
+];
 
 Future<void> _pump(WidgetTester tester, {double width = 393}) async {
   tester.view.physicalSize = Size(width, 900);
@@ -20,9 +39,29 @@ Future<void> _pump(WidgetTester tester, {double width = 393}) async {
   addTearDown(tester.view.reset);
 
   await tester.pumpWidget(
-    const ProviderScope(child: MaterialApp(home: PlaylistScreen())),
+    ProviderScope(
+      retry: (_, _) => null,
+      overrides: [
+        seasonsRepositoryProvider.overrideWithValue(_FakeSeasonsRepository()),
+      ],
+      // The screen is season-scoped now; the arg's display hints stand in for
+      // the season detail endpoint the spec doesn't have.
+      child: const MaterialApp(
+        home: PlaylistScreen(
+          season: SeasonArg(
+            id: 'season-1',
+            title: 'Design systems, end to end',
+            creatorName: 'Amara Design',
+          ),
+        ),
+      ),
+    ),
   );
-  await tester.pump();
+  // Discrete pumps: the loading state is a skeleton on a repeating ticker,
+  // which `pumpAndSettle` would wait on forever.
+  for (var i = 0; i < 5; i++) {
+    await tester.pump();
+  }
 }
 
 void main() {
@@ -68,4 +107,12 @@ void main() {
     await _pump(tester, width: 320);
     expect(tester.takeException(), isNull);
   });
+}
+
+class _FakeSeasonsRepository extends SeasonsRepository {
+  _FakeSeasonsRepository() : super(Dio());
+
+  @override
+  Future<List<PlaylistEpisode>> getSeasonEpisodes(String seasonId) async =>
+      _episodes();
 }

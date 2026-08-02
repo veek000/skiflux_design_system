@@ -1,10 +1,16 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/error_handling/error_display.dart';
+import '../../shared/notifications/fcm_service.dart';
+import '../../shared/notifications/local_notifications.dart';
+import '../../shared/notifications/notification_permission.dart';
+import '../../shared/toast/skiflux_toast.dart';
 import 'data/settings_store.dart';
 import 'widgets/settings_tile.dart';
 
@@ -162,9 +168,137 @@ class _NotificationSettingsScreenState
                 ),
               ],
             ),
+            if (kDebugMode) ...[
+              const SizedBox(height: SkifluxSpacing.spaceL),
+              const _PushDiagnostics(),
+            ],
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Debug-only push diagnostics.
+///
+/// A push notification cannot be exercised from inside the app: Android only
+/// draws one in the tray when the app is backgrounded, and the message has to
+/// come from Firebase. What the device *can* do is hand over the two things
+/// needed to send one — the registration token and the permission state — so
+/// they are surfaced here instead of only in `debugPrint`, which is unreadable
+/// on a real handset.
+///
+/// Wrapped in [kDebugMode] at the call site, so it is compiled out of release.
+class _PushDiagnostics extends ConsumerStatefulWidget {
+  const _PushDiagnostics();
+
+  @override
+  ConsumerState<_PushDiagnostics> createState() => _PushDiagnosticsState();
+}
+
+class _PushDiagnosticsState extends ConsumerState<_PushDiagnostics> {
+  String? _token;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_probe());
+  }
+
+  Future<void> _probe() async {
+    final token = await ref.read(fcmServiceProvider).getToken();
+    if (!mounted) return;
+    setState(() {
+      _token = token;
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fcm = ref.read(fcmServiceProvider);
+    final granted = fcm.permissionGranted;
+    final token = _token;
+
+    return SettingsSection(
+      label: 'Push diagnostics (debug only)',
+      children: [
+        SettingsTile(
+          icon: RemixIcons.shield_check_fill,
+          iconBackground: SkifluxColors.backgroundInfoSubtle,
+          iconColor: SkifluxColors.contentInfoBold,
+          title: 'Permission',
+          subtitle: switch (granted) {
+            null => 'Not asked yet on this install',
+            true => 'Granted',
+            false => 'Denied or unavailable',
+          },
+          onTap: () async {
+            // Goes through the same soft pre-prompt the app uses after
+            // sign-in, so what is tested is the real flow.
+            await maybeAskForNotificationPermission(context, ref);
+            if (mounted) setState(() {});
+          },
+        ),
+        SettingsTile(
+          icon: RemixIcons.refresh_line,
+          iconBackground: SkifluxColors.backgroundNoticeSubtle,
+          iconColor: SkifluxColors.contentNotice,
+          title: 'Reset prompt state',
+          subtitle: 'Lets the pre-prompt appear again on this device',
+          onTap: () async {
+            await resetNotificationPromptState();
+            if (!context.mounted) return;
+            SkifluxToast.success(context, 'Prompt state cleared');
+          },
+        ),
+        SettingsTile(
+          icon: RemixIcons.notification_badge_fill,
+          iconBackground: SkifluxColors.backgroundPositiveSubtle,
+          iconColor: SkifluxColors.contentPositive,
+          title: 'Send a test notification',
+          // A *push* cannot be triggered from in here — the message has to
+          // come from Firebase, and Android only draws one in the tray when
+          // the app is backgrounded. This posts a local one instead, which
+          // exercises everything except the FCM transport: the runtime
+          // permission, the channel, and the monochrome tray icon.
+          subtitle: 'Posts to the tray now — background the app to see it',
+          onTap: () async {
+            final sent = await ref.read(localNotificationsProvider).sendTest();
+            if (!context.mounted) return;
+            if (sent) {
+              SkifluxToast.success(context, 'Sent — check your tray');
+            } else {
+              // Says which of the two it was rather than "nothing happened".
+              SkifluxToast.error(
+                context,
+                fcm.permissionGranted == true
+                    ? 'Not supported on this platform'
+                    : 'Grant notification permission first',
+              );
+            }
+          },
+        ),
+        SettingsTile(
+          icon: RemixIcons.key_2_fill,
+          iconBackground: SkifluxColors.brand100,
+          iconColor: SkifluxColors.contentBrand,
+          title: 'FCM token',
+          subtitle: _loading
+              ? 'Reading…'
+              : (token == null
+                    ? 'Unavailable — no Firebase config, or permission denied'
+                    : 'Tap to copy · ${token.substring(0, 12)}…'),
+          onTap: token == null
+              ? null
+              : () async {
+                  await Clipboard.setData(ClipboardData(text: token));
+                  if (!context.mounted) return;
+                  SkifluxToast.success(context, 'Token copied');
+                },
+        ),
+      ],
     );
   }
 }

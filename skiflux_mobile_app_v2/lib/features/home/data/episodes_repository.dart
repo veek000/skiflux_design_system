@@ -1,8 +1,11 @@
+import 'package:decimal/decimal.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/error_handling/error_handler.dart';
 import '../../../shared/network/api_client.dart';
 import '../../../shared/network/api_repository.dart';
+import '../../playlists/data/seasons_repository.dart' show coinCostOf;
+import 'episode_resource.dart';
 import 'home_feed_store.dart';
 
 /// Learner episode catalogue endpoints used by home + later library screens.
@@ -20,6 +23,18 @@ class EpisodesRepository extends ApiRepository {
 
   Future<List<HomeFeedItem>> getFollowingEpisodes() => getList(
     '/episodes/following/',
+    parse: episodeJsonToFeedItem,
+  );
+
+  /// `GET /episodes/{episode_id}` — one episode, so the feed can play a
+  /// sibling picked out of the season sheet.
+  ///
+  /// The spec has this return **403** when the episode requires a purchase the
+  /// user hasn't made. That surfaces as an error the caller shows; it is not
+  /// swallowed, because silently doing nothing on a tap reads as a broken
+  /// button rather than as "you don't own this yet".
+  Future<HomeFeedItem> getEpisode(String episodeId) => getObject(
+    '/episodes/$episodeId',
     parse: episodeJsonToFeedItem,
   );
 
@@ -97,6 +112,12 @@ HomeFeedItem episodeJsonToFeedItem(Map<String, dynamic> json) {
 
   final hasVideo = videoUrl != null && videoUrl.isNotEmpty;
 
+  // The server's own verdict, reconciled with purchase state. Absent reads as
+  // unlocked: hiding content the backend never said was paid is the worse
+  // error, and the player still fails honestly if the stream is withheld.
+  final purchased = json['is_purchased'] == true;
+  final locked = json['is_locked'] == true && !purchased;
+
   return HomeFeedItem(
     type: hasVideo ? FeedContentType.video : FeedContentType.image,
     epTag: epTag,
@@ -114,7 +135,24 @@ HomeFeedItem episodeJsonToFeedItem(Map<String, dynamic> json) {
     commentCount: _intOrNull(json['comment_count']),
     saveCount: _intOrNull(json['save_count']),
     durationSeconds: _intOrNull(json['video_duration']),
+    seasonId: _stringOrNull(json['season_id']),
+    seasonTitle: _stringOrNull(json['season_title']),
+    skillworld: _stringOrNull(json['skillworld']),
+    isLocked: locked,
+    coinCost: coinCostOf(_decimalOrNull(json['skillcoin_price'])),
+    // `Episode.resources` / `Episode.tasks` are inline on the viewer payload
+    // and were never read, so the More Menu offered both cards on every
+    // episode — Resources opened four hardcoded filenames.
+    resources: parseEpisodeResources(json['resources']),
+    taskCount: json['tasks'] is List ? (json['tasks'] as List).length : 0,
   );
+}
+
+/// Money is a decimal string on the wire — never `double.parse`.
+Decimal? _decimalOrNull(Object? value) {
+  if (value is String) return Decimal.tryParse(value.trim());
+  if (value is num) return Decimal.tryParse(value.toString());
+  return null;
 }
 
 int? _intOrNull(Object? value) {

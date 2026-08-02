@@ -22,6 +22,9 @@ class LibraryEpisode {
     this.videoUrl,
     this.durationSeconds = 0,
     this.viewCount = 0,
+    this.likeCount,
+    this.commentCount,
+    this.saveCount,
     this.skillworld,
     this.watchProgress = 0,
   });
@@ -47,6 +50,14 @@ class LibraryEpisode {
   final int durationSeconds;
 
   final int viewCount;
+
+  /// Engagement counts off the same `Episode` payload. Required by the schema,
+  /// but left nullable so a legacy or hand-built episode renders no number on
+  /// the action rail rather than a fabricated zero.
+  final int? likeCount;
+  final int? commentCount;
+  final int? saveCount;
+
   final String? skillworld;
 
   /// 0 = untouched, 1 = finished. Only watch history knows this; liked and
@@ -87,6 +98,9 @@ class LibraryEpisode {
     videoUrl: videoUrl,
     durationSeconds: durationSeconds,
     viewCount: viewCount,
+    likeCount: likeCount,
+    commentCount: commentCount,
+    saveCount: saveCount,
     skillworld: skillworld,
     watchProgress: watchProgress ?? this.watchProgress,
   );
@@ -106,6 +120,13 @@ class LibraryEpisode {
       creatorUsername: creatorUsername,
       creatorInitials: creatorInitials,
       episodeId: id,
+      // Without these the modal player's rail renders bare icons: `_railCount`
+      // maps a null count to an empty label and the number disappears.
+      likeCount: likeCount,
+      commentCount: commentCount,
+      saveCount: saveCount,
+      durationSeconds: durationSeconds > 0 ? durationSeconds : null,
+      skillworld: skillworld,
     );
   }
 
@@ -148,9 +169,62 @@ class LibraryEpisode {
       videoUrl: _string(json['video_url']),
       durationSeconds: _int(json['video_duration']) ?? 0,
       viewCount: _int(json['view_count']) ?? 0,
+      likeCount: _int(json['like_count']),
+      commentCount: _int(json['comment_count']),
+      saveCount: _int(json['save_count']),
       skillworld: _string(json['skillworld']),
     );
   }
+
+  /// The feed's own model in the shape the library and downloads use.
+  ///
+  /// One episode described by two endpoints. Downloading from the feed needs
+  /// this shape, because it is what the downloads registry persists and what a
+  /// Downloads row renders. Returns null without a backend episode id — a
+  /// client-only catalogue item has no identity to key a download on.
+  static LibraryEpisode? fromFeedItem(HomeFeedItem item) {
+    final id = item.episodeId;
+    if (id == null || id.isEmpty) return null;
+    return LibraryEpisode(
+      id: id,
+      title: item.title,
+      description: item.description,
+      creatorName: item.creatorName,
+      creatorUsername: item.creatorUsername,
+      creatorInitials: item.creatorInitials,
+      thumbnailUrl: item.coverUrl,
+      videoUrl: item.videoUrl,
+      durationSeconds: item.durationSeconds ?? 0,
+      likeCount: item.likeCount,
+      commentCount: item.commentCount,
+      saveCount: item.saveCount,
+      skillworld: item.skillworld,
+    );
+  }
+
+  /// Wire-shaped, so it round-trips through [LibraryEpisode.fromJson].
+  ///
+  /// Exists for the downloads registry, which persists what is on disk to
+  /// `shared_preferences` — a downloaded episode has to survive a relaunch
+  /// with the title, creator and thumbnail its row needs, without a fetch.
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'title': title,
+    'description': description,
+    'creator': {
+      'display_name': creatorName,
+      'username': creatorUsername,
+    },
+    'order': order,
+    'thumbnail_url': thumbnailUrl,
+    'video_url': videoUrl,
+    'video_duration': durationSeconds,
+    'view_count': viewCount,
+    'like_count': likeCount,
+    'comment_count': commentCount,
+    'save_count': saveCount,
+    'skillworld': skillworld,
+  };
 }
 
 /// One `WatchHistoryItem`: the episode, plus how far and when it was watched.

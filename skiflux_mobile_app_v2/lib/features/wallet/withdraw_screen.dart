@@ -93,10 +93,12 @@ class WithdrawScreenState extends ConsumerState<WithdrawScreen> {
                   if (wallet.balanceKnown)
                     CoinBalanceCard(coins: wallet.wholeCoins)
                   else if (wallet.loading)
-                    const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(SkifluxSpacing.spaceL),
-                        child: CircularProgressIndicator(),
+                    // The balance card's own footprint, so the amount field
+                    // below it doesn't slide when the balance arrives.
+                    const SkifluxSkeletonGroup(
+                      child: SkifluxSkeleton(
+                        height: SkifluxUnit.u56,
+                        radius: SkifluxRadii.l,
                       ),
                     )
                   else

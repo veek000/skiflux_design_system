@@ -42,6 +42,7 @@ class SkifluxComposeBar extends StatefulWidget {
     this.onDeleteTap,
     this.onSend,
     this.onSendVoiceNote,
+    this.onRecordingFailed,
   });
 
   final SkifluxComposeState state;
@@ -56,6 +57,17 @@ class SkifluxComposeBar extends StatefulWidget {
   /// recording. The file lives in the app documents directory; the
   /// receiver owns it from here (attach, upload, or delete).
   final ValueChanged<String>? onSendVoiceNote;
+
+  /// Raised when a recording could not be started or produced no file — mic
+  /// permission refused, the recorder throwing, an empty capture.
+  ///
+  /// Without this the bar failed silently in the most confusing way possible:
+  /// the parent had already switched it to the recording state, so the user saw
+  /// a waveform (flat, because nothing was being captured), tapped send, and
+  /// **nothing happened at all** — no note, no error. [reason] is a
+  /// user-facing sentence; the parent decides how to show it and is expected to
+  /// put the bar back to idle.
+  final ValueChanged<String>? onRecordingFailed;
 
   @override
   State<SkifluxComposeBar> createState() => _SkifluxComposeBarState();
@@ -115,14 +127,32 @@ class _SkifluxComposeBarState extends State<SkifluxComposeBar> {
     if (mounted) setState(() {});
   }
 
+  /// Begin capturing.
+  ///
+  /// `checkPermission()` both reads and *requests* the mic grant, so a refusal
+  /// lands here. It used to `return` on refusal and on any throw, leaving the
+  /// bar showing a recording UI that was recording nothing.
   Future<void> _startRecording() async {
-    final hasPermission = await _recorder.checkPermission();
-    if (!hasPermission) return;
-    final dir = await getApplicationDocumentsDirectory();
-    final path =
-        '${dir.path}/voice_note_${DateTime.now().millisecondsSinceEpoch}.m4a';
-    await _recorder.record(path: path);
-    _recordingPath = path;
+    try {
+      if (!await _recorder.checkPermission()) {
+        _fail('Microphone access is needed to record a voice note');
+        return;
+      }
+      final dir = await getApplicationDocumentsDirectory();
+      final path =
+          '${dir.path}/voice_note_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      await _recorder.record(path: path);
+      _recordingPath = path;
+    } catch (error) {
+      debugPrint('SkifluxComposeBar: recording failed to start → $error');
+      _recordingPath = null;
+      _fail("We couldn't start recording");
+    }
+  }
+
+  void _fail(String reason) {
+    if (!mounted) return;
+    widget.onRecordingFailed?.call(reason);
   }
 
   Future<void> _discardRecording() async {
@@ -136,10 +166,43 @@ class _SkifluxComposeBarState extends State<SkifluxComposeBar> {
   }
 
   Future<void> _sendRecording() async {
-    final path = await _recorder.stop(false) ?? _recordingPath;
+    String? path;
+    try {
+      path = await _recorder.stop(false) ?? _recordingPath;
+    } catch (error) {
+      debugPrint('SkifluxComposeBar: recorder.stop failed → $error');
+      path = _recordingPath;
+    }
     _recordingPath = null;
-    if (path != null) widget.onSendVoiceNote?.call(path);
+    // `stop(false)` leaves the controller holding the finished recording's
+    // state, so a second note in the same session records against a stale
+    // buffer (or refuses outright). Reset returns it to a fresh state; the
+    // file on disk is untouched and is what gets sent below.
+    _recorder.reset();
+
+    // No file, or an empty one: the capture never happened (refused mic, a
+    // recorder that failed to start, a tap-send faster than the first frame).
+    // Reporting it is the whole point — this path used to fall through to
+    // `onSend`, which the comments sheet ignores when there is no text, so the
+    // send button simply did nothing.
+    if (path == null || !_hasBytes(path)) {
+      _fail("That recording didn't capture any audio");
+      widget.onSend?.call();
+      return;
+    }
+    widget.onSendVoiceNote?.call(path);
     widget.onSend?.call();
+  }
+
+  static bool _hasBytes(String path) {
+    try {
+      final file = File(path);
+      return file.existsSync() && file.lengthSync() > 0;
+    } catch (_) {
+      // Cannot stat it — let the upload be the judge rather than dropping a
+      // recording that may be perfectly good.
+      return true;
+    }
   }
 
   @override

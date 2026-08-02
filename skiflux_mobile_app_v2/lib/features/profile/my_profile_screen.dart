@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/error_handling/error_handler.dart';
+import '../../shared/widgets/network_image.dart';
 import '../../shared/sheets/share_sheet.dart';
 import '../../shared/toast/skiflux_toast.dart';
 import '../leaderboard/leaderboard_screen.dart';
@@ -10,30 +12,25 @@ import '../search/search_screen.dart';
 import '../settings/settings_screen.dart';
 import '../streaks/data/streaks_store.dart';
 import '../streaks/streak_screen.dart';
-import '../subscriptions/data/subscriptions_store.dart';
 import '../subscriptions/subscriptions_screen.dart' show CircleTapTarget;
 import '../wallet/wallet_screen.dart';
 import 'badges_screen.dart';
 import 'change_skill_world_sheet.dart';
+import 'data/download_action.dart';
+import 'data/library_episode.dart';
+import 'data/library_repository.dart';
+import 'data/library_store.dart';
 import 'data/models/user_profile.dart';
 import 'data/profile_store.dart';
 import 'data/skill_world_store.dart';
 import 'downloads_screen.dart';
+import 'library_episode_player.dart';
 import 'liked_videos_screen.dart';
 import 'saved_videos_screen.dart';
 import 'watch_history_screen.dart';
 
 // Figma: **Profile Flow 17** (`1256:23812`) — "My Profile" bottom-nav tab
-// root. Identity from [meProfileProvider] when signed in; demo fallback offline.
-
-/// Demo identity when `GET /me/profile` has not loaded yet.
-abstract final class _MyProfileDemo {
-  static const name = 'Amara Design';
-  static const handle = '@amara';
-  static const initials = 'AD';
-  static const xp = '2,450';
-  static const leaderboardRank = '#12 in Master';
-}
+// root. Identity comes from [meProfileProvider]; there is no stand-in for it.
 
 class MyProfileBody extends ConsumerWidget {
   const MyProfileBody({super.key});
@@ -41,11 +38,7 @@ class MyProfileBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(hasSessionProvider);
-    final subs = ref.watch(subscriptionsProvider);
-    final history = subs.creators.isEmpty
-        ? const <SubscriptionEpisode>[]
-        : subs.feed().take(5).toList();
-    // Session gate: still show chrome while loading; signed-out keeps demo.
+    // Session gate: still show chrome while the session resolves.
     final signedOut = session.value == false;
     return Column(
       children: [
@@ -69,7 +62,7 @@ class MyProfileBody extends ConsumerWidget {
               const SizedBox(height: SkifluxSpacing.spaceL),
               const _WatchHistoryHeading(),
               const SizedBox(height: SkifluxSpacing.spaceL),
-              _WatchHistoryRail(episodes: history),
+              const _WatchHistoryRail(),
               const SizedBox(height: SkifluxSpacing.spaceL),
               const _MenuList(),
               const SizedBox(height: SkifluxSpacing.spaceL),
@@ -123,30 +116,33 @@ class _ProfileHeader extends ConsumerWidget {
     final profileAsync = ref.watch(meProfileProvider);
     final UserProfile? profile = profileAsync.value;
 
-    final name = profile?.displayName ?? _MyProfileDemo.name;
-    final handle = (profile?.handle.isNotEmpty ?? false)
-        ? profile!.handle
-        : _MyProfileDemo.handle;
-    final initials = profile?.initials ?? _MyProfileDemo.initials;
-    final xpLabel = profile?.xpLabel ?? _MyProfileDemo.xp;
-    final streakLabel = profile != null && profile.streakCount > 0
+    // No stand-in identity. `Amara Design / @amara / AD / 2,450` used to fill
+    // this in whenever `GET /me/profile` had not answered, so a signed-out or
+    // still-loading user read someone else's name and XP as their own. In
+    // flight the header holds its shape as a skeleton; with no profile at all
+    // it says so.
+    if (profile == null) {
+      return _ProfileHeaderPlaceholder(loading: profileAsync.isLoading);
+    }
+
+    final handle = profile.handle;
+    final streakLabel = profile.streakCount > 0
         ? '${profile.streakCount}'
         : '$streak';
-    final avatarUrl = profile?.avatarUrl;
+    final avatarUrl = profile.avatarUrl;
 
     return Column(
       children: [
         if (avatarUrl != null && avatarUrl.isNotEmpty)
           ClipOval(
-            child: Image.network(
-              avatarUrl,
-              width: 64,
-              height: 64,
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => SkifluxAvatar(
+            child: SkifluxNetworkImage(
+              url: avatarUrl,
+              width: SkifluxUnit.u64,
+              height: SkifluxUnit.u64,
+              errorWidget: SkifluxAvatar(
                 style: SkifluxAvatarStyle.initial,
                 size: SkifluxUnit.u64,
-                initials: initials,
+                initials: profile.initials,
               ),
             ),
           )
@@ -154,22 +150,24 @@ class _ProfileHeader extends ConsumerWidget {
           SkifluxAvatar(
             style: SkifluxAvatarStyle.initial,
             size: SkifluxUnit.u64,
-            initials: initials,
+            initials: profile.initials,
           ),
         const SizedBox(height: SkifluxSpacing.spaceS),
         Text(
-          name,
+          profile.displayName,
           style: SkifluxTypography.headingH8Bold.copyWith(
             color: SkifluxColors.contentPrimary,
           ),
         ),
-        const SizedBox(height: SkifluxSpacing.spaceXs),
-        Text(
-          handle,
-          style: SkifluxTypography.bodyP11Regular.copyWith(
-            color: SkifluxColors.contentPrimary,
+        if (handle.isNotEmpty) ...[
+          const SizedBox(height: SkifluxSpacing.spaceXs),
+          Text(
+            handle,
+            style: SkifluxTypography.bodyP11Regular.copyWith(
+              color: SkifluxColors.contentPrimary,
+            ),
           ),
-        ),
+        ],
         const SizedBox(height: SkifluxSpacing.spaceS),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -187,7 +185,7 @@ class _ProfileHeader extends ConsumerWidget {
             const SizedBox(width: SkifluxSpacing.spaceS),
             _StatPill(
               icon: RemixIcons.flashlight_fill,
-              label: xpLabel,
+              label: profile.xpLabel,
               background: SkifluxColors.backgroundBrandOpacity50,
               foreground: SkifluxColors.contentBrand,
             ),
@@ -206,6 +204,56 @@ class _ProfileHeader extends ConsumerWidget {
         ),
         const SizedBox(height: SkifluxSpacing.spaceS),
         const _WorldButton(),
+      ],
+    );
+  }
+}
+
+/// The header with no profile behind it — in flight, or signed out.
+///
+/// Occupies the loaded header's footprint either way so the watch-history
+/// heading below does not slide when the profile lands. Loading shows the
+/// shapes; a resolved-but-absent profile says plainly that there is nobody to
+/// show, which the sign-in line at the top of the screen then explains.
+class _ProfileHeaderPlaceholder extends StatelessWidget {
+  const _ProfileHeaderPlaceholder({required this.loading});
+
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) {
+      return const SkifluxSkeletonGroup(
+        child: Column(
+          children: [
+            SkifluxSkeleton.circle(size: SkifluxUnit.u64),
+            SizedBox(height: SkifluxSpacing.spaceS),
+            SkifluxSkeleton.text(width: 160),
+            SizedBox(height: SkifluxSpacing.spaceXs),
+            SkifluxSkeleton.text(width: 96),
+            SizedBox(height: SkifluxSpacing.spaceS),
+            SkifluxSkeleton(
+              width: 220,
+              height: SkifluxUnit.u32,
+              radius: SkifluxRadii.pill,
+            ),
+          ],
+        ),
+      );
+    }
+    return Column(
+      children: [
+        const SkifluxAvatar(
+          style: SkifluxAvatarStyle.blank,
+          size: SkifluxUnit.u64,
+        ),
+        const SizedBox(height: SkifluxSpacing.spaceS),
+        Text(
+          'Not signed in',
+          style: SkifluxTypography.headingH8Bold.copyWith(
+            color: SkifluxColors.contentTertiary,
+          ),
+        ),
       ],
     );
   }
@@ -440,42 +488,129 @@ class _WatchHistoryHeading extends StatelessWidget {
   }
 }
 
-class _WatchHistoryRail extends StatefulWidget {
-  const _WatchHistoryRail({required this.episodes});
+/// The rail is `GET /me/watch-history`, not the subscriptions feed.
+///
+/// It used to render `subscriptionsProvider.feed().take(5)` — the five newest
+/// episodes from creators the user follows, watched or not — under a heading
+/// that says "Watch History". Its "Remove from watch history" could only hide
+/// a card for the session, because there was nothing to remove it from.
+///
+/// Everything stays inside the same 172px box the loaded cards occupy, so the
+/// menu below it does not move between loading, empty and loaded.
+class _WatchHistoryRail extends ConsumerWidget {
+  const _WatchHistoryRail();
 
-  final List<SubscriptionEpisode> episodes;
+  /// 98 thumb + 8 gap + 2-line H10 title + 4 gap + 16 creator row.
+  static const double _height = 172;
 
   @override
-  State<_WatchHistoryRail> createState() => _WatchHistoryRailState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final history = ref.watch(watchHistoryProvider);
+
+    return SizedBox(
+      height: _height,
+      child: switch (history) {
+        AsyncLoading() => const _WatchHistoryRailSkeleton(),
+        AsyncError(:final error) => _WatchHistoryRailError(
+          error: error,
+          onRetry: () => ref.read(watchHistoryProvider.notifier).refresh(),
+        ),
+        AsyncData(:final value) => value.isEmpty
+            ? const SkifluxEmptyState.compact(
+                icon: Icon(
+                  RemixIcons.history_fill,
+                  size: SkifluxEmptyState.iconSizeCompact,
+                  color: SkifluxColors.contentBrand,
+                ),
+                title: 'Nothing watched yet',
+                message: 'Episodes you watch show up here.',
+              )
+            : ListView.separated(
+                scrollDirection: Axis.horizontal,
+                // The rail is a preview; "View all" above it opens the rest.
+                itemCount: value.length > 10 ? 10 : value.length,
+                separatorBuilder: (_, _) =>
+                    const SizedBox(width: SkifluxSpacing.spaceL),
+                itemBuilder: (_, i) => _WatchHistoryCard(entry: value[i]),
+              ),
+      },
+    );
+  }
 }
 
-class _WatchHistoryRailState extends State<_WatchHistoryRail> {
-  /// Episodes dropped via the row menu. The rail is derived from the
-  /// subscriptions feed rather than a watch-history store, so "Remove from
-  /// watch history" only hides the card for the session.
-  // TODO(backend, minor): persist watch-history removals once the rail reads a real watch-history feed instead of the subscriptions feed — expects: DELETE /watch-history/{episodeId}
-  final _removed = <String>{};
-
-  static String _key(SubscriptionEpisode episode) =>
-      '${episode.creatorUsername}#${episode.epNumber}';
+/// Three card silhouettes at the real 128×98 thumbnail size.
+class _WatchHistoryRailSkeleton extends StatelessWidget {
+  const _WatchHistoryRailSkeleton();
 
   @override
   Widget build(BuildContext context) {
-    final episodes = widget.episodes
-        .where((e) => !_removed.contains(_key(e)))
-        .toList(growable: false);
-    return SizedBox(
-      // 98 thumb + 8 gap + 2-line H10 title + 4 gap + 16 creator row.
-      height: 172,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: episodes.length,
-        separatorBuilder: (_, _) =>
-            const SizedBox(width: SkifluxSpacing.spaceL),
-        itemBuilder: (_, i) => _WatchHistoryCard(
-          episode: episodes[i],
-          onRemove: () => setState(() => _removed.add(_key(episodes[i]))),
-        ),
+    return const SkifluxSkeletonGroup(
+      child: Row(
+        children: [
+          _WatchHistoryCardSkeleton(),
+          SizedBox(width: SkifluxSpacing.spaceL),
+          _WatchHistoryCardSkeleton(),
+          SizedBox(width: SkifluxSpacing.spaceL),
+          _WatchHistoryCardSkeleton(),
+        ],
+      ),
+    );
+  }
+}
+
+class _WatchHistoryCardSkeleton extends StatelessWidget {
+  const _WatchHistoryCardSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox(
+      width: 128,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SkifluxSkeleton(width: 128, height: 98, radius: SkifluxRadii.l),
+          SizedBox(height: SkifluxSpacing.spaceS),
+          SkifluxSkeleton.text(),
+          SizedBox(height: SkifluxSpacing.spaceXs),
+          SkifluxSkeleton.text(width: 80),
+        ],
+      ),
+    );
+  }
+}
+
+/// A failed load, at rail scale: what went wrong plus a way to try again,
+/// rather than a silently empty strip that reads as "you've watched nothing".
+class _WatchHistoryRailError extends ConsumerWidget {
+  const _WatchHistoryRailError({required this.error, required this.onRetry});
+
+  final Object error;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            // Same classifier the full-screen [LoadFailure] uses, so this
+            // never puts an exception string in front of the user.
+            ref.read(errorHandlerProvider).classify(error).message,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: SkifluxTypography.bodyP11Regular.copyWith(
+              color: SkifluxColors.contentTertiary,
+            ),
+          ),
+          const SizedBox(height: SkifluxSpacing.spaceS),
+          SkifluxButton(
+            label: 'Retry',
+            size: SkifluxButtonSize.s,
+            onPressed: onRetry,
+          ),
+        ],
       ),
     );
   }
@@ -485,79 +620,114 @@ class _WatchHistoryRailState extends State<_WatchHistoryRail> {
 /// 2-line title, creator name + "more" glyph. The glyph opens the same row
 /// More Menu the Watch History screen uses (**Profile Flow 14** `1256:24327`).
 class _WatchHistoryCard extends ConsumerWidget {
-  const _WatchHistoryCard({required this.episode, required this.onRemove});
+  const _WatchHistoryCard({required this.entry});
 
-  final SubscriptionEpisode episode;
-
-  /// Drops this card from the rail after "Remove from watch history".
-  final VoidCallback onRemove;
+  final WatchHistoryEntry entry;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final creator = ref.watch(subscriptionsProvider).creatorOf(episode);
+    final episode = entry.episode;
     return SizedBox(
       width: 128,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _thumbnail(),
-          const SizedBox(height: SkifluxSpacing.spaceS),
-          Text(
-            episode.title,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: SkifluxTypography.headingH10Bold.copyWith(
-              color: SkifluxColors.contentPrimary,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        // The card is the whole point of the rail: tapping it resumes the
+        // episode in the same modal player the library screens open.
+        onTap: () => showLibraryEpisodePlayer(context, episode),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _thumbnail(),
+            const SizedBox(height: SkifluxSpacing.spaceS),
+            Text(
+              episode.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: SkifluxTypography.headingH10Bold.copyWith(
+                color: SkifluxColors.contentPrimary,
+              ),
             ),
-          ),
-          const SizedBox(height: SkifluxSpacing.spaceXs),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  creator.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: SkifluxTypography.bodyP11Regular.copyWith(
+            const SizedBox(height: SkifluxSpacing.spaceXs),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    episode.creatorName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: SkifluxTypography.bodyP11Regular.copyWith(
+                      color: SkifluxColors.contentTertiary,
+                    ),
+                  ),
+                ),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _openRowMenu(context, ref),
+                  child: const Icon(
+                    RemixIcons.more_2_fill,
+                    size: SkifluxIcons.sizeS,
                     color: SkifluxColors.contentTertiary,
                   ),
                 ),
-              ),
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => _openRowMenu(context),
-                child: const Icon(
-                  RemixIcons.more_2_fill,
-                  size: SkifluxIcons.sizeS,
-                  color: SkifluxColors.contentTertiary,
-                ),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
   /// Same handlers as the Watch History screen's rows, so the sheet behaves
   /// identically wherever it is opened from.
-  Future<void> _openRowMenu(BuildContext context) async {
+  Future<void> _openRowMenu(BuildContext context, WidgetRef ref) async {
     final action = await showWatchHistoryMenuSheet(context);
     if (!context.mounted || action == null) return;
     switch (action) {
       case WatchHistoryMenuAction.remove:
-        SkifluxToast.info(context, 'Removed from watch history');
-        onRemove();
+        // Goes to `DELETE /me/watch-history/{episode_id}` and stays gone.
+        // The card used to be hidden for the session only, so it came back
+        // on the next rebuild.
+        try {
+          await ref.read(watchHistoryProvider.notifier).remove(entry);
+          if (!context.mounted) return;
+          SkifluxToast.info(context, 'Removed from watch history');
+        } catch (error) {
+          if (!context.mounted) return;
+          SkifluxToast.error(
+            context,
+            ref.read(errorHandlerProvider).classify(error).message,
+          );
+        }
       case WatchHistoryMenuAction.download:
-        SkifluxToast.info(context, 'Episode queued for download');
+        await downloadEpisode(context, ref, entry.episode);
       case WatchHistoryMenuAction.save:
-        SkifluxToast.success(context, 'Saved to your videos');
+        // Really saves, same as the Watch History screen's own row menu — the
+        // episode shows up under Saved Videos afterwards.
+        try {
+          await ref
+              .read(libraryRepositoryProvider)
+              .toggleSave(entry.episode.id);
+          ref.invalidate(savedEpisodesProvider);
+          if (!context.mounted) return;
+          SkifluxToast.success(context, 'Saved to your videos');
+        } catch (error) {
+          if (!context.mounted) return;
+          SkifluxToast.error(
+            context,
+            ref.read(errorHandlerProvider).classify(error).message,
+          );
+        }
       case WatchHistoryMenuAction.share:
-        await showShareSheet(context);
+        await showShareSheet(
+          context,
+          title: '${entry.episode.epTag} · ${entry.episode.title}',
+          url: shareableMediaUrl(entry.episode.videoUrl),
+        );
     }
   }
 
   Widget _thumbnail() {
+    final url = entry.episode.thumbnailUrl;
     return ClipRRect(
       borderRadius: SkifluxRadii.borderL,
       child: SizedBox(
@@ -566,13 +736,13 @@ class _WatchHistoryCard extends ConsumerWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // TODO(backend, blocking): replace local placeholder asset with real CDN/backend video thumbnail URL — expects: String (network URL)
-            Image.asset(
-              'assets/home_video_raw1.png',
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) =>
-                  const ColoredBox(color: SkifluxColors.magenta900),
-            ),
+            // `Episode.thumbnail_url` is required by the schema, so the asset
+            // is a decode/404 fallback. Every card showing the same stock
+            // frame was the giveaway that the field was never read.
+            if (url != null && url.isNotEmpty)
+              SkifluxNetworkImage(url: url, errorWidget: _placeholderCover())
+            else
+              _placeholderCover(),
             Positioned(
               top: SkifluxSpacing.spaceS,
               left: SkifluxSpacing.spaceS,
@@ -588,38 +758,65 @@ class _WatchHistoryCard extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(SkifluxRadii.x),
                 ),
                 child: Text(
-                  episode.epTag,
+                  entry.episode.epTag,
                   style: SkifluxTypography.bodyP11Semibold.copyWith(
                     color: SkifluxColors.contentPrimaryInverse,
                   ),
                 ),
               ),
             ),
-            Positioned(
-              bottom: SkifluxSpacing.spaceS,
-              right: SkifluxSpacing.spaceS,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: SkifluxSpacing.spaceXs,
-                  vertical: SkifluxSpacing.space2xs,
-                ),
-                decoration: BoxDecoration(
-                  color: SkifluxColors.overlay50,
-                  borderRadius: BorderRadius.circular(SkifluxRadii.x),
-                ),
-                child: Text(
-                  episode.duration,
-                  style: SkifluxTypography.bodyP11Semibold.copyWith(
-                    color: SkifluxColors.contentPrimaryInverse,
+            // Hidden rather than "0:00" when the payload omits the duration.
+            if (entry.episode.durationLabel.isNotEmpty)
+              Positioned(
+                bottom: SkifluxSpacing.spaceS,
+                right: SkifluxSpacing.spaceS,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: SkifluxSpacing.spaceXs,
+                    vertical: SkifluxSpacing.space2xs,
+                  ),
+                  decoration: BoxDecoration(
+                    color: SkifluxColors.overlay50,
+                    borderRadius: BorderRadius.circular(SkifluxRadii.x),
+                  ),
+                  child: Text(
+                    entry.episode.durationLabel,
+                    style: SkifluxTypography.bodyP11Semibold.copyWith(
+                      color: SkifluxColors.contentPrimaryInverse,
+                    ),
                   ),
                 ),
               ),
-            ),
+            // How far in the user actually got — the one thing that makes
+            // this a history card rather than a catalogue card. Drawn only
+            // for a started episode, never as a full bar by default.
+            if (entry.progress > 0)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: LinearProgressIndicator(
+                  value: entry.progress,
+                  minHeight: 3,
+                  backgroundColor: SkifluxColors.overlay50,
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    SkifluxColors.contentBrand,
+                  ),
+                ),
+              ),
           ],
         ),
       ),
     );
   }
+
+  /// The stock cover, used only when the episode carries no thumbnail or the
+  /// network image fails to decode.
+  Widget _placeholderCover() => Image.asset(
+    'assets/home_video_raw1.png',
+    fit: BoxFit.cover,
+    errorBuilder: (_, _, _) => const ColoredBox(color: SkifluxColors.magenta900),
+  );
 }
 
 // ── Menu list ────────────────────────────────────────────────────────
@@ -629,18 +826,17 @@ class _MenuList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Real standing once the profile loads; the demo string only stands in
-    // while signed out, like the header above. `rankLabel` already formats
-    // "#12 in Master" from `rank` + `current_level`.
+    // `rankLabel` formats "#12 in Master" from `rank` + `current_level`. With
+    // no profile the row simply carries no detail — it used to read "#12 in
+    // Master" for everyone, including signed-out users who have no standing.
     final profile = ref.watch(meProfileProvider).value;
-    final rankLabel = profile?.rankLabel ?? _MyProfileDemo.leaderboardRank;
 
     return Column(
       children: [
         _MenuRow(
           icon: RemixIcons.trophy_fill,
           label: 'Leaderboard',
-          detail: rankLabel,
+          detail: profile?.rankLabel,
           onTap: () => Navigator.of(
             context,
           ).push(MaterialPageRoute(builder: (_) => const LeaderboardScreen())),

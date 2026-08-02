@@ -380,11 +380,32 @@ void main() {
       );
       final repo = CardsRepository(_dio(adapter));
 
-      final url = await repo.startAddCard(gatewayName: 'paystack');
-      expect(url.toString(), 'https://checkout.paystack.com/save');
+      final handOff = await repo.startAddCard(gatewayName: 'paystack');
+      expect(handOff.checkoutUrl.toString(), 'https://checkout.paystack.com/save');
+      // Absent in this body — the flow still runs, it just cannot verify
+      // before re-reading the vault.
+      expect(handOff.txRef, isNull);
       final request = adapter.received.single;
       expect(request.path, kCardsAddPath);
       expect(_bodyOf(request), {'gateway_name': 'paystack'});
+    });
+
+    test('startAddCard keeps the tx_ref the verify step needs', () async {
+      // `payment-flows.md` §2: after the hosted page, call
+      // `POST /wallet/topup/verify` with this reference *then* re-read
+      // `GET /wallet/cards`. Parsing only the URL — the previous behaviour —
+      // left the app re-reading the vault and hoping a webhook had landed.
+      final adapter = _StubAdapter(
+        (_) async => _json(
+          200,
+          '{"data":{"checkout_url":"https://checkout.stripe.com/c/pay/cs_test",'
+          '"tx_ref":"skf-card-9f8e7d6c5b4a","gateway":"stripe"}}',
+        ),
+      );
+      final repo = CardsRepository(_dio(adapter));
+
+      final handOff = await repo.startAddCard(gatewayName: 'stripe');
+      expect(handOff.txRef, 'skf-card-9f8e7d6c5b4a');
     });
 
     test('a URL-less add-card body is paymentMethodActionFailed', () async {

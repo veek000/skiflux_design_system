@@ -100,24 +100,8 @@ class SkifluxInputField extends StatelessWidget {
               horizontal: SkifluxSpacing.spaceL,
               vertical: SkifluxSpacing.spaceM,
             ),
-            prefixIcon: leadingIcon != null
-                ? IconTheme(
-                    data: const IconThemeData(
-                      color: SkifluxColors.contentTertiary,
-                      size: SkifluxSpacing.spaceL,
-                    ),
-                    child: leadingIcon!,
-                  )
-                : null,
-            suffixIcon: trailingIcon != null
-                ? IconTheme(
-                    data: const IconThemeData(
-                      color: SkifluxColors.contentTertiary,
-                      size: SkifluxSpacing.spaceL,
-                    ),
-                    child: trailingIcon!,
-                  )
-                : null,
+            prefixIcon: _affix(leadingIcon),
+            suffixIcon: _affix(trailingIcon),
             border: _border(
               SkifluxColors.borderSecondary,
               SkifluxBorderWidth.xs,
@@ -155,6 +139,26 @@ class SkifluxInputField extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+
+  /// A prefix/suffix slot for the field.
+  ///
+  /// [InputDecoration] gives these slots a 48×48 minimum, and a widget that
+  /// does not centre itself inside that box is pinned to its top-left corner.
+  /// An [Icon] happens to centre (it wraps its glyph in a [Center]); a [Text],
+  /// or anything in a [Padding], does not — which is why the withdraw field's
+  /// trailing "Coins" label sat against the top edge instead of on the
+  /// baseline of the amount. [Center] with `widthFactor: 1` centres vertically
+  /// while still letting the slot hug its child's width.
+  static Widget? _affix(Widget? child) {
+    if (child == null) return null;
+    return IconTheme(
+      data: const IconThemeData(
+        color: SkifluxColors.contentTertiary,
+        size: SkifluxSpacing.spaceL,
+      ),
+      child: Center(widthFactor: 1, child: child),
     );
   }
 

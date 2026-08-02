@@ -66,7 +66,10 @@ class DownloadQualityScreen extends ConsumerWidget {
                   iconColor: SkifluxColors.contentBrand,
                   title: 'Used storage',
                   trailing: Text(
-                    _formatStorage(ref.watch(downloadsProvider).length),
+                    // Real bytes on disk. This was `count × 112 MB`.
+                    formatBytes(
+                      ref.watch(downloadsProvider.notifier).totalBytes,
+                    ),
                     style: SkifluxTypography.bodyP10Regular.copyWith(
                       color: SkifluxColors.contentTertiary,
                     ),
@@ -98,17 +101,11 @@ class DownloadQualityScreen extends ConsumerWidget {
     );
   }
 
-  String _formatStorage(int count) {
-    final mb = count * 112;
-    if (mb == 0) return '0 B';
-    if (mb >= 1000) return '${(mb / 1000).toStringAsFixed(1)} GB';
-    return '$mb MB';
-  }
-
   Future<void> _clearAll(BuildContext context, WidgetRef ref) async {
     final count = ref.read(downloadsProvider).length;
-    final mb = count * 112;
-    final sizeStr = mb >= 1000 ? '${(mb / 1000).toStringAsFixed(1)} GB' : '$mb MB';
+    final sizeStr = formatBytes(
+      ref.read(downloadsProvider.notifier).totalBytes,
+    );
 
     final confirmed = await showConfirmSheet(
       context,
@@ -116,12 +113,14 @@ class DownloadQualityScreen extends ConsumerWidget {
       message: count == 0
           ? 'You have no downloaded episodes to clear.'
           : 'Are you sure you want to delete $sizeStr of downloaded '
-            'episodes? You will need to download them again to watch offline.',
+                'episodes? You will need to download them again to watch '
+                'offline.',
       confirmLabel: 'Clear download',
       icon: RemixIcons.delete_bin_fill,
     );
     if (confirmed != true || !context.mounted) return;
-    ref.read(downloadsProvider.notifier).clearAll();
+    await ref.read(downloadsProvider.notifier).clearAll();
+    if (!context.mounted) return;
     await showSuccessSheet(
       context,
       title: 'Downloads Cleared',

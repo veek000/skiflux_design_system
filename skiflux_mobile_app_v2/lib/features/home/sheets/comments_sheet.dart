@@ -5,21 +5,33 @@ import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../../shared/error_handling/error_display.dart';
 import '../../../shared/error_handling/error_handler.dart';
+import '../../../shared/sheets/confirm_sheet.dart';
 import '../../../shared/sheets/skiflux_sheet.dart';
+import '../../../shared/toast/skiflux_toast.dart';
 import '../../../shared/widgets/load_failure.dart';
+import '../../../shared/widgets/loading_skeletons.dart';
+import '../../../shared/widgets/network_image.dart';
 import '../data/comments_store.dart';
+import '../data/voice_note_cache.dart';
+import 'report_comment_sheet.dart';
 
 /// Figma: **Home & In-app Flow 10 / 09** (`198:13767`, `848:39525`)
 ///
 /// Comments bottom sheet — comment list + compose bar. The compose bar
 /// switches to its recording state via the mic button (`848:39483`); a
 /// sent recording uploads as a multipart `audio_file` and stays in the list
-/// as a real playable voicenote only if the upload succeeds.
+/// as a real playable voicenote only if the upload succeeds. A note that came
+/// back from the server is downloaded to the app cache first (see
+/// [voiceNoteCacheProvider]) — the player takes a path, never a URL.
 ///
 /// Header count comes from the backend total, not a hardcoded number.
 /// Thumb-up posts the real `POST /comments/like` toggle; Reply posts to
-/// `POST /comments/{id}/reply/`. Author taps are disabled because the
-/// `EpisodeComment` payload carries no username/user id to navigate with.
+/// `POST /comments/{id}/reply/`. On the user's own rows, Edit reuses the
+/// compose bar (prefilled) against `PATCH /comments/{id}/` and Delete confirms
+/// before `DELETE /comments/{id}/`; on everyone else's, thumb-down asks for a
+/// category and posts `POST /comments/{id}/report/`. Author taps are disabled
+/// because the `EpisodeComment` payload carries no username/user id to
+/// navigate with.
 Future<void> showCommentsSheet(BuildContext context, String episodeId) {
   return showSkifluxSheet(
     context: context,
@@ -37,6 +49,11 @@ class _CommentsSheet extends ConsumerStatefulWidget {
 
 class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
   final TextEditingController _controller = TextEditingController();
+
+  /// The row being edited, if any. Editing borrows the compose bar rather than
+  /// adding a second text field, so this is what tells `_sendComment` to
+  /// `PATCH` an existing comment instead of posting a new one.
+  CommentItem? _editing;
 
   @override
   void initState() {
@@ -72,10 +89,29 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
     }
   }
 
+  /// The compose bar could not record. Returns it to idle so the user isn't
+  /// left staring at a recording UI that will never produce a note.
+  void _reportRecordingFailure(String reason) {
+    if (!mounted) return;
+    ref.read(commentsProvider.notifier).setComposeState(
+          SkifluxComposeState.idle,
+        );
+    SkifluxToast.error(context, reason);
+  }
+
   Future<void> _sendComment() async {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
+    final editing = _editing;
     try {
+      if (editing != null) {
+        await ref.read(commentsProvider.notifier).editComment(editing, text);
+        if (mounted) {
+          setState(() => _editing = null);
+          _controller.clear();
+        }
+        return;
+      }
       await ref.read(commentsProvider.notifier).addMessage(text);
       if (mounted) _controller.clear();
     } catch (e, st) {
@@ -93,6 +129,64 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
     }
   }
 
+  /// Load [comment]'s text into the compose bar. A reply in progress is
+  /// cancelled first — the bar can only be doing one of the two.
+  void _startEdit(CommentItem comment) {
+    ref.read(commentsProvider.notifier).cancelReply();
+    setState(() => _editing = comment);
+    _controller
+      ..text = comment.message ?? ''
+      ..selection = TextSelection.collapsed(
+        offset: _controller.text.length,
+      );
+  }
+
+  void _cancelEdit() {
+    setState(() => _editing = null);
+    _controller.clear();
+  }
+
+  Future<void> _deleteComment(CommentItem comment) async {
+    final confirmed = await showConfirmSheet(
+      context,
+      title: 'Delete comment?',
+      message: comment.replies.isEmpty
+          ? 'This removes your comment for everyone. It cannot be undone.'
+          : 'This removes your comment and its replies for everyone. It '
+                'cannot be undone.',
+      confirmLabel: 'Delete',
+      icon: RemixIcons.delete_bin_6_fill,
+    );
+    if (confirmed != true || !mounted) return;
+    // A row being edited that is now gone would leave the compose bar
+    // patching a deleted comment.
+    if (_editing?.id == comment.id) _cancelEdit();
+    try {
+      await ref.read(commentsProvider.notifier).deleteComment(comment);
+      if (mounted) SkifluxToast.success(context, 'Comment deleted');
+    } catch (e, st) {
+      if (!mounted) return;
+      // Includes the rejection an incorrect ownership guess earns; the row
+      // comes back and the user is told, rather than it silently reappearing.
+      await ErrorDisplay.show(context, ref, e, stackTrace: st);
+    }
+  }
+
+  Future<void> _reportComment(CommentItem comment) async {
+    final category = await showReportCommentSheet(context);
+    if (category == null || !mounted) return;
+    try {
+      await ref.read(commentsProvider.notifier).reportComment(
+            comment,
+            category,
+          );
+      if (mounted) SkifluxToast.success(context, 'Thanks for your report');
+    } catch (e, st) {
+      if (!mounted) return;
+      await ErrorDisplay.show(context, ref, e, stackTrace: st);
+    }
+  }
+
   Future<void> _toggleLike(CommentItem comment) async {
     try {
       await ref.read(commentsProvider.notifier).toggleCommentLike(comment);
@@ -100,6 +194,17 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
       if (!mounted) return;
       await ErrorDisplay.show(context, ref, e, stackTrace: st);
     }
+  }
+
+  /// A voice note whose audio can't be prepared. The row has already fallen
+  /// back to static bars; this says why, once, and clears any playing flag so
+  /// the play button doesn't sit stuck showing pause.
+  void _reportPlaybackFailure(int index, Object error) {
+    if (!mounted) return;
+    if (ref.read(commentsProvider).playingIndex == index) {
+      ref.read(commentsProvider.notifier).clearPlaying();
+    }
+    SkifluxToast.error(context, "That voice note couldn't be played");
   }
 
   @override
@@ -114,9 +219,16 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Flexible(child: _list(session, notifier)),
-          if (session.replyingTo != null)
-            _ReplyingToBar(
-              target: session.replyingTo!,
+          if (_editing != null)
+            _ComposeContextBar(
+              icon: RemixIcons.edit_2_line,
+              label: 'Editing your comment',
+              onCancel: _cancelEdit,
+            )
+          else if (session.replyingTo != null)
+            _ComposeContextBar(
+              icon: RemixIcons.reply_line,
+              label: 'Replying to ${session.replyingTo!.authorName}',
               onCancel: notifier.cancelReply,
             ),
           Padding(
@@ -126,11 +238,22 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
             child: SkifluxComposeBar(
               state: session.composeState,
               controller: _controller,
-              onMicTap: () =>
-                  notifier.setComposeState(SkifluxComposeState.recording),
+              hintText: _editing != null
+                  ? 'Edit your comment...'
+                  : 'Add a comment...',
+              // Recording a voice note mid-edit would send a new comment
+              // rather than change the one being edited.
+              onMicTap: _editing != null
+                  ? null
+                  : () =>
+                        notifier.setComposeState(SkifluxComposeState.recording),
               onDeleteTap: () =>
                   notifier.setComposeState(SkifluxComposeState.idle),
               onSendVoiceNote: _sendVoiceNote,
+              // A refused mic grant (or a capture that produced nothing) used
+              // to leave the bar showing a flat waveform and the send button
+              // doing nothing at all. Say what happened and put the bar back.
+              onRecordingFailed: _reportRecordingFailure,
               onSend: _sendComment,
             ),
           ),
@@ -141,10 +264,9 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
 
   Widget _list(CommentsState session, CommentsNotifier notifier) {
     if (session.isLoading && session.comments.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(SkifluxSpacing.space2xl),
-        child: Center(child: CircularProgressIndicator()),
-      );
+      // Avatar, then the name over the comment body — the shape of the rows
+      // that follow, so the compose bar doesn't jump when they arrive.
+      return const ListRowSkeleton(rows: 5);
     }
     if (session.error != null && session.comments.isEmpty) {
       return Padding(
@@ -193,27 +315,48 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
   ) {
     final data = session.comments[index];
     final isVoice = data.body == SkifluxCommentBody.voicenote;
-    // Only locally recorded notes have a playable file; remote voice notes
-    // render the static row (the widget can't stream a URL yet).
-    final playable = isVoice && data.audioPath != null;
+    // A note recorded this session already has a local file. One reloaded from
+    // the server arrives as a URL, so it is downloaded into the app cache and
+    // played from there — the player takes a path, never a URL.
+    final remoteUrl = data.audioPath == null ? data.audioUrl : null;
+    final cached = isVoice && remoteUrl != null
+        ? ref.watch(voiceNoteCacheProvider(remoteUrl)).value
+        : null;
+    final audioPath = data.audioPath ?? cached;
+    final playable = isVoice && audioPath != null;
+    final isOwn = data.author == SkifluxCommentAuthor.own;
+    // Every write needs a confirmed backend id; optimistic rows have none yet.
+    final confirmed = data.id != null;
     final Widget comment = SkifluxComment(
       authorName: data.authorName,
       handle: data.handle,
       author: data.author,
       body: data.body,
       message: data.message,
-      audioPath: data.audioPath,
-      avatarImage:
-          data.avatarUrl != null ? NetworkImage(data.avatarUrl!) : null,
+      audioPath: audioPath,
+      avatarImage: data.avatarUrl != null
+          ? skifluxImageProvider(data.avatarUrl!)
+          : null,
       timeLabel: data.timeLabel,
       playing: playable && session.playingIndex == index,
       onPlayToggle: playable ? () => notifier.togglePlay(index) : null,
       onPlaybackComplete: playable ? notifier.clearPlaying : null,
-      // Reply needs a confirmed backend id (optimistic rows have none yet).
-      onReply: data.id != null ? () => notifier.startReply(data) : null,
-      // `POST /comments/like` is the thumb-up toggle. There is no dislike
-      // endpoint, so thumb-down stays inert.
-      onThumbUp: data.id != null ? () => _toggleLike(data) : null,
+      // A note that can't be prepared used to fail silently — static bars, no
+      // sound, no explanation.
+      onPlaybackError: (error) => _reportPlaybackFailure(index, error),
+      onReply: confirmed ? () => notifier.startReply(data) : null,
+      // `POST /comments/like` is the thumb-up toggle. The count travels with
+      // it: `like_count` was parsed and kept in sync through every optimistic
+      // flip, and then never rendered anywhere.
+      liked: data.isLiked,
+      likeCount: data.likeCount,
+      onThumbUp: confirmed ? () => _toggleLike(data) : null,
+      // Thumb-down reports. Own rows don't render it at all (the DS hides it),
+      // and a voice note has no text to edit.
+      onThumbDown:
+          confirmed && !isOwn ? () => _reportComment(data) : null,
+      onEdit: confirmed && isOwn && !isVoice ? () => _startEdit(data) : null,
+      onDelete: confirmed && isOwn ? () => _deleteComment(data) : null,
       // No username/user id on the payload → no honest profile to open.
       onAuthorTap: null,
     );
@@ -226,12 +369,18 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
   }
 }
 
-/// One-line "Replying to {name}" strip over the compose bar, with a cancel
-/// affordance — without it, Reply would silently reroute the next send.
-class _ReplyingToBar extends StatelessWidget {
-  const _ReplyingToBar({required this.target, required this.onCancel});
+/// One-line strip over the compose bar naming what the next send will do —
+/// "Replying to {name}" or "Editing your comment" — with a cancel affordance.
+/// Without it, Reply (or Edit) would silently reroute the next send.
+class _ComposeContextBar extends StatelessWidget {
+  const _ComposeContextBar({
+    required this.icon,
+    required this.label,
+    required this.onCancel,
+  });
 
-  final CommentItem target;
+  final IconData icon;
+  final String label;
   final VoidCallback onCancel;
 
   @override
@@ -245,15 +394,15 @@ class _ReplyingToBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(
-            RemixIcons.reply_line,
+          Icon(
+            icon,
             size: SkifluxIcons.sizeS,
             color: SkifluxColors.contentTertiary,
           ),
           const SizedBox(width: SkifluxSpacing.spaceS),
           Expanded(
             child: Text(
-              'Replying to ${target.authorName}',
+              label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: SkifluxTypography.bodyP11Regular.copyWith(

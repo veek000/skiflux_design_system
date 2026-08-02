@@ -7,7 +7,9 @@ import '../../shared/error_handling/error_handler.dart';
 import '../../shared/sheets/share_sheet.dart';
 import '../../shared/sheets/skiflux_sheet.dart';
 import '../../shared/toast/skiflux_toast.dart';
+import '../../shared/widgets/clear_all_action.dart';
 import '../../shared/widgets/load_failure.dart';
+import 'data/download_action.dart';
 import 'data/library_episode.dart';
 import 'data/library_repository.dart';
 import 'data/library_store.dart';
@@ -53,14 +55,8 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
           onPressed: () => Navigator.of(context).pop(),
         ),
         // "Clear all" in negative red (1256:24238).
-        trailing: TextButton(
+        trailing: ClearAllAction(
           onPressed: loaded.isEmpty ? null : _clearAll,
-          child: Text(
-            'Clear all',
-            style: SkifluxTypography.uiButtonMedium.copyWith(
-              color: SkifluxColors.contentNegative,
-            ),
-          ),
         ),
       ),
       body: SafeArea(
@@ -185,13 +181,15 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
       case WatchHistoryMenuAction.remove:
         await _remove(entry);
       case WatchHistoryMenuAction.download:
-        // TODO(backend, blocking): no offline download pipeline exists — this
-        // only acknowledges the tap — expects: a download URL + local store
-        SkifluxToast.info(context, 'Episode queued for download');
+        await downloadEpisode(context, ref, entry.episode);
       case WatchHistoryMenuAction.save:
         await _save(entry.episode);
       case WatchHistoryMenuAction.share:
-        await showShareSheet(context);
+        await showShareSheet(
+          context,
+          title: '${entry.episode.epTag} · ${entry.episode.title}',
+          url: shareableMediaUrl(entry.episode.videoUrl),
+        );
     }
   }
 

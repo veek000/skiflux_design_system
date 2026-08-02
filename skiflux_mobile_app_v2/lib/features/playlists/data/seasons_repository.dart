@@ -28,15 +28,61 @@ class SeasonsRepository extends ApiRepository {
   /// Returns season shells with **no episodes**; the list endpoint carries a
   /// count, not the rows. Call [getSeasonEpisodes] to fill one in.
   //
-  // TODO(backend, minor): `GET /seasons` filters by skillworld only, so a
-  // creator's Playlists tab still has no source — expects: a `creator` query
-  // param on GET /seasons, or GET /creators/{creator_id}/seasons/
+  // TODO(backend, minor): `GET /seasons` takes only `skillworld`, so a
+  // creator's Playlists tab and Recent section have to walk the whole catalogue
+  // and filter on the device — matching on `creator.id` *or* `creator.username`
+  // because `PublicCreatorProfile.id` and `SeasonList.creator.id` are not
+  // guaranteed to agree, and paging because page one alone made creators
+  // further down read as "no uploads yet". Both go away with a server-side
+  // filter. Expects: `GET /seasons?creator={creator_id}`, or
+  // `GET /creators/{creator_id}/seasons/`.
+  //
+  // TODO(backend, minor): there is no `GET /seasons/{season_id}` detail
+  // endpoint, only the episodes sub-resource, so a season's title and cover
+  // must be carried in by whoever navigates to it. A deep link into a season
+  // cannot render its own header.
   Future<List<Playlist>> getSeasons({String? skillworld}) => getList(
     '/seasons',
     parse: seasonJsonToPlaylist,
     // ignore: use_null_aware_elements
     query: {if (skillworld != null) 'skillworld': skillworld},
   );
+
+  /// The catalogue across pages, for the creator-scoped filters that have no
+  /// server-side filter to use.
+  ///
+  /// [getSeasons] returns page one only, so a creator whose seasons sit further
+  /// down read as having no uploads — one of the causes of the empty Recent and
+  /// Playlists tabs. Paging is capped at [maxPages] because this walks the whole
+  /// catalogue to find one creator's rows; when the cap is hit the result is
+  /// knowingly partial, and the caller's diagnostic says as much.
+  ///
+  /// The spec declares `GET /seasons` as a bare array, so a response with no
+  /// `next` simply yields a single page and stops.
+  Future<List<Playlist>> getAllSeasons({
+    String? skillworld,
+    int maxPages = 5,
+    int limit = 100,
+  }) async {
+    final all = <Playlist>[];
+    for (var offset = 0, page = 0; page < maxPages; page++) {
+      final result = await getPage(
+        '/seasons',
+        parse: seasonJsonToPlaylist,
+        query: {
+          // ignore: use_null_aware_elements
+          if (skillworld != null) 'skillworld': skillworld,
+          'limit': limit,
+          'offset': offset,
+        },
+      );
+      all.addAll(result.results);
+      // No `next` (or an unpaginated bare array) means this was everything.
+      if (!result.hasMore || result.results.isEmpty) break;
+      offset += result.results.length;
+    }
+    return List.unmodifiable(all);
+  }
 
   /// `GET /seasons/{season_id}/episodes` — the rows, with their lock state.
   Future<List<PlaylistEpisode>> getSeasonEpisodes(String seasonId) => getList(
@@ -56,8 +102,10 @@ Playlist seasonJsonToPlaylist(Map<String, dynamic> json) {
   final creator = json['creator'];
   var creatorName = '';
   var creatorUsername = '';
+  String? creatorId;
   if (creator is Map) {
     final c = Map<String, dynamic>.from(creator);
+    creatorId = _string(c['id']);
     creatorUsername = _string(c['username']) ?? '';
     creatorName =
         _string(c['display_name']) ??
@@ -79,6 +127,11 @@ Playlist seasonJsonToPlaylist(Map<String, dynamic> json) {
     declaredEpisodeCount: _int(json['episode_count']),
     // No view count on `SeasonList`; an invented one would be worse than none.
     viewsLabel: '',
+    // The creator UUID is what the profile filters seasons by, and what the
+    // playlist header navigates to. Dropping it is why the playlist screen
+    // used to hand a username to a route that wanted an id.
+    creatorId: creatorId,
+    skillworld: _string(json['skillworld']),
   );
 }
 
@@ -99,6 +152,14 @@ PlaylistEpisode episodeJsonToPlaylistEpisode(Map<String, dynamic> json) {
     state: locked
         ? PlaylistEpisodeState.locked
         : PlaylistEpisodeState.unlocked,
+    skillworld: _string(json['skillworld']),
+    viewCount: _int(json['view_count']),
+    createdAt: DateTime.tryParse(_string(json['created_at']) ?? '')?.toLocal(),
+    thumbnailUrl:
+        _string(json['thumbnail_url']) ?? _string(json['preview_url']),
+    // Both are required on `Episode`; a locked row may still carry only the
+    // preview, which is the right thing to play in that case.
+    videoUrl: _string(json['video_url']) ?? _string(json['preview_url']),
   );
 }
 

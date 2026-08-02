@@ -1,7 +1,11 @@
 /// Streak state backing the Streaks screen (Figma Streak Flow `3092:14400`).
 ///
-/// [StreaksNotifier.refreshFromBackend] loads `GET /me/streak`; the demo seed
-/// remains the offline fallback, same arrangement as `wallet_store`.
+/// [StreaksNotifier.refreshFromBackend] loads `GET /me/streak`. There is no
+/// fallback snapshot: the store used to seed four weeks of 2029 demo history
+/// and keep it on screen when the request failed, so a user with no streak —
+/// or no network — was shown a 7-day run and a "May 20th - 26th" week that
+/// had never happened. It now starts empty and loading, and a failed refresh
+/// surfaces [StreaksState.error] for the screen to retry from.
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -51,8 +55,10 @@ class StreakWeek {
   /// computed [label] so client and API never disagree on the wording.
   final String? labelOverride;
 
-  /// Whether this week is the demo "current" week ([currentStart]).
-  bool isCurrentFor(DateTime currentStart) => sameDay(start, currentStart);
+  /// Whether this week is the one the API reported as current. Null start
+  /// (no week loaded at all) is never "current".
+  bool isCurrentFor(DateTime? currentStart) =>
+      currentStart != null && sameDay(start, currentStart);
 
   /// Week-range pill label, e.g. "May 20th - 26th" / "Apr 29th - May 5th".
   String get label {
@@ -109,6 +115,7 @@ class StreaksState {
     this.celebrated = false,
     this.fromBackend = false,
     this.loading = false,
+    this.error,
   });
 
   final int streak;
@@ -119,12 +126,19 @@ class StreaksState {
   final List<StreakWeek> history;
   final bool celebrated;
 
-  /// True once `GET /me/streak` has answered. While false the screen is
-  /// showing the demo seed.
+  /// True once `GET /me/streak` has answered. While false there is nothing
+  /// real on screen yet — the screen shows a skeleton, an error or an empty
+  /// state rather than numbers.
   final bool fromBackend;
   final bool loading;
 
-  StreakWeek get currentWeek => history.last;
+  /// Why the last refresh failed, if it did. Cleared by a successful load.
+  final Object? error;
+
+  /// The week the API reported, or null before it has answered. Nullable on
+  /// purpose: `history.last` on an empty list is what forced the demo seed to
+  /// exist in the first place.
+  StreakWeek? get currentWeek => history.isEmpty ? null : history.last;
 
   /// The tracked week whose Sun–Sat range contains [day], if any.
   StreakWeek? weekContaining(DateTime day) {
@@ -139,7 +153,14 @@ class StreaksState {
     return null;
   }
 
-  StreaksState copyWith({bool? celebrated, bool? loading}) {
+  /// [clearError] is separate from `error:` because passing null to a
+  /// nullable named parameter cannot be told apart from omitting it.
+  StreaksState copyWith({
+    bool? celebrated,
+    bool? loading,
+    Object? error,
+    bool clearError = false,
+  }) {
     return StreaksState(
       streak: streak,
       bestStreak: bestStreak,
@@ -150,6 +171,7 @@ class StreaksState {
       celebrated: celebrated ?? this.celebrated,
       fromBackend: fromBackend,
       loading: loading ?? this.loading,
+      error: clearError ? null : (error ?? this.error),
     );
   }
 }
@@ -163,87 +185,57 @@ class StreaksState {
 // expects: history: List<{start_date: Date, end_date: Date, label: String,
 // days: List<StreakWeekDay>}>
 class StreaksNotifier extends Notifier<StreaksState> {
-  static const _completed = StreakDayState.completed;
-  static const _missed = StreakDayState.missed;
-
   @override
   StreaksState build() {
-    // Streak 7 matches Figma Streak Screen 03/04 so the 7-day milestone
-    // celebration is reachable. Four weeks of demo history, newest last
-    // (= the current week). Year 2029 puts May 20 on a Sunday, matching
-    // the Figma "May 20th - 27th" label against the Sun-first tracker.
-    // Current week: Sun–Fri completed, Sat ahead. (Figma screen 03's Sat
-    // cell reads "5" — an authoring slip; the real next streak number
-    // after 7 is 8.) The May 13 week ends completed so today's streak of
-    // 7 adds up (Sat + Sun–Fri).
-    return StreaksState(
-      streak: 7,
-      bestStreak: 14,
-      xpEarned: 240,
-      milestone: 7,
-      milestoneXp: 50,
-      history: [
-        StreakWeek(DateTime(2029, 4, 29), const [
-          StreakDay('Sun', _completed),
-          StreakDay('Mon', _completed),
-          StreakDay('Tue', _completed),
-          StreakDay('Wed', _completed),
-          StreakDay('Thu', _completed),
-          StreakDay('Fri', _completed),
-          StreakDay('Sat', _completed),
-        ]),
-        StreakWeek(DateTime(2029, 5, 6), const [
-          StreakDay('Sun', _completed),
-          StreakDay('Mon', _completed),
-          StreakDay('Tue', _completed),
-          StreakDay('Wed', _completed),
-          StreakDay('Thu', _completed),
-          StreakDay('Fri', _completed),
-          StreakDay('Sat', _missed),
-        ]),
-        StreakWeek(DateTime(2029, 5, 13), const [
-          StreakDay('Sun', _missed),
-          StreakDay('Mon', _completed),
-          StreakDay('Tue', _completed),
-          StreakDay('Wed', _missed),
-          StreakDay('Thu', _completed),
-          StreakDay('Fri', _completed),
-          StreakDay('Sat', _completed),
-        ]),
-        StreakWeek(DateTime(2029, 5, 20), const [
-          StreakDay('Sun', _completed),
-          StreakDay('Mon', _completed),
-          StreakDay('Tue', _completed),
-          StreakDay('Wed', _completed),
-          StreakDay('Thu', _completed),
-          StreakDay('Fri', _completed),
-          StreakDay('Sat', StreakDayState.future, 8),
-        ]),
-      ],
+    // Empty and loading. Every figure below is the user's own, or nothing:
+    // a streak, a best streak and an XP total are claims about what someone
+    // did, and there is no honest placeholder for that.
+    return const StreaksState(
+      streak: 0,
+      bestStreak: 0,
+      xpEarned: 0,
+      milestone: 0,
+      milestoneXp: 0,
+      history: [],
+      loading: true,
     );
   }
 
   /// The milestone sheet shows once per session, when the Streaks screen
   /// first opens with the milestone reached.
   bool consumeCelebration() {
+    // `milestone` is 0 until the API answers, and `0 < 0` is false — without
+    // this guard an empty or failed load would celebrate a streak of zero.
+    if (state.milestone <= 0) return false;
     if (state.celebrated || state.streak < state.milestone) return false;
     state = state.copyWith(celebrated: true);
     return true;
   }
 
-  /// Loads `GET /me/streak`. Keeps the current (demo or prior) snapshot on
-  /// failure so the screen never empties out — same contract as
-  /// `WalletNotifier.refreshFromBackend`.
+  /// Loads `GET /me/streak`.
+  ///
+  /// A failure records [StreaksState.error] and stops loading. It used to be
+  /// swallowed, which left the demo seed on screen — the user then read four
+  /// weeks of 2029 history as their own. Nothing is retained now; the screen
+  /// shows the failure and a retry.
   Future<void> refreshFromBackend() async {
-    if (state.loading) return;
-    state = state.copyWith(loading: true);
+    // `state.loading` starts true now, so re-entrancy is tracked separately
+    // rather than read off the snapshot — otherwise the first call would see
+    // its own initial loading flag and return without fetching anything.
+    if (_inFlight) return;
+    _inFlight = true;
+    state = state.copyWith(loading: true, clearError: true);
     try {
       final summary = await ref.read(streaksRepositoryProvider).getStreak();
       state = _fromSummary(summary, celebrated: state.celebrated);
-    } catch (_) {
-      state = state.copyWith(loading: false);
+    } catch (e) {
+      state = state.copyWith(loading: false, error: e);
+    } finally {
+      _inFlight = false;
     }
   }
+
+  bool _inFlight = false;
 
   /// Adapts the wire [wire.StreakSummary] onto the screen's view model.
   ///

@@ -6,6 +6,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/widgets/load_failure.dart';
+import '../../shared/widgets/network_image.dart';
 import 'data/leaderboard_store.dart';
 
 // Figma: **Profile Flow 01** (`1256:25612`) — Leaderboard screen.
@@ -23,10 +24,17 @@ class LeaderboardScreen extends ConsumerWidget {
   /// podium bottom y565.92 − card top y538, in 361-frame units).
   static const double cardOverlap = 27.92;
 
-  /// The least the rank card may be squeezed to: its header plus about two
-  /// rows. Below this the podium gives ground instead, because a card with a
-  /// negative height is a layout assertion rather than a tight design.
+  /// The rank card's comfortable height: its header plus about two rows.
   static const double minRankCardHeight = 200;
+
+  /// The least the rank card may be squeezed to before anything else gives:
+  /// its header plus a single row.
+  ///
+  /// The card is a scroll view, so height only costs it visible rows — which
+  /// makes it the right thing to squeeze first, ahead of the podium. Only once
+  /// the card is down to this does the podium begin to scale, and even then it
+  /// is clamped (see `_Board._minPodiumScale`).
+  static const double minRankCardFloor = 120;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -106,78 +114,54 @@ class _Board extends StatelessWidget {
         final rise = _Podium.columnRiseFor(context);
         final natural = _Podium.heightAt(scale, rise);
 
-        // On a short screen the podium yields rather than pushing the rank
-        // card to a negative height. Shrinking the whole group uniformly
-        // keeps every clearance inside it proportional, so nothing that fits
-        // at full size can start overlapping at reduced size.
-        final budget = math.max(
-          0.0,
-          constraints.maxHeight - LeaderboardScreen.minRankCardHeight,
-        );
-        final shrink = natural <= budget || natural == 0
-            ? 1.0
-            : budget / natural;
-        final drawn = natural * shrink;
+        // Who yields on a short screen — and now only one thing does.
+        //
+        // The rank table is a scroll view, so losing height costs it visible
+        // rows and nothing else. The podium cannot give ground the same way: it
+        // is one fixed composition, and scaling it shrinks the type inside the
+        // columns along with the art, which is how the 1st-place XP line ended
+        // up sitting on the podium in the first place.
+        //
+        // So the podium is drawn at its natural size, always. The table takes
+        // whatever is left; once that is down to [minRankCardFloor] the whole
+        // board scrolls. Previously the podium was scaled to protect the table
+        // — first to a ruinous 0.09, then clamped to 0.72 — and a clamped
+        // shrink is still a shrink: at 0.72 the labels closed the gap onto the
+        // step on exactly the short screens the clamp was meant to rescue.
+        final drawn = natural;
 
-        return Stack(
+        final board = Stack(
           children: [
             Positioned(
               top: 0,
               left: SkifluxSpacing.spaceL,
               right: SkifluxSpacing.spaceL,
               height: drawn,
-              child: _ShrinkToFit(
-                naturalHeight: natural,
-                scale: shrink,
-                child: _Podium(board: board, rise: rise),
-              ),
+              child: _Podium(board: this.board, rise: rise),
             ),
             Positioned(
               // Figma overlap: 565.92 − 538 ≈ 28 (scaled).
-              top: drawn - LeaderboardScreen.cardOverlap * scale * shrink,
+              top: drawn - LeaderboardScreen.cardOverlap * scale,
               left: SkifluxSpacing.spaceL,
               right: SkifluxSpacing.spaceL,
               bottom: 0,
-              child: _RankTable(board: board),
+              child: _RankTable(board: this.board),
             ),
           ],
         );
+
+        // The table has stopped being usable — scroll rather than squeeze the
+        // podium. The table starts below the fold, which is recoverable; a
+        // podium with its labels on the art is not.
+        final wanted = drawn + LeaderboardScreen.minRankCardFloor;
+        if (wanted <= constraints.maxHeight) return board;
+
+        // The Stack needs a definite height: inside a scroll view the table's
+        // `bottom: 0` has nothing to resolve against.
+        return SingleChildScrollView(
+          child: SizedBox(height: wanted, child: board),
+        );
       },
-    );
-  }
-}
-
-/// Lays [child] out at [naturalHeight] and draws it at [scale], anchored to
-/// the bottom so the podium stays sitting on the rank card's top edge.
-///
-/// [Transform.scale] alone does not change the space a child takes, and
-/// `FittedBox` would re-measure the child under unbounded constraints — which
-/// the podium cannot answer, since its geometry is width-driven.
-class _ShrinkToFit extends StatelessWidget {
-  const _ShrinkToFit({
-    required this.naturalHeight,
-    required this.scale,
-    required this.child,
-  });
-
-  final double naturalHeight;
-  final double scale;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    if (scale >= 1) return child;
-    return ClipRect(
-      child: OverflowBox(
-        alignment: Alignment.bottomCenter,
-        minHeight: naturalHeight,
-        maxHeight: naturalHeight,
-        child: Transform.scale(
-          scale: scale,
-          alignment: Alignment.bottomCenter,
-          child: child,
-        ),
-      ),
     );
   }
 }
@@ -309,6 +293,17 @@ class _Podium extends StatelessWidget {
   /// (`_CrownBadge` is offset by `-spaceM` inside an unclipped Stack).
   static const double _crownOverhang = SkifluxSpacing.spaceM;
 
+  /// The gap between the XP line and the step it stands on.
+  ///
+  /// Deliberately a constant in logical pixels rather than a scaled fraction:
+  /// the labels are laid out in logical pixels too, so a gap that scaled with
+  /// the art would close exactly where the text did not — which is what the
+  /// 1st-place XP line touching the podium was. Also deliberately larger than
+  /// the 4 the Figma frame implies: that 4 is measured against the step's flat
+  /// top face, while the SVG's leading edge (what [_firstStep] resolves to) is
+  /// the front of the bevel, a few pixels below where the label visually lands.
+  static const double stepClearance = SkifluxSpacing.spaceM;
+
   /// Everything in a column that is *not* the two text lines: the crown's
   /// overhang, the 64px avatar, the gap under it, the gap between the two
   /// lines, and the clearance that keeps the XP off the step's bevel.
@@ -317,7 +312,7 @@ class _Podium extends StatelessWidget {
       SkifluxUnit.u64 +
       SkifluxSpacing.spaceS +
       SkifluxSpacing.spaceXs +
-      SkifluxSpacing.spaceXs;
+      stepClearance;
 
   /// The exact height of a podium column above its step, for the text metrics
   /// in force in [context].
@@ -481,8 +476,8 @@ class _PodiumColumn extends StatelessWidget {
           ),
         ),
         // Clears the step's leading edge so the XP line does not sit flush on
-        // the bevel it is standing on.
-        const SizedBox(height: SkifluxSpacing.spaceXs),
+        // the bevel it is standing on. See [_Podium.stepClearance].
+        const SizedBox(height: _Podium.stepClearance),
       ],
     );
   }
@@ -743,7 +738,7 @@ class _EntryAvatar extends StatelessWidget {
       style: hasPhoto ? SkifluxAvatarStyle.avatar : SkifluxAvatarStyle.initial,
       size: size,
       initials: entry.initials,
-      image: hasPhoto ? NetworkImage(url) : null,
+      image: hasPhoto ? skifluxImageProvider(url) : null,
     );
   }
 }

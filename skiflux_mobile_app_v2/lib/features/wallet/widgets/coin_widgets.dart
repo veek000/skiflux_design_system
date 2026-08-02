@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../playlists/data/playlists_store.dart';
+import '../data/models/saved_card.dart';
 
 // Shared money-flow widgets, used by both the Buy Coins modal sheet
 // (`home/sheets/buy_coins_sheet.dart`, Other Video Player Flow 04) and the
@@ -154,21 +155,51 @@ class CoinPackBadgePill extends StatelessWidget {
   }
 }
 
+/// The three ways the spec lets a user pay for a top-up.
+///
+/// The first two are hosted checkout (`POST /wallet/topup/initiate`), differing
+/// only in the `payment_method` restriction sent to the gateway. The third is
+/// `POST /wallet/topup/charge-card`, which the spec describes as "one-tap
+/// top-up… no checkout redirect needed" — a different endpoint and no WebView
+/// at all, which is why it cannot be a third value of the old boolean.
+enum TopupMethod {
+  card('card'),
+  bankTransfer('bank_transfer'),
+  savedCard(null);
+
+  const TopupMethod(this.wireValue);
+
+  /// `PaymentMethodEnum` value for `TopupInitiateRequest`, or null for the
+  /// saved-card path, which never calls initiate.
+  final String? wireValue;
+
+  bool get isHostedCheckout => wireValue != null;
+}
+
 /// Card / Bank Transfer payment picker (`1256:27722`). A bordered card with
-/// two selectable rows; [cardSelected] true → Card, false → Bank Transfer.
+/// selectable rows.
+///
+/// A saved card, when the vault holds one, is offered as a third row: it skips
+/// the gateway page entirely, so surfacing it beneath two rows that both open a
+/// WebView is the difference between one tap and a full checkout.
 class PaymentMethodSelector extends StatelessWidget {
   const PaymentMethodSelector({
     super.key,
-    required this.cardSelected,
+    required this.selected,
     required this.onChanged,
+    this.savedCard,
   });
 
-  /// true = Card Payment, false = Bank Transfer.
-  final bool cardSelected;
-  final ValueChanged<bool> onChanged;
+  final TopupMethod selected;
+  final ValueChanged<TopupMethod> onChanged;
+
+  /// The default saved card, or null when the vault is empty — in which case
+  /// no saved-card row is drawn at all.
+  final SavedCard? savedCard;
 
   @override
   Widget build(BuildContext context) {
+    final card = savedCard;
     return Container(
       decoration: BoxDecoration(
         borderRadius: SkifluxRadii.borderL,
@@ -180,18 +211,32 @@ class PaymentMethodSelector extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
+          if (card != null)
+            _row(
+              method: TopupMethod.savedCard,
+              selected: selected == TopupMethod.savedCard,
+              icon: RemixIcons.bank_card_fill,
+              iconBg: SkifluxColors.backgroundSelected,
+              iconColor: SkifluxColors.contentBrand,
+              label: card.maskedNumber.isNotEmpty
+                  ? card.maskedNumber
+                  : '•••• ${card.last4}',
+              // Names the actual advantage, not the mechanism.
+              sublabel: 'Pay instantly, no extra steps',
+              divider: true,
+            ),
           _row(
-            isCard: true,
-            selected: cardSelected,
+            method: TopupMethod.card,
+            selected: selected == TopupMethod.card,
             icon: RemixIcons.bank_card_2_fill,
             iconBg: SkifluxColors.backgroundSelected,
             iconColor: SkifluxColors.contentBrand,
-            label: 'Card Payment',
+            label: card != null ? 'Another card' : 'Card Payment',
             divider: true,
           ),
           _row(
-            isCard: false,
-            selected: !cardSelected,
+            method: TopupMethod.bankTransfer,
+            selected: selected == TopupMethod.bankTransfer,
             icon: RemixIcons.bank_fill,
             iconBg: SkifluxColors.backgroundInfoSubtle,
             iconColor: SkifluxColors.contentInfoBold,
@@ -204,16 +249,17 @@ class PaymentMethodSelector extends StatelessWidget {
   }
 
   Widget _row({
-    required bool isCard,
+    required TopupMethod method,
     required bool selected,
     required IconData icon,
     required Color iconBg,
     required Color iconColor,
     required String label,
     required bool divider,
+    String? sublabel,
   }) {
     return GestureDetector(
-      onTap: () => onChanged(isCard),
+      onTap: () => onChanged(method),
       behavior: HitTestBehavior.opaque,
       child: Container(
         padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
@@ -236,17 +282,34 @@ class PaymentMethodSelector extends StatelessWidget {
             ),
             const SizedBox(width: SkifluxSpacing.spaceL),
             Expanded(
-              child: Text(
-                label,
-                style: SkifluxTypography.headingH10Bold.copyWith(
-                  color: SkifluxColors.contentSecondary,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: SkifluxTypography.headingH10Bold.copyWith(
+                      color: SkifluxColors.contentSecondary,
+                    ),
+                  ),
+                  if (sublabel != null) ...[
+                    const SizedBox(height: SkifluxSpacing.space2xs),
+                    Text(
+                      sublabel,
+                      style: SkifluxTypography.bodyP11Regular.copyWith(
+                        color: SkifluxColors.contentTertiary,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
-            SkifluxRadio<bool>(
-              value: isCard,
-              groupValue: cardSelected,
-              onChanged: (v) => onChanged(v),
+            SkifluxRadio<TopupMethod>(
+              value: method,
+              groupValue: selected ? method : null,
+              onChanged: (v) => onChanged(method),
             ),
           ],
         ),

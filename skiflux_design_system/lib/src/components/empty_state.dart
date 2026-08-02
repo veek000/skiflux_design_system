@@ -21,37 +21,56 @@ class SkifluxEmptyState extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.message,
-  });
+  }) : _compact = false;
+
+  /// The same state at the scale a rail or card can hold.
+  ///
+  /// The full size assumes a screen to itself: 98px circle plus 48px of
+  /// vertical padding is taller than a horizontal rail, so an empty rail
+  /// either clipped the state or forced the rail to grow. Same content, half
+  /// the furniture — use [iconSizeCompact] for the icon passed in.
+  const SkifluxEmptyState.compact({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.message,
+  }) : _compact = true;
 
   final Widget icon;
   final String title;
   final String message;
 
+  final bool _compact;
+
   /// Circle diameter from Figma (`304:9491`).
   static const double _circleSize = 98;
+  static const double _circleSizeCompact = 64;
 
   /// Icon box inside the circle.
   static const double iconSize = 48;
+  static const double iconSizeCompact = 32;
 
   @override
   Widget build(BuildContext context) {
+    final circle = _compact ? _circleSizeCompact : _circleSize;
+    final glyph = _compact ? iconSizeCompact : iconSize;
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: SkifluxSpacing.space4xl),
+      padding: EdgeInsets.symmetric(
+        vertical: _compact ? SkifluxSpacing.spaceM : SkifluxSpacing.space4xl,
+      ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: _circleSize,
-            height: _circleSize,
+            width: circle,
+            height: circle,
             decoration: const BoxDecoration(
               color: SkifluxColors.brand100,
               shape: BoxShape.circle,
             ),
             child: Center(
-              child: SizedBox(
-                width: iconSize,
-                height: iconSize,
-                child: icon,
-              ),
+              child: SizedBox(width: glyph, height: glyph, child: icon),
             ),
           ),
           const SizedBox(height: SkifluxSpacing.spaceS),
@@ -60,21 +79,26 @@ class SkifluxEmptyState extends StatelessWidget {
               horizontal: SkifluxSpacing.spaceL,
             ),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   title,
                   textAlign: TextAlign.center,
-                  style: SkifluxTypography.headingH7Bold.copyWith(
-                    color: SkifluxColors.contentPrimary,
-                  ),
+                  style:
+                      (_compact
+                              ? SkifluxTypography.headingH9Bold
+                              : SkifluxTypography.headingH7Bold)
+                          .copyWith(color: SkifluxColors.contentPrimary),
                 ),
                 const SizedBox(height: SkifluxSpacing.spaceXs),
                 Text(
                   message,
                   textAlign: TextAlign.center,
-                  style: SkifluxTypography.bodyP8Regular.copyWith(
-                    color: SkifluxColors.contentTertiary,
-                  ),
+                  style:
+                      (_compact
+                              ? SkifluxTypography.bodyP11Regular
+                              : SkifluxTypography.bodyP8Regular)
+                          .copyWith(color: SkifluxColors.contentTertiary),
                 ),
               ],
             ),

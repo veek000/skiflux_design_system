@@ -8,6 +8,7 @@ import '../../shared/error_handling/error_display.dart';
 import '../../shared/error_handling/error_handler.dart';
 import '../../shared/utils/external_link.dart';
 import '../../shared/widgets/load_failure.dart';
+import '../../shared/widgets/loading_skeletons.dart';
 import '../notifications/notifications_screen.dart';
 import '../search/search_screen.dart';
 import '../subscriptions/subscriptions_screen.dart';
@@ -103,7 +104,34 @@ class _TasksBodyState extends ConsumerState<TasksBody> {
   Widget _learningSection(TasksState tasks, TasksNotifier notifier) {
     switch (tasks.learningSource) {
       case TaskSectionSource.loading:
-        return const Center(child: CircularProgressIndicator());
+        // Mirrors `_LearningList`: the filter-pill row, then the task rows.
+        return const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SkifluxSkeletonGroup(
+              child: SizedBox(
+                height: SkifluxUnit.u32,
+                child: Row(
+                  children: [
+                    SkifluxSkeleton(width: 72, radius: SkifluxRadii.pill),
+                    SizedBox(width: SkifluxSpacing.spaceS),
+                    SkifluxSkeleton(width: 96, radius: SkifluxRadii.pill),
+                    SizedBox(width: SkifluxSpacing.spaceS),
+                    SkifluxSkeleton(width: 88, radius: SkifluxRadii.pill),
+                  ],
+                ),
+              ),
+            ),
+            SizedBox(height: SkifluxSpacing.spaceL),
+            Expanded(
+              child: ListRowSkeleton(
+                rows: 4,
+                leadingIsCircle: false,
+                padding: EdgeInsets.zero,
+              ),
+            ),
+          ],
+        );
       case TaskSectionSource.error:
         return LoadFailure(
           error: const SkifluxFailure(SkifluxErrorKind.contentLoadFailed),
@@ -136,7 +164,7 @@ class _TasksBodyState extends ConsumerState<TasksBody> {
   Widget _missionSection(TasksState tasks, TasksNotifier notifier) {
     switch (tasks.missionsSource) {
       case TaskSectionSource.loading:
-        return const Center(child: CircularProgressIndicator());
+        return const ListRowSkeleton(rows: 4, padding: EdgeInsets.zero);
       case TaskSectionSource.error:
         return LoadFailure(
           error: const SkifluxFailure(SkifluxErrorKind.contentLoadFailed),

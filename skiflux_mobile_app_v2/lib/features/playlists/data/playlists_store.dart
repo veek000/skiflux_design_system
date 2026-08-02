@@ -1,5 +1,10 @@
-/// Demo playlists + the SkillCoin balance view used by unlock flows
+/// The season cache + the SkillCoin balance view used by unlock flows
 /// (Home & In-app + Other Video Player).
+///
+/// There is no seeded catalogue behind this any more. Every season the app
+/// shows is fetched by `season_providers.dart` and registered here via
+/// [PlaylistsNotifier.cacheSeason]; the cache exists so the unlock sheet can
+/// resolve an episode by id no matter which screen opened it.
 ///
 /// Money honesty: `skillCoins` here is a *derived whole-coin view* of the
 /// wallet's real [Decimal] balance (`walletProvider.remoteWallet.balance`),
@@ -11,9 +16,8 @@ library;
 import 'package:decimal/decimal.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../shared/network/token_store.dart';
+import '../../../shared/utils/formatting.dart';
 import '../../wallet/data/topup_repository.dart';
-import 'seasons_repository.dart';
 
 enum PlaylistEpisodeState { unlocked, locked, completed }
 
@@ -25,6 +29,11 @@ class PlaylistEpisode {
     required this.duration,
     required this.coinCost,
     this.state = PlaylistEpisodeState.locked,
+    this.skillworld,
+    this.viewCount,
+    this.createdAt,
+    this.thumbnailUrl,
+    this.videoUrl,
   });
 
   final String id;
@@ -34,12 +43,50 @@ class PlaylistEpisode {
   final int coinCost;
   PlaylistEpisodeState state;
 
+  /// `Episode.skillworld` — the world this episode belongs to, used by the
+  /// creator profile's category pills.
+  ///
+  /// Mutable so a caller that knows the owning season can fill in a payload
+  /// that omitted it; that has to happen in place, because [state] is mutated
+  /// by [PlaylistsNotifier.markPurchased] and a copied row would stop
+  /// reflecting purchases.
+  String? skillworld;
+
+  /// `Episode.view_count`. Null when the payload didn't carry one; the row
+  /// then prints no view figure rather than inventing "22k".
+  final int? viewCount;
+
+  /// `Episode.created_at`, for "5 hrs ago" and newest-first ordering.
+  final DateTime? createdAt;
+
+  /// `Episode.thumbnail_url`. Null only when the payload omitted a field the
+  /// schema requires; the row then falls back to the placeholder cover.
+  final String? thumbnailUrl;
+
+  /// `Episode.video_url` — the stream. Carried so a row opened from a creator
+  /// profile or a season sheet can actually *play*: the player modal these
+  /// screens open builds its feed item from this, and without it the modal
+  /// fell back to image mode and showed a still.
+  final String? videoUrl;
+
+  bool get hasVideo => videoUrl != null && videoUrl!.isNotEmpty;
+
   String get epTag => 'EP ${number.toString().padLeft(2, '0')}';
 
   bool get isLocked => state == PlaylistEpisodeState.locked;
   bool get isUnlocked =>
       state == PlaylistEpisodeState.unlocked ||
       state == PlaylistEpisodeState.completed;
+
+  /// "22k views · 5 hrs ago", trimmed to whatever is actually known — empty
+  /// when the payload carried neither.
+  String get metaLine {
+    final parts = <String>[
+      if (viewCount != null) '${countLabel(viewCount!)} views',
+      if (createdAt != null) relativeAgeLabel(createdAt),
+    ];
+    return parts.join(' · ');
+  }
 }
 
 class Playlist {
@@ -49,20 +96,33 @@ class Playlist {
     required this.creatorName,
     required this.creatorUsername,
     required this.episodes,
-    this.description =
-        'Learn how to design scalable systems with reusable components, '
-        'tokens, and patterns. Build a library that ships faster and stays '
-        'consistent across products.',
-    this.viewsLabel = '550.7k views',
+    // Both default to empty rather than to the old demo copy ("Learn how to
+    // design scalable systems…" / "550.7k views"). Every construction site
+    // passes these explicitly, so the defaults only ever stood to put fake
+    // blurbs and fake view counts on a season the backend said nothing about.
+    this.description = '',
+    this.viewsLabel = '',
     this.coverAsset = 'assets/home_video_cover.png',
     this.coverUrl,
     this.declaredEpisodeCount,
+    this.creatorId,
+    this.skillworld,
   });
 
   final String id;
   final String title;
   final String creatorName;
   final String creatorUsername;
+
+  /// `SeasonList.creator.id` — the creator UUID, which is what
+  /// `GET /creators/{id}` takes and what the profile filters its seasons by.
+  /// A username is not a substitute: the two namespaces are different.
+  final String? creatorId;
+
+  /// `SeasonList.skillworld`, the raw backend value (`design`, `code`, …).
+  /// Mapped through `SkillWorld.fromBackendValue` for display.
+  final String? skillworld;
+
   final List<PlaylistEpisode> episodes;
   final String description;
   final String viewsLabel;
@@ -103,6 +163,8 @@ class Playlist {
     coverAsset: coverAsset,
     coverUrl: coverUrl,
     declaredEpisodeCount: declaredEpisodeCount,
+    creatorId: creatorId,
+    skillworld: skillworld,
   );
 }
 
@@ -285,34 +347,54 @@ List<CoinPack> _fallbackCoinPacks() => [
   ),
 ];
 
-/// Snapshot of the coin view + default playlist.
+/// Snapshot of the coin view + every season the app has loaded this session.
 class PlaylistsState {
-  PlaylistsState({
-    required this.skillCoins,
-    required this.defaultPlaylist,
-    this.fromBackend = false,
-  });
+  PlaylistsState({required this.skillCoins, this.seasonsById = const {}});
 
   /// Whole-coin display balance — floor of the wallet's real Decimal
   /// balance, synced by the wallet store. Not a source of truth.
   int skillCoins;
-  final Playlist defaultPlaylist;
 
-  /// True once `GET /seasons` has answered. While false the catalogue — and
-  /// every lock state in it — is the demo seed, so nothing here should be
-  /// treated as this user's real entitlements.
-  final bool fromBackend;
+  /// Seasons keyed by season id, registered by
+  /// [PlaylistsNotifier.cacheSeason] as each one is fetched. This is a lookup
+  /// table, not a catalogue: it holds what has been shown, in no order, and a
+  /// screen that wants a list of seasons asks the backend, not this map.
+  final Map<String, Playlist> seasonsById;
 
-  PlaylistEpisode? byId(String id) {
-    for (final e in defaultPlaylist.episodes) {
-      if (e.id == id) return e;
+  /// The season an episode belongs to, across everything cached.
+  Playlist? seasonOf(String episodeId) {
+    for (final season in seasonsById.values) {
+      for (final e in season.episodes) {
+        if (e.id == episodeId) return season;
+      }
     }
     return null;
   }
 
-  PlaylistEpisode? byNumber(int number) {
-    for (final e in defaultPlaylist.episodes) {
-      if (e.number == number) return e;
+  /// Resolves an episode by id across every cached season. The unlock sheet
+  /// depends on this, so any season a screen displays must be cached first or
+  /// its rows cannot be purchased.
+  PlaylistEpisode? byId(String id) {
+    if (id.isEmpty) return null;
+    for (final season in seasonsById.values) {
+      for (final e in season.episodes) {
+        if (e.id == id) return e;
+      }
+    }
+    return null;
+  }
+
+  /// Episode number lookup, optionally scoped to one season. Numbers only
+  /// identify an episode *within* a season, so an unscoped call returns the
+  /// first match and is only safe when a single season is cached.
+  PlaylistEpisode? byNumber(int number, {String? seasonId}) {
+    final seasons = seasonId != null
+        ? [if (seasonsById[seasonId] != null) seasonsById[seasonId]!]
+        : seasonsById.values;
+    for (final season in seasons) {
+      for (final e in season.episodes) {
+        if (e.number == number) return e;
+      }
     }
     return null;
   }
@@ -321,16 +403,17 @@ class PlaylistsState {
 /// Riverpod choice: [NotifierProvider] — episode lock state mutates via
 /// unlock. The coin figure is a mirror of the wallet (see [setSkillCoins]).
 ///
-/// The catalogue starts as the demo seed and is replaced by `GET /seasons` +
-/// `GET /seasons/{id}/episodes` on [refreshFromBackend]; from then on every
-/// lock state is the server's own `is_locked` / `is_purchased`.
+/// Every season here arrived from `GET /seasons/{id}/episodes` by way of
+/// `season_providers.dart`, so every lock state is the server's own
+/// `is_locked` / `is_purchased` and nothing else.
 class PlaylistsNotifier extends Notifier<PlaylistsState> {
   @override
   PlaylistsState build() {
-    // Seeded at 0, not a fake balance: a signed-in user sees their real
-    // balance as soon as the wallet refresh lands, and a signed-out user is
-    // honestly shown zero coins rather than 100 that don't exist.
-    return PlaylistsState(skillCoins: 0, defaultPlaylist: _seedPlaylist());
+    // Zero, not a fake balance: a signed-in user sees their real balance as
+    // soon as the wallet refresh lands, and a signed-out user is honestly
+    // shown zero coins rather than 100 that don't exist. The season cache
+    // starts empty for the same reason.
+    return PlaylistsState(skillCoins: 0);
   }
 
   /// Syncs the SkillCoin display from `GET /wallet/my-wallet`. Callers pass
@@ -339,46 +422,23 @@ class PlaylistsNotifier extends Notifier<PlaylistsState> {
   void setSkillCoins(int coins) {
     state = PlaylistsState(
       skillCoins: coins < 0 ? 0 : coins,
-      defaultPlaylist: state.defaultPlaylist,
-      fromBackend: state.fromBackend,
+      seasonsById: state.seasonsById,
     );
   }
 
-  /// Loads the real catalogue: `GET /seasons`, then the first season's
-  /// episodes.
+  /// Registers a hydrated season so its episodes can be resolved by id later
+  /// — most importantly by the unlock sheet, which only receives an episode
+  /// id and has no idea which screen opened it.
   ///
-  /// Signed out this is a no-op — the seed *is* the demo, and there are no
-  /// entitlements to speak of. Signed in, the seed is replaced wholesale, so a
-  /// user never sees fabricated "Unlocked" rows against their own account. A
-  /// failure leaves whatever was already there: stale beats wrong, and beats a
-  /// blank screen.
-  ///
-  /// Only the first season is hydrated because every playlist surface in the
-  /// app reads [PlaylistsState.defaultPlaylist]; a real browse list is a
-  /// screen that does not exist yet.
-  Future<void> refreshFromBackend() async {
-    if (_loading) return;
-    _loading = true;
-    try {
-      if (!await ref.read(tokenStoreProvider).hasSession()) return;
-      final seasons = await ref.read(seasonsRepositoryProvider).getSeasons();
-      if (seasons.isEmpty) return;
-      final hydrated = await ref
-          .read(seasonsRepositoryProvider)
-          .getSeasonWithEpisodes(seasons.first);
-      state = PlaylistsState(
-        skillCoins: state.skillCoins,
-        defaultPlaylist: hydrated,
-        fromBackend: true,
-      );
-    } catch (_) {
-      // Keep the current catalogue — see the doc above.
-    } finally {
-      _loading = false;
-    }
+  /// A season with no episodes is ignored: caching a shell would let [byId]
+  /// answer "not found" for an episode that simply hasn't been fetched.
+  void cacheSeason(Playlist season) {
+    if (season.id.isEmpty || season.episodes.isEmpty) return;
+    state = PlaylistsState(
+      skillCoins: state.skillCoins,
+      seasonsById: {...state.seasonsById, season.id: season},
+    );
   }
-
-  bool _loading = false;
 
   /// Marks [episodeId] unlocked after `POST /episodes/purchase` returned
   /// 2xx, mirroring the confirmed spend locally (clamped at zero) until the
@@ -394,88 +454,7 @@ class PlaylistsNotifier extends Notifier<PlaylistsState> {
     ep.state = PlaylistEpisodeState.unlocked;
     state = PlaylistsState(
       skillCoins: coins,
-      defaultPlaylist: state.defaultPlaylist,
-      fromBackend: state.fromBackend,
-    );
-  }
-
-  static Playlist _seedPlaylist() {
-    return Playlist(
-      id: 'pl-ui-design-system',
-      title: 'UI Design System',
-      creatorName: 'Amara Design',
-      creatorUsername: 'amara',
-      description:
-          'A complete walkthrough of building a modern design system — '
-          'from foundations (color, type, spacing) to components, '
-          'documentation, and shipping the library to production teams.',
-      viewsLabel: '550.7k views',
-      episodes: [
-        PlaylistEpisode(
-          id: 'ep-01',
-          number: 1,
-          title: 'Introduction to UI Design Thinking',
-          duration: '12:40',
-          coinCost: 0,
-          state: PlaylistEpisodeState.completed,
-        ),
-        PlaylistEpisode(
-          id: 'ep-02',
-          number: 2,
-          title: 'Color Tokens & Hierarchy',
-          duration: '15:10',
-          coinCost: 25,
-          state: PlaylistEpisodeState.unlocked,
-        ),
-        PlaylistEpisode(
-          id: 'ep-03',
-          number: 3,
-          title: 'Spacing & Layout Grid',
-          duration: '14:05',
-          coinCost: 25,
-          state: PlaylistEpisodeState.unlocked,
-        ),
-        PlaylistEpisode(
-          id: 'ep-04',
-          number: 4,
-          title: 'Typography Scale',
-          duration: '11:20',
-          coinCost: 25,
-          state: PlaylistEpisodeState.locked,
-        ),
-        PlaylistEpisode(
-          id: 'ep-05',
-          number: 5,
-          title: 'Component Anatomy',
-          duration: '18:00',
-          coinCost: 25,
-          state: PlaylistEpisodeState.locked,
-        ),
-        PlaylistEpisode(
-          id: 'ep-06',
-          number: 6,
-          title: 'Design Systems from Scratch',
-          duration: '20:15',
-          coinCost: 25,
-          state: PlaylistEpisodeState.locked,
-        ),
-        PlaylistEpisode(
-          id: 'ep-07',
-          number: 7,
-          title: 'Accessibility & Contrast',
-          duration: '13:30',
-          coinCost: 25,
-          state: PlaylistEpisodeState.locked,
-        ),
-        PlaylistEpisode(
-          id: 'ep-08',
-          number: 8,
-          title: 'Shipping the Library',
-          duration: '16:45',
-          coinCost: 25,
-          state: PlaylistEpisodeState.locked,
-        ),
-      ],
+      seasonsById: state.seasonsById,
     );
   }
 }

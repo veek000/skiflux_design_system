@@ -29,6 +29,42 @@ class EnvConfig {
   /// Whether a backend origin was compiled into this build.
   static bool get isApiBaseUrlConfigured => apiBaseUrl.isNotEmpty;
 
+  /// Optional override for the payment return URL. Normally empty — see
+  /// [paymentReturnUrl].
+  static const String topupRedirectUrl = String.fromEnvironment(
+    'TOPUP_REDIRECT_URL',
+  );
+
+  /// The app's own landing page for a finished hosted checkout.
+  ///
+  /// Deliberately a URL that does not have to exist. `payment-flows.md` is
+  /// explicit that `redirect_url` is "where the gateway sends the user
+  /// afterwards (**your app page**)", and that the gateway appends the result:
+  /// `redirect_url?status=success&tx_ref=skf-card-9f8e7d6c5b4a`. On the web
+  /// that page would call `topup/verify`. In an app there is no page — the
+  /// checkout WebView watches for navigation *to* this URL and closes before
+  /// it ever loads, which is the standard mobile pattern and the reason the
+  /// host need not resolve.
+  ///
+  /// This previously sent nothing at all, on the reading that the spec's
+  /// `nullable: true` meant the backend owned the return. It does own a
+  /// default (`PAYMENT_REDIRECT_URL` in its `.env`) — but that default is a
+  /// *web* page on some other host, so the WebView had nothing it could
+  /// recognise and the checkout could never hand back. Sending our own is what
+  /// closes the loop.
+  static String get paymentReturnUrl =>
+      topupRedirectUrl.isNotEmpty ? topupRedirectUrl : _defaultReturnUrl;
+
+  /// Not a real page. `skiflux.app` is the brand domain; the path exists only
+  /// to be recognised.
+  static const String _defaultReturnUrl =
+      'https://skiflux.app/payments/return';
+
+  /// Host of [apiBaseUrl], e.g. `api.skiflux.com`. Empty when no origin is
+  /// configured. Used by the checkout WebView to recognise the backend's own
+  /// return page without having to know its exact path.
+  static String get apiHost => Uri.tryParse(apiBaseUrl)?.host ?? '';
+
   /// Feature flag enabling or disabling telemetry analytics.
   static const bool enableAnalytics = bool.fromEnvironment(
     'ENABLE_ANALYTICS',

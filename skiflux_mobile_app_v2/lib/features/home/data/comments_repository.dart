@@ -67,6 +67,51 @@ class CommentsRepository extends ApiRepository {
     body: {'text': text},
     kind: SkifluxErrorKind.likeCommentReactionFailed,
   );
+
+  /// `PATCH /comments/{comment_id}/` — edit the text of one's own comment
+  /// (`PatchedEpisodeCommentUpdateRequest`, `text` max 500). The server is the
+  /// only authority on ownership; a 403 here is the honest answer for a row the
+  /// client guessed wrong about.
+  Future<void> editComment(int commentId, String text) => patch<void>(
+    '/comments/$commentId/',
+    body: {'text': text},
+    kind: SkifluxErrorKind.likeCommentReactionFailed,
+  );
+
+  /// `DELETE /comments/{comment_id}/` — 204, no body.
+  Future<void> deleteComment(int commentId) => delete(
+    '/comments/$commentId/',
+    kind: SkifluxErrorKind.likeCommentReactionFailed,
+  );
+
+  /// `POST /comments/{comment_id}/report/` — `ReportCommentRequest`, whose
+  /// `category` is **required**, so the caller has to have asked which one.
+  /// 400 means "already reported or comment not found".
+  Future<void> reportComment(int commentId, String category) => post<void>(
+    '/comments/$commentId/report/',
+    body: {'category': category},
+    kind: SkifluxErrorKind.likeCommentReactionFailed,
+  );
+}
+
+/// The spec's `ReportCommentCategoryEnum`, with the labels its description
+/// spells out. Wire values are sent verbatim; the labels are what the picker
+/// shows.
+enum ReportCommentCategory {
+  toxicLanguage('toxic_language', 'Toxic / Offensive language'),
+  spam('spam', 'Spam / External promotion'),
+  harassment('harassment', 'Harassment'),
+  inappropriateSolicitation(
+    'inappropriate_solicitation',
+    'Inappropriate solicitation',
+  ),
+  duplicate('duplicate', 'Duplicate'),
+  other('other', 'Other');
+
+  const ReportCommentCategory(this.wireValue, this.label);
+
+  final String wireValue;
+  final String label;
 }
 
 final commentsRepositoryProvider = Provider<CommentsRepository>(

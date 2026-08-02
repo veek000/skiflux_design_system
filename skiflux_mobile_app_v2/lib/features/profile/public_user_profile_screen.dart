@@ -111,10 +111,7 @@ class PublicUserProfileScreen extends ConsumerWidget {
     final asyncProfile = ref.watch(publicUserProfileProvider(username));
 
     return asyncProfile.when(
-      loading: () => _shell(
-        context,
-        const Center(child: CircularProgressIndicator()),
-      ),
+      loading: () => _shell(context, const _ProfileSkeleton()),
       // Real failure panel with retry — a 404/timeout used to read as a bare
       // "Failed to load profile" with no way forward.
       error: (e, st) => _shell(
@@ -149,6 +146,45 @@ class PublicUserProfileScreen extends ConsumerWidget {
   }
 }
 
+/// The loaded view's own shape while it is in flight: the avatar-and-name
+/// header, then the stack of section cards.
+///
+/// Screen-specific rather than one of the shared skeletons — nothing else in
+/// the app is a centred avatar over a column of cards, and a generic row list
+/// here would resize the whole page the moment the profile landed.
+class _ProfileSkeleton extends StatelessWidget {
+  const _ProfileSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SkifluxSkeletonGroup(
+      child: Padding(
+        padding: EdgeInsets.all(SkifluxSpacing.spaceL),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Column(
+                children: [
+                  SkifluxSkeleton.circle(size: SkifluxUnit.u80),
+                  SizedBox(height: SkifluxSpacing.spaceM),
+                  SkifluxSkeleton.text(width: 160),
+                  SizedBox(height: SkifluxSpacing.spaceS),
+                  SkifluxSkeleton.text(width: 96),
+                ],
+              ),
+            ),
+            SizedBox(height: SkifluxSpacing.spaceL),
+            SkifluxSkeleton(height: 140, radius: SkifluxRadii.l),
+            SizedBox(height: SkifluxSpacing.spaceL),
+            SkifluxSkeleton(height: 140, radius: SkifluxRadii.l),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _PublicUserProfileView extends StatelessWidget {
   const _PublicUserProfileView({
     required this.profile,
@@ -171,7 +207,10 @@ class _PublicUserProfileView extends StatelessWidget {
         trailing: IconButton(
           padding: EdgeInsets.zero,
           icon: const Icon(RemixIcons.share_forward_fill),
-          onPressed: () => showShareSheet(context),
+          onPressed: () => showShareSheet(
+            context,
+            title: '${profile.name} (@${profile.username}) on SkiFlux',
+          ),
         ),
       ),
       body: ListView(

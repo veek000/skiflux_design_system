@@ -68,6 +68,11 @@ class FcmService {
   /// collector. Null = drop the message (still debug-logged).
   void Function(String message)? onForegroundDisplay;
 
+  /// Called when the user taps a notification, from background or a cold
+  /// launch. The app shell sets this to open the Notifications screen.
+  /// Null = the tap only opens the app, which is the pre-routing behaviour.
+  void Function(RemoteMessage message)? onNotificationTap;
+
   /// Last known FCM registration token, if any. Debug / inspection only —
   /// backend registration is still blocked on endpoint confirmation.
   String? lastToken;
@@ -159,21 +164,11 @@ class FcmService {
 
       // Terminated → launched by tapping a notification.
       final initial = await _messaging.getInitialMessage();
-      if (initial != null) {
-        debugPrint(
-          'FCM getInitialMessage: id=${initial.messageId} '
-          '(tap deep-link routing deferred — tracker #58)',
-        );
-      }
+      if (initial != null) handleNotificationTap(initial);
 
       // Background → resumed by tapping a notification.
       _openedSub = FirebaseMessaging.onMessageOpenedApp.listen(
-        (message) {
-          debugPrint(
-            'FCM onMessageOpenedApp: id=${message.messageId} '
-            '(tap deep-link routing deferred — tracker #58)',
-          );
-        },
+        handleNotificationTap,
         onError: (Object e, StackTrace st) {
           debugPrint('FCM onMessageOpenedApp error: $e\n$st');
         },
@@ -181,6 +176,22 @@ class FcmService {
     } catch (e, st) {
       debugPrint('FCM attachListeners failed: $e\n$st');
     }
+  }
+
+  /// A notification was tapped, from background or a cold launch.
+  ///
+  /// Not every notification has somewhere specific to go — "Welcome to
+  /// Skiflux" has no episode, no comment and no task behind it — so the
+  /// default is the Notifications screen, which is right for all of them and
+  /// wrong for none. Per-type deep links can be layered on top once the
+  /// backend documents `NotificationItem.data`, which is typed `{}` today;
+  /// until then a tap that lands somewhere sensible beats a tap that does
+  /// nothing at all, which is what this used to do.
+  void handleNotificationTap(RemoteMessage message) {
+    debugPrint(
+      'FCM notification tap: id=${message.messageId} data=${message.data}',
+    );
+    onNotificationTap?.call(message);
   }
 
   /// Display path for a foreground [RemoteMessage]. Public so fakes/tests can

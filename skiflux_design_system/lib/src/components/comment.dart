@@ -50,10 +50,13 @@ class SkifluxComment extends StatefulWidget {
     this.onReply,
     this.onEdit,
     this.onDelete,
+    this.liked = false,
+    this.likeCount = 0,
     this.onThumbUp,
     this.onThumbDown,
     this.onPlayToggle,
     this.onPlaybackComplete,
+    this.onPlaybackError,
     this.onAuthorTap,
   });
 
@@ -83,6 +86,19 @@ class SkifluxComment extends StatefulWidget {
   final ImageProvider? avatarImage;
   final String? avatarInitials;
 
+  /// Whether the signed-in user has liked this comment — fills the thumb-up
+  /// and tints it brand. The parent owns it so the icon reflects the real
+  /// `is_liked` from the payload plus the user's own optimistic toggle.
+  final bool liked;
+
+  /// `EpisodeComment.like_count`. Rendered beside the thumb-up, so the tally
+  /// the payload already carries is visible — it was parsed and kept in sync
+  /// through every optimistic toggle, and then shown nowhere.
+  ///
+  /// Zero prints nothing: a bare thumb reads as "no likes yet" more honestly
+  /// than a "0" does.
+  final int likeCount;
+
   final VoidCallback? onReply;
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
@@ -93,6 +109,12 @@ class SkifluxComment extends StatefulWidget {
   /// Fired when a real playback reaches the end of the file, so the parent
   /// can clear its playing flag.
   final VoidCallback? onPlaybackComplete;
+
+  /// Raised when the audio file cannot be prepared for playback — a truncated
+  /// or unreadable recording, a failed download. The row falls back to static
+  /// bars; without this the failure was invisible and the note simply never
+  /// made a sound.
+  final ValueChanged<Object>? onPlaybackError;
 
   /// Opens public user profile when the avatar / name row is tapped.
   final VoidCallback? onAuthorTap;
@@ -106,6 +128,16 @@ class _SkifluxCommentState extends State<SkifluxComment> {
   StreamSubscription<int>? _positionSub;
   StreamSubscription<void>? _completionSub;
   int _positionMs = 0;
+
+  /// Whether [PlayerController.preparePlayer] has actually resolved.
+  ///
+  /// `_player != null` is not the same question: the controller is assigned
+  /// before prepare runs, so a failed or still-in-flight prepare used to leave
+  /// a non-null but unusable controller — [AudioFileWaveforms] bound to it drew
+  /// no progress and `startPlayer()` made no sound, silently. The waveform
+  /// binds only once this is true, and a toggle that arrives mid-prepare is
+  /// re-applied at the end of [_initPlayer] rather than dropped.
+  bool _prepared = false;
 
   bool get _isOwn => widget.author == SkifluxCommentAuthor.own;
 
@@ -124,9 +156,12 @@ class _SkifluxCommentState extends State<SkifluxComment> {
     if (widget.audioPath != oldWidget.audioPath) {
       _disposePlayer();
       if (_hasAudio) _initPlayer();
-    } else if (_player != null && widget.playing != oldWidget.playing) {
+    } else if (_prepared && _player != null &&
+        widget.playing != oldWidget.playing) {
       // Parent toggled play state (tap here, or another comment started
-      // and the parent paused this one).
+      // and the parent paused this one). A toggle arriving before prepare
+      // resolves is not lost — [_initPlayer] applies `widget.playing` when it
+      // finishes.
       if (widget.playing) {
         _player!.startPlayer();
       } else {
@@ -153,9 +188,24 @@ class _SkifluxCommentState extends State<SkifluxComment> {
         widget.onPlaybackComplete?.call();
       }
     });
-    await player.setFinishMode(finishMode: FinishMode.pause);
-    await player.preparePlayer(path: widget.audioPath!);
-    if (mounted) setState(() {}); // maxDuration is now known
+    try {
+      await player.setFinishMode(finishMode: FinishMode.pause);
+      await player.preparePlayer(path: widget.audioPath!);
+    } catch (error) {
+      // An unprepared controller can neither draw nor play. Drop it so the row
+      // renders the static bars, and tell the parent — silently swallowing this
+      // is what made a broken note look like a working one.
+      if (!mounted) return;
+      _disposePlayer();
+      setState(() {});
+      widget.onPlaybackError?.call(error);
+      return;
+    }
+    if (!mounted) return;
+    // maxDuration is now known, and the waveform may bind.
+    setState(() => _prepared = true);
+    // Applies a toggle that arrived while prepare was still running, which
+    // `didUpdateWidget` deliberately skipped.
     if (widget.playing) await player.startPlayer();
   }
 
@@ -164,6 +214,7 @@ class _SkifluxCommentState extends State<SkifluxComment> {
     _completionSub?.cancel();
     _player?.dispose();
     _player = null;
+    _prepared = false;
     _positionMs = 0;
   }
 
@@ -297,7 +348,7 @@ class _SkifluxCommentState extends State<SkifluxComment> {
         ),
         const SizedBox(width: SkifluxSpacing.spaceS),
         Expanded(
-          child: _player != null
+          child: _prepared && _player != null
               ? LayoutBuilder(
                   builder: (context, constraints) => AudioFileWaveforms(
                     size: Size(
@@ -310,9 +361,10 @@ class _SkifluxCommentState extends State<SkifluxComment> {
                     playerWaveStyle: SkifluxWaveformStyle.player(),
                   ),
                 )
-              // Static fallback: fill the row with bars so the waveform
-              // runs right up to the duration label (same spaceS gap as
-              // between the play button and the waveform).
+              // Static fallback: no audio, or prepare hasn't resolved (or
+              // failed). Fill the row with bars so the waveform runs right up
+              // to the duration label (same spaceS gap as between the play
+              // button and the waveform).
               : LayoutBuilder(
                   builder: (context, constraints) => SkifluxVoiceWaveform(
                     barCount: ((constraints.maxWidth +
@@ -344,9 +396,21 @@ class _SkifluxCommentState extends State<SkifluxComment> {
     return '${d.inMinutes}:${seconds.toString().padLeft(2, '0')}';
   }
 
+  /// Timestamp + text actions on the left, reactions on the right.
+  ///
+  /// An own comment used to return the left group alone, which cost it the
+  /// thumb-up as well as the thumb-down — so the author could neither see nor
+  /// change the like state on their own row. Only the thumb-down is withheld
+  /// now: it opens a report, and reporting oneself is not a thing.
+  ///
+  /// The left group is a [Wrap] rather than a Row because an own comment
+  /// carries four items (time, Reply, Edit, Delete); on a narrow sheet they
+  /// flow onto a second line instead of overflowing.
   Widget _actionRow() {
-    final left = Row(
-      mainAxisSize: MainAxisSize.min,
+    final left = Wrap(
+      spacing: SkifluxSpacing.spaceM,
+      runSpacing: SkifluxSpacing.spaceXs,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         Text(
           widget.timeLabel,
@@ -354,7 +418,6 @@ class _SkifluxCommentState extends State<SkifluxComment> {
             color: SkifluxColors.contentDisabled,
           ),
         ),
-        const SizedBox(width: SkifluxSpacing.spaceM),
         _action(
           icon: RemixIcons.question_answer_line,
           label: 'Reply',
@@ -362,14 +425,12 @@ class _SkifluxCommentState extends State<SkifluxComment> {
           onTap: widget.onReply,
         ),
         if (_isOwn) ...[
-          const SizedBox(width: SkifluxSpacing.spaceM),
           _action(
             icon: RemixIcons.edit_2_line,
             label: 'Edit',
             color: SkifluxColors.contentDisabled,
             onTap: widget.onEdit,
           ),
-          const SizedBox(width: SkifluxSpacing.spaceM),
           _action(
             icon: RemixIcons.delete_bin_6_line,
             label: 'Delete',
@@ -380,31 +441,52 @@ class _SkifluxCommentState extends State<SkifluxComment> {
       ],
     );
 
-    if (_isOwn) return left;
-
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        left,
+        Expanded(child: left),
+        const SizedBox(width: SkifluxSpacing.spaceM),
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            GestureDetector(
-              onTap: widget.onThumbDown,
-              child: const Icon(
-                RemixIcons.thumb_down_line,
-                size: SkifluxIcons.sizeS,
-                color: SkifluxColors.contentDisabled,
+            if (!_isOwn) ...[
+              GestureDetector(
+                onTap: widget.onThumbDown,
+                child: const Icon(
+                  RemixIcons.thumb_down_line,
+                  size: SkifluxIcons.sizeS,
+                  color: SkifluxColors.contentDisabled,
+                ),
               ),
-            ),
-            const SizedBox(
-                width: SkifluxSpacing.spaceS + SkifluxSpacing.space2xs),
+              const SizedBox(
+                  width: SkifluxSpacing.spaceS + SkifluxSpacing.space2xs),
+            ],
             GestureDetector(
               onTap: widget.onThumbUp,
-              child: const Icon(
-                RemixIcons.thumb_up_line,
-                size: SkifluxIcons.sizeS,
-                color: SkifluxColors.contentDisabled,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    widget.liked
+                        ? RemixIcons.thumb_up_fill
+                        : RemixIcons.thumb_up_line,
+                    size: SkifluxIcons.sizeS,
+                    color: widget.liked
+                        ? SkifluxColors.contentBrand
+                        : SkifluxColors.contentDisabled,
+                  ),
+                  if (widget.likeCount > 0) ...[
+                    const SizedBox(width: SkifluxSpacing.spaceXs),
+                    Text(
+                      '${widget.likeCount}',
+                      style: SkifluxTypography.uiButtonSmall.copyWith(
+                        color: widget.liked
+                            ? SkifluxColors.contentBrand
+                            : SkifluxColors.contentDisabled,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ],

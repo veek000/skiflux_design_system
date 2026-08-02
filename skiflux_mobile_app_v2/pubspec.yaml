@@ -108,6 +108,23 @@ dependencies:
   # reachability — the connectivity banner stays driven by the app's own dio
   # traffic (see shared/network/connectivity_store.dart).
   connectivity_plus: 7.3.1
+  # System-tray progress for offline downloads (the Netflix pattern: an
+  # ongoing, silent notification whose bar advances with the transfer, then
+  # resolves to "Downloaded" or "Download failed"). Requested 2026-08-01.
+  #
+  # There is no way to hand-roll this: a notification with a determinate
+  # progress bar is platform UI. FCM's own display path (firebase_messaging)
+  # only renders *remote* messages, so it cannot post one either.
+  #
+  # Android-only in practice — iOS has no progress-notification API, so
+  # DownloadNotifications is a no-op there rather than posting a stream of
+  # banners. Requires Java 8+ desugaring; see android/app/build.gradle.kts.
+  flutter_local_notifications: 22.2.0
+  # In-app checkout for payment-gateway hand-offs. The gateway's hosted page
+  # runs in a WebView the app can watch, so a completed payment verifies itself
+  # instead of asking the user to come back and tap "I've paid". PAN/CVV entry
+  # still happens on the gateway's own page, never in our UI (PCI).
+  webview_flutter: ^4.14.1
 
 flutter_launcher_icons:
   image_path: "assets/app_icons/app_icon_source.png"

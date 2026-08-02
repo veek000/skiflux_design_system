@@ -1,12 +1,11 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 /// Presents a Skiflux bottom sheet the way the Figma overlays do:
-/// 5px backdrop blur + `Overlay/50` scrim behind a white card with
-/// 24px top corners (Figma nodes `198:13821` / `198:13822` etc.).
+/// an `Overlay/50` scrim behind a white card with 24px top corners (Figma
+/// nodes `198:13821` / `198:13822` etc.). Figma draws a 5px blur behind the
+/// scrim; it is deliberately not reproduced — see [_SkifluxSheetRoute].
 ///
 /// Built on `modal_bottom_sheet`'s [ModalSheetRoute] (confirmed per package
 /// policy) so every sheet is draggable: swipe down past the threshold (or
@@ -21,9 +20,9 @@ Future<T?> showSkifluxSheet<T>({
   return Navigator.of(context).push(_SkifluxSheetRoute<T>(builder: builder));
 }
 
-/// [ModalSheetRoute] restyled to the Skiflux overlay look: the package's
-/// plain dim barrier is replaced with the animated 5px blur + `Overlay/50`
-/// scrim, and the sheet card gets the grabber pill overlay.
+/// [ModalSheetRoute] restyled to the Skiflux overlay look: the package's plain
+/// dim barrier is replaced with an animated `Overlay/50` scrim, and the sheet
+/// card gets the grabber pill overlay.
 class _SkifluxSheetRoute<T> extends ModalSheetRoute<T> {
   _SkifluxSheetRoute({required super.builder})
     : super(
@@ -39,30 +38,25 @@ class _SkifluxSheetRoute<T> extends ModalSheetRoute<T> {
             _GrabberOverlay(child: child),
       );
 
-  /// Blurred + dimmed backdrop; tap to dismiss. Follows [animation] so the
-  /// blur/scrim also relax while the sheet is dragged down.
+  /// Dimmed backdrop; tap to dismiss. Follows [animation] so the scrim also
+  /// relaxes while the sheet is dragged down.
+  ///
+  /// This was a 5px [BackdropFilter] blur behind every sheet. A blur is a
+  /// full-screen GPU read-back repainted on every frame of the open animation,
+  /// on top of whatever the sheet itself is doing — which is what made sheets
+  /// hitch on cold open. A solid scrim reads the same at 50% and costs a fill.
   @override
   Widget buildModalBarrier() {
     final curved = CurvedAnimation(
       parent: animation!,
       curve: Curves.easeOutCubic,
     );
-    return AnimatedBuilder(
-      animation: curved,
-      builder: (context, _) => GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => navigator?.maybePop(),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(
-            sigmaX: 5 * curved.value,
-            sigmaY: 5 * curved.value,
-          ),
-          child: ColoredBox(
-            color: SkifluxColors.overlay50.withValues(
-              alpha: 0.5 * curved.value,
-            ),
-          ),
-        ),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => navigator?.maybePop(),
+      child: FadeTransition(
+        opacity: curved,
+        child: const ColoredBox(color: SkifluxColors.overlay50),
       ),
     );
   }

@@ -8,9 +8,11 @@ import 'package:skiflux_design_system/skiflux_design_system.dart';
 import '../../shared/error_handling/error_display.dart';
 import '../../shared/network/token_store.dart';
 import '../../shared/notifications/fcm_service.dart';
+import '../../shared/notifications/notification_permission.dart';
 import '../../shared/toast/skiflux_toast.dart';
 import '../home/data/home_feed_store.dart';
 import '../home/home_screen.dart';
+import '../notifications/data/notifications_store.dart';
 import '../profile/data/devices_repository.dart';
 import '../profile/data/profile_store.dart';
 import '../profile/data/skill_world_store.dart';
@@ -119,10 +121,23 @@ class _AuthFlowState extends ConsumerState<AuthFlow> {
     unawaited(ref.read(walletProvider.notifier).refreshFromBackend());
     unawaited(ref.read(homeFeedProvider.notifier).refresh());
     unawaited(ref.read(tasksProvider.notifier).refreshMissionsFromBackend());
+    // The bell's dot is derived from this list, so it has to be fetched
+    // before the user opens the Notifications screen — otherwise the badge
+    // stays dark until the one place that would have shown it is visited.
+    unawaited(ref.read(notificationsProvider.notifier).refreshFromBackend());
     final fcm = ref.read(fcmServiceProvider);
     await fcm.registerTokenWithBackend((token) {
       return ref.read(devicesRepositoryProvider).registerDevice(token: token);
     });
+
+    // Ask *after* sign-in, never at cold start: the iOS prompt is once-ever,
+    // and a soft pre-prompt guards it (see maybeAskForNotificationPermission).
+    // Deferred a beat so it lands on the home screen this flow just pushed,
+    // rather than over the auth screen that is on its way out.
+    if (!mounted) return;
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    if (!mounted) return;
+    await maybeAskForNotificationPermission(context, ref);
   }
 
   /// Onboarding "Login" — branch on settings + capability **before** any

@@ -6,6 +6,7 @@ import '../../shared/error_handling/error_display.dart';
 import '../../shared/sheets/confirm_sheet.dart';
 import '../../shared/sheets/success_sheet.dart';
 import '../../shared/toast/skiflux_toast.dart';
+import '../../shared/widgets/loading_skeletons.dart';
 import 'add_card_sheet.dart';
 import 'data/payment_store.dart';
 import 'widgets/settings_tile.dart';
@@ -51,10 +52,14 @@ class PaymentMethodsScreen extends ConsumerWidget {
             ),
             const SizedBox(height: SkifluxSpacing.spaceL),
             ...cardsAsync.when(
+              // Card rows: a brand mark, then the masked number over the
+              // expiry. `padding: zero` because the list already sits inside
+              // the screen's own padded column.
               loading: () => const [
-                Padding(
-                  padding: EdgeInsets.all(SkifluxSpacing.space2xl),
-                  child: Center(child: CircularProgressIndicator()),
+                ListRowSkeleton(
+                  rows: 3,
+                  leadingIsCircle: false,
+                  padding: EdgeInsets.zero,
                 ),
               ],
               error: (e, st) => [

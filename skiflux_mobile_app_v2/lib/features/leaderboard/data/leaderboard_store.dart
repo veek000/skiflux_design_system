@@ -85,7 +85,8 @@ class LeaderboardData {
 
   static const empty = LeaderboardData(entries: []);
 
-  /// Ranked entries, podium first.
+  /// Every entry on the page, sorted by [LeaderboardEntry.rank] ascending —
+  /// see `LeaderboardNotifier.resolve`.
   final List<LeaderboardEntry> entries;
 
   /// The signed-in learner's standing. Null when it is genuinely unknown —
@@ -104,11 +105,26 @@ class LeaderboardData {
 
   bool get isEmpty => entries.isEmpty;
 
-  /// Top three. `take`/`skip` rather than `sublist` because a filtered league
-  /// can come back with fewer than three learners in it.
-  List<LeaderboardEntry> get podium => entries.take(3).toList(growable: false);
+  /// The podium — ranks 1, 2 and 3, selected **by rank** rather than by
+  /// position.
+  ///
+  /// `take(3)`/`skip(3)` only produced the right split while the payload
+  /// happened to arrive rank-ordered, and nothing guaranteed that: `resolve`
+  /// iterates the rows verbatim and the repository defaults a missing rank to
+  /// 0. When the order slipped, the table started at whoever was fourth in the
+  /// list rather than fourth on the board.
+  ///
+  /// A filtered league with fewer than three learners simply yields a shorter
+  /// podium.
+  List<LeaderboardEntry> get podium => entries
+      .where((entry) => entry.rank >= 1 && entry.rank <= 3)
+      .toList(growable: false);
 
-  List<LeaderboardEntry> get ranked => entries.skip(3).toList(growable: false);
+  /// Everyone the podium doesn't hold: rank 4 and below, plus any row whose
+  /// rank is unknown (0) — those belong in the table, not on the podium.
+  List<LeaderboardEntry> get ranked => entries
+      .where((entry) => entry.rank > 3 || entry.rank < 1)
+      .toList(growable: false);
 
   /// Index of the signed-in learner's row within [ranked], or -1. Drives the
   /// rank card's opening scroll position.
@@ -231,6 +247,15 @@ class LeaderboardNotifier extends AsyncNotifier<LeaderboardData> {
         break;
       }
     }
+
+    // Sort last: the `page.rows[i]` fallback above depends on `entries` still
+    // being index-aligned with the payload. Unknown ranks (0) sort to the end
+    // rather than ahead of first place.
+    entries.sort((a, b) {
+      final ra = a.rank >= 1 ? a.rank : 1 << 30;
+      final rb = b.rank >= 1 ? b.rank : 1 << 30;
+      return ra.compareTo(rb);
+    });
 
     final level = position?.currentLevel;
 

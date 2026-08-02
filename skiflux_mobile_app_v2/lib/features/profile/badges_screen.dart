@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/widgets/loading_skeletons.dart';
 import 'data/badge_catalogue.dart';
 import 'data/badges_repository.dart';
 
@@ -69,7 +70,13 @@ class BadgesScreen extends ConsumerWidget {
       body: SafeArea(
         top: false,
         child: ref.watch(userBadgesProvider).when(
-              loading: () => const Center(child: CircularProgressIndicator()),
+              // Two rows of the same 3-up tile grid `_grid` builds, at the
+              // tile's own 113:130 ratio.
+              loading: () => const CardGridSkeleton(
+                count: 6,
+                columns: 3,
+                aspectRatio: 113 / 130,
+              ),
               error: (e, st) => Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,

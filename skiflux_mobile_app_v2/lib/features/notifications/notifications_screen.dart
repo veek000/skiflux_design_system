@@ -7,6 +7,7 @@ import 'package:timeago/timeago.dart' as timeago;
 
 import '../../shared/error_handling/error_handler.dart';
 import '../../shared/widgets/load_failure.dart';
+import '../../shared/widgets/loading_skeletons.dart';
 import 'data/notifications_store.dart';
 
 // Figma: **Notification Flow** (`1256:28688`) — Notifications screen
@@ -115,7 +116,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
       );
     }
     if (notifications.isEmpty && notifier.loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const ListRowSkeleton(rows: 6);
     }
     if (notifications.isEmpty) return const _EmptyState();
     return _NotificationList(notifications: notifications);
@@ -150,19 +151,27 @@ class _NotificationList extends StatelessWidget {
       }
     }
 
-    return ListView(
+    // Built as a list of (label, rows) pairs rather than three hand-spaced
+    // branches. The old form put a `SizedBox` *before* the Earlier section
+    // unconditionally, so a list with nothing newer than two days old — which
+    // is most of them once a day has passed — opened with a stray 16px band
+    // above its first heading, and the gaps between sections varied by which
+    // combination of the three happened to be present.
+    final sections = <(String, List<AppNotification>)>[
+      if (today.isNotEmpty) ('Today', today),
+      if (yesterday.isNotEmpty) ('Yesterday', yesterday),
+      if (earlier.isNotEmpty) ('Earlier', earlier),
+    ];
+
+    return ListView.separated(
       padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
-      children: [
-        if (today.isNotEmpty) _Section(label: 'Today', notifications: today),
-        if (yesterday.isNotEmpty) ...[
-          if (today.isNotEmpty) const SizedBox(height: SkifluxSpacing.spaceL),
-          _Section(label: 'Yesterday', notifications: yesterday),
-        ],
-        if (earlier.isNotEmpty) ...[
-          const SizedBox(height: SkifluxSpacing.spaceL),
-          _Section(label: 'Earlier', notifications: earlier),
-        ],
-      ],
+      itemCount: sections.length,
+      separatorBuilder: (_, _) =>
+          const SizedBox(height: SkifluxSpacing.spaceXl),
+      itemBuilder: (_, i) => _Section(
+        label: sections[i].$1,
+        notifications: sections[i].$2,
+      ),
     );
   }
 }

@@ -18,7 +18,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/error_handling/error_handler.dart';
 import '../../../shared/network/token_store.dart';
+import '../../../shared/utils/formatting.dart';
+import '../../playlists/data/season_providers.dart';
 import 'subscriptions_repository.dart';
+
+// `relativeAgeLabel` / `countLabel` used to live here; they now belong to every
+// content surface, so they moved to `shared/utils/formatting.dart`. Re-exported
+// because this file is the import the subscription screens and tests already
+// reach for.
+export '../../../shared/utils/formatting.dart' show countLabel, relativeAgeLabel;
 
 enum SubscriptionFeedFilter { recent, today, continueWatching, unwatched }
 
@@ -129,6 +137,7 @@ class SubscriptionEpisode {
     this.description = '',
     this.thumbnailUrl,
     this.videoUrl,
+    this.season,
   });
 
   /// Spec `Episode` — the same schema the home feed parses.
@@ -151,6 +160,7 @@ class SubscriptionEpisode {
         ? json['video_duration'] as int
         : 0;
     final viewCount = json['view_count'] is int ? json['view_count'] as int : 0;
+    final seasonId = _string(json['season_id']);
 
     return SubscriptionEpisode(
       id: json['id']?.toString() ?? '',
@@ -161,7 +171,7 @@ class SubscriptionEpisode {
       creatorId: creatorId,
       creatorName: creatorName,
       duration: _durationLabel(durationSeconds),
-      views: '${_countLabel(viewCount)} views',
+      views: '${countLabel(viewCount)} views',
       postedAgo: relativeAgeLabel(createdAt),
       // "New" = dropped in the last 3 days; "today" = the last 24 hours. Both
       // are presentation heuristics over `created_at`, not backend flags.
@@ -169,6 +179,15 @@ class SubscriptionEpisode {
       postedToday: age != null && age.inHours < 24,
       thumbnailUrl: _string(json['thumbnail_url']),
       videoUrl: _string(json['video_url']),
+      season: seasonId == null
+          ? null
+          : SeasonArg(
+              id: seasonId,
+              title: _string(json['season_title']),
+              creatorName: creatorName,
+              creatorId: creatorId.isEmpty ? null : creatorId,
+              skillworld: _string(json['skillworld']),
+            ),
     );
   }
 
@@ -193,12 +212,24 @@ class SubscriptionEpisode {
   final String? thumbnailUrl;
   final String? videoUrl;
 
+  /// The season this episode belongs to, when the caller knew it.
+  ///
+  /// Null on a row parsed from a payload that carried no `season_id`, and on
+  /// the legacy synthetic rows. The player modal's "View Playlist" link is
+  /// hidden in that case — there is no playlist to open, and a link that does
+  /// nothing is worse than no link.
+  final SeasonArg? season;
+
   bool get isUnwatched => watchProgress == 0;
   bool get isContinueWatching => watchProgress > 0 && watchProgress < 1;
   bool get hasThumbnail => thumbnailUrl != null && thumbnailUrl!.isNotEmpty;
 
   String get epTag => 'EP ${epNumber.toString().padLeft(2, '0')}';
-  String get meta => '$views · $postedAgo';
+
+  /// "22k views · 5 hrs ago", dropping either half the payload didn't carry
+  /// rather than printing a dangling separator around a blank.
+  String get meta =>
+      [views, postedAgo].where((s) => s.isNotEmpty).join(' · ');
 }
 
 class SubscriptionsState {
@@ -492,30 +523,6 @@ final subscriptionsProvider =
 
 // ── Formatting helpers (pure; unit-testable) ─────────────────────────
 
-/// "5 hrs ago" / "2 days ago" / "Just now" from a payload timestamp.
-/// Null (missing/unparseable `created_at`) reads as "Recently" — a vague
-/// truth rather than a precise invention.
-String relativeAgeLabel(DateTime? createdAt, {DateTime? now}) {
-  if (createdAt == null) return 'Recently';
-  final delta = (now ?? DateTime.now()).difference(createdAt);
-  if (delta.isNegative || delta.inMinutes < 1) return 'Just now';
-  if (delta.inMinutes < 60) {
-    return '${delta.inMinutes} min${delta.inMinutes == 1 ? '' : 's'} ago';
-  }
-  if (delta.inHours < 24) {
-    return '${delta.inHours} hr${delta.inHours == 1 ? '' : 's'} ago';
-  }
-  if (delta.inDays < 7) {
-    return '${delta.inDays} day${delta.inDays == 1 ? '' : 's'} ago';
-  }
-  final weeks = delta.inDays ~/ 7;
-  if (weeks < 5) return '$weeks week${weeks == 1 ? '' : 's'} ago';
-  final months = delta.inDays ~/ 30;
-  if (months < 12) return '$months month${months == 1 ? '' : 's'} ago';
-  final years = delta.inDays ~/ 365;
-  return '$years year${years == 1 ? '' : 's'} ago';
-}
-
 String _durationLabel(int seconds) {
   if (seconds <= 0) return '0:00';
   final h = seconds ~/ 3600;
@@ -524,12 +531,6 @@ String _durationLabel(int seconds) {
   final ss = s.toString().padLeft(2, '0');
   if (h > 0) return '$h:${m.toString().padLeft(2, '0')}:$ss';
   return '$m:$ss';
-}
-
-String _countLabel(int n) {
-  if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
-  if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}k';
-  return '$n';
 }
 
 String? _string(Object? value) {

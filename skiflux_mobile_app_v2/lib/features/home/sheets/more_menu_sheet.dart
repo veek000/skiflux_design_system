@@ -7,6 +7,10 @@ import '../../../shared/error_handling/error_display.dart';
 import '../../../shared/sheets/skiflux_sheet.dart';
 import '../../../shared/toast/skiflux_toast.dart';
 import '../../playlists/data/playlists_store.dart';
+import '../../profile/data/download_action.dart';
+import '../../profile/data/downloads_store.dart';
+import '../../profile/data/library_episode.dart';
+import '../data/episode_resource.dart';
 import '../data/home_feed_store.dart';
 import '../../tasks/data/tasks_store.dart';
 import '../../tasks/quiz_intro_screen.dart';
@@ -17,24 +21,36 @@ import 'playback_speed_sheet.dart';
 
 // Figma: **Other Video Player Flow 08** (`1256:27071`) — More Menu.
 
-Future<void> showMoreMenuSheet(BuildContext context, {String? episodeId}) {
+Future<void> showMoreMenuSheet(
+  BuildContext context, {
+  String? episodeId,
+  HomeFeedItem? item,
+}) {
   return showSkifluxSheet(
     context: context,
-    builder: (_) => _MoreMenuSheet(episodeId: episodeId),
+    builder: (_) => _MoreMenuSheet(episodeId: episodeId, item: item),
   );
 }
 
 class _MoreMenuSheet extends ConsumerWidget {
-  const _MoreMenuSheet({this.episodeId});
+  const _MoreMenuSheet({this.episodeId, this.item});
 
   /// Backend UUID of the episode this menu was opened for; null for demo
   /// catalogue items that only exist client-side.
   final String? episodeId;
 
+  /// The full feed item, when the caller has one. Downloading needs more than
+  /// an id — the row that appears in Downloads has to render offline, so the
+  /// title, creator and thumbnail travel with it.
+  final HomeFeedItem? item;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final prefs = ref.watch(playerPrefsProvider);
     final prefsNotifier = ref.read(playerPrefsProvider.notifier);
+    final resources = item?.resources ?? const <EpisodeResource>[];
+    final canDownload =
+        (item?.hasPlayableVideo ?? false) && (item?.episodeId?.isNotEmpty ?? false);
     return SkifluxSheetShell(
       title: 'More Menu',
       child: ListView(
@@ -43,33 +59,44 @@ class _MoreMenuSheet extends ConsumerWidget {
         controller: ModalScrollController.of(context),
         padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
         children: [
-          _FeatureCard(
-            gradient: const LinearGradient(
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-              colors: [SkifluxColors.brand200, SkifluxColors.brand50],
+          // Both cards are conditional on the episode actually having
+          // something behind them. They used to render unconditionally, so an
+          // episode with no task offered "View Task" (which silently did
+          // nothing) and every episode offered Resources (which opened four
+          // hardcoded filenames).
+          if (item?.hasTask ?? false) ...[
+            _FeatureCard(
+              gradient: const LinearGradient(
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+                colors: [SkifluxColors.brand200, SkifluxColors.brand50],
+              ),
+              iconBackground: SkifluxColors.backgroundHover,
+              icon: RemixIcons.clipboard_fill,
+              title: 'View Task',
+              subtitle: 'See what you need to execute',
+              trailing: RemixIcons.arrow_right_s_line,
+              onTap: () => _openTask(context, ref),
             ),
-            iconBackground: SkifluxColors.backgroundHover,
-            icon: RemixIcons.clipboard_fill,
-            title: 'View Task',
-            subtitle: 'See what you need to execute',
-            trailing: RemixIcons.arrow_right_s_line,
-            onTap: () => _openTask(context, ref),
-          ),
-          const SizedBox(height: SkifluxSpacing.spaceS),
-          _FeatureCard(
-            color: SkifluxColors.backgroundHover,
-            iconBackground: SkifluxColors.backgroundPrimary,
-            icon: RemixIcons.folder_download_fill,
-            title: 'Episode Resources',
-            subtitle: 'Assets & reference files',
-            trailing: RemixIcons.download_2_line,
-            onTap: () {
-              Navigator.of(context).pop();
-              showEpisodeResourcesSheet(context);
-            },
-          ),
-          const SizedBox(height: SkifluxSpacing.spaceS),
+            const SizedBox(height: SkifluxSpacing.spaceS),
+          ],
+          if (resources.isNotEmpty) ...[
+            _FeatureCard(
+              color: SkifluxColors.backgroundHover,
+              iconBackground: SkifluxColors.backgroundPrimary,
+              icon: RemixIcons.folder_download_fill,
+              title: 'Episode Resources',
+              subtitle: resources.length == 1
+                  ? '1 file or link'
+                  : '${resources.length} files and links',
+              trailing: RemixIcons.download_2_line,
+              onTap: () {
+                Navigator.of(context).pop();
+                showEpisodeResourcesSheet(context, resources);
+              },
+            ),
+            const SizedBox(height: SkifluxSpacing.spaceS),
+          ],
           _MenuRow(
             icon: RemixIcons.speed_fill,
             label: 'Playback Speed',
@@ -81,14 +108,15 @@ class _MoreMenuSheet extends ConsumerWidget {
               await showPlaybackSpeedSheet(context);
             },
           ),
-          _MenuRow(
-            icon: RemixIcons.download_fill,
-            label: 'Download Episode',
-            onTap: () {
-              Navigator.of(context).pop();
-              SkifluxToast.info(context, 'Episode queued for download');
-            },
-          ),
+          // Only offered when there is a file to fetch. An episode with no
+          // `video_url` (or no backend id to key a download on) has nothing
+          // to download, and the row used to invite one anyway.
+          if (canDownload)
+            _MenuRow(
+              icon: RemixIcons.download_fill,
+              label: _downloadLabel(ref),
+              onTap: () => _download(context, ref),
+            ),
           _MenuRow(
             icon: RemixIcons.fullscreen_fill,
             label: 'Full Screen',
@@ -97,11 +125,19 @@ class _MoreMenuSheet extends ConsumerWidget {
               navigator.pop();
               navigator.push(
                 MaterialPageRoute<void>(
-                  builder: (_) => const FullScreenPlayerScreen(),
+                  // The episode travels with the route: the screen used to
+                  // render a bundled placeholder image whatever was playing.
+                  builder: (_) => FullScreenPlayerScreen(item: item),
                 ),
               );
             },
           ),
+          // TODO(backend, minor): this toggle stores `captionsOn` and nothing
+          // reads it — no player renders captions and `Episode` carries no
+          // caption/subtitle track, so the chip flips On/Off over a feature
+          // that does not exist (tracker #63 / #61). Either a caption track on
+          // Episode (WebVTT URL) or this row should go. Expects:
+          // `captions_url` / `subtitles: [{lang, url}]` on Episode.
           _MenuRow(
             icon: RemixIcons.closed_captioning_fill,
             label: 'Caption',
@@ -145,6 +181,33 @@ class _MoreMenuSheet extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+
+  /// "Download Episode" / "Downloaded" / "Downloading…", so the row reports
+  /// what is actually on the device rather than always inviting a download.
+  String _downloadLabel(WidgetRef ref) {
+    final id = episodeId;
+    if (id == null) return 'Download Episode';
+    for (final d in ref.watch(downloadsProvider)) {
+      if (d.episode.id != id) continue;
+      if (d.isComplete) return 'Downloaded';
+      if (d.isDownloading) return 'Downloading…';
+    }
+    return 'Download Episode';
+  }
+
+  /// Real download: streams `video_url` to the device and registers it, so the
+  /// episode plays offline. This used to be a toast and nothing else — the
+  /// "queued for download" message described a queue that did not exist.
+  Future<void> _download(BuildContext context, WidgetRef ref) async {
+    final feedItem = item;
+    Navigator.of(context).pop();
+    // Shared with the two watch-history row menus, which used to only toast.
+    await downloadEpisode(
+      context,
+      ref,
+      feedItem == null ? null : LibraryEpisode.fromFeedItem(feedItem),
     );
   }
 

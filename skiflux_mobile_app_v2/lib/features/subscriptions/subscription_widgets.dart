@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/widgets/network_image.dart';
 import 'data/subscriptions_store.dart';
 
 // Shared building blocks for the subscriptions flow (Figma section
@@ -263,10 +264,9 @@ class SubscriptionEpisodeCard extends ConsumerWidget {
             // bundled art only as the offline/missing fallback (same
             // network→asset pattern as the feed card cover).
             if (episode.hasThumbnail)
-              Image.network(
-                episode.thumbnailUrl!,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => Image.asset(
+              SkifluxNetworkImage(
+                url: episode.thumbnailUrl!,
+                errorWidget: Image.asset(
                   'assets/home_video_raw1.png',
                   fit: BoxFit.cover,
                   errorBuilder: (_, _, _) =>

@@ -76,16 +76,17 @@ class LearningTask {
   /// `GET /me/submissions` record, when any) → list card model.
   ///
   /// Rewards: the `WatchedEpisodeTaskItem` schema carries **no** coin/XP
-  /// fields; `completion_criteria` (spec type `{}`) is read opportunistically
-  /// for `skillcoin_reward`/`xp_reward`-style keys, and when nothing is there
-  /// the card simply shows no reward chip rather than inventing "+25".
+  /// fields, so they are read out of [WatchedEpisodeTask.rewardHints] —
+  /// everywhere one could plausibly arrive, gathered at parse time. When
+  /// nothing is there the card shows no reward chip rather than inventing
+  /// "+25". See that field for the backend ask.
   factory LearningTask.fromWatched(
     WatchedEpisodeTask task, {
     UserSubmission? latestSubmission,
   }) {
     final isQuiz = task.isAssessment;
-    final coins = _criteriaCoins(task.completionCriteria);
-    final xp = _criteriaXp(task.completionCriteria);
+    final coins = _criteriaCoins(task.rewardHints);
+    final xp = _criteriaXp(task.rewardHints);
 
     var status = statusFrom(task.status, submitted: task.submittedAt != null);
     String? feedback;

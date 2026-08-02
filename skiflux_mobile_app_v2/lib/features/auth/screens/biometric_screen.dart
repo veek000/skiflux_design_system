@@ -20,6 +20,8 @@ import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../../shared/error_handling/error_display.dart';
 import '../../../shared/toast/skiflux_toast.dart';
+import '../../../shared/widgets/network_image.dart';
+import '../../profile/data/profile_store.dart';
 import '../data/biometric_store.dart';
 import 'auth_chrome.dart';
 
@@ -158,23 +160,7 @@ class _BiometricScreenState extends ConsumerState<BiometricScreen> {
             ),
             child: Column(
               children: [
-                Container(
-                  width: _avatar,
-                  height: _avatar,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: SkifluxColors.backgroundSelected,
-                  ),
-                  // The spec's only avatar source is `GET /me`, which needs the
-                  // session this screen is unlocking. Resolves when the profile
-                  // cache lands (Tier 1 #39), not from an auth endpoint.
-                  // TODO(backend, minor): draw the account's avatar from the cached profile — expects: {avatar} on GET /api/v1/me
-                  child: const Icon(
-                    RemixIcons.user_fill,
-                    size: SkifluxIcons.sizeL,
-                    color: SkifluxColors.contentBrand,
-                  ),
-                ),
+                _AccountAvatar(size: _avatar, fallbackName: _displayName),
                 const SizedBox(height: SkifluxSpacing.spaceXs),
                 Text(
                   'Welcome Back',
@@ -246,5 +232,85 @@ class _BiometricScreenState extends ConsumerState<BiometricScreen> {
         ],
       ),
     );
+  }
+}
+
+/// The returning account's own picture at the top of the biometric gate.
+///
+/// This was a generic user glyph behind a `TODO(backend)` reading "the spec's
+/// only avatar source is `GET /me`, which needs the session this screen is
+/// unlocking". That was the wrong conclusion: the biometric gate is *re*-auth,
+/// so the token pair is already in the keychain and `GET /me/profile` is
+/// perfectly callable — what the prompt authorises is reuse of that session,
+/// not minting one. So the profile is fetched and the picture is real.
+///
+/// Three tiers, in descending order of how much we actually know: the uploaded
+/// avatar, the account's initials, and — only when the profile has not
+/// answered — the anonymous glyph. Falling back to initials rather than to the
+/// glyph matters here: the frame says "Welcome Back" and "Not Veek?", so a
+/// blank silhouette next to a name reads as the wrong account.
+class _AccountAvatar extends ConsumerWidget {
+  const _AccountAvatar({required this.size, required this.fallbackName});
+
+  final double size;
+
+  /// Derived from the address this flow signed in with — used for initials
+  /// while `GET /me/profile` is in flight, and if it never answers.
+  final String fallbackName;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profile = ref.watch(meProfileProvider).value;
+    final avatarUrl = profile?.avatarUrl;
+
+    if (avatarUrl != null && avatarUrl.isNotEmpty) {
+      return ClipOval(
+        child: SizedBox(
+          width: size,
+          height: size,
+          child: SkifluxNetworkImage(
+            url: avatarUrl,
+            // A failed image load falls back to the same initials the
+            // no-avatar case shows, rather than to a broken-image box.
+            errorWidget: _initialsDisc(profile?.initials),
+            placeholder: _initialsDisc(profile?.initials),
+          ),
+        ),
+      );
+    }
+    return _initialsDisc(profile?.initials);
+  }
+
+  Widget _initialsDisc(String? initials) {
+    final text = (initials != null && initials.isNotEmpty && initials != '?')
+        ? initials
+        : _initialsOf(fallbackName);
+    return Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        color: SkifluxColors.backgroundSelected,
+      ),
+      child: text.isEmpty
+          ? const Icon(
+              RemixIcons.user_fill,
+              size: SkifluxIcons.sizeL,
+              color: SkifluxColors.contentBrand,
+            )
+          : Text(
+              text,
+              style: SkifluxTypography.headingH8Bold.copyWith(
+                color: SkifluxColors.contentBrand,
+              ),
+            ),
+    );
+  }
+
+  /// First letter of the name this flow derived from the email address.
+  static String _initialsOf(String name) {
+    final trimmed = name.trim();
+    return trimmed.isEmpty ? '' : trimmed[0].toUpperCase();
   }
 }

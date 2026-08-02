@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../config/env_config.dart';
 import '../../shared/error_handling/error_display.dart';
 import '../../shared/sheets/skiflux_sheet.dart';
-import '../../shared/utils/external_link.dart';
+import '../../shared/webview/checkout_screen.dart';
 import '../wallet/data/cards_repository.dart';
 import '../wallet/data/topup_repository.dart';
 import 'data/payment_store.dart';
@@ -40,6 +41,10 @@ class _AddCardSheetState extends ConsumerState<_AddCardSheet> {
 
   /// True once the checkout URL has been handed off to the browser.
   bool _handedOff = false;
+
+  /// The `skf-card-…` reference for the attempt in flight, so the manual
+  /// "I've added my card" button verifies the same one the WebView did.
+  String? _txRef;
 
   @override
   Widget build(BuildContext context) {
@@ -128,19 +133,41 @@ class _AddCardSheetState extends ConsumerState<_AddCardSheet> {
     );
   }
 
-  /// `POST /wallet/cards/add` → open the returned checkout URL.
+  /// `POST /wallet/cards/add` → the gateway's hosted card-capture page, in an
+  /// in-app WebView.
+  ///
+  /// The page is the gateway's own: the PAN and CVV are typed on their origin
+  /// and tokenised there. The app never sees them, which is the whole reason
+  /// this flow is hosted rather than a form in our UI.
   Future<void> _startHostedFlow() async {
     setState(() => _busy = true);
     try {
-      final checkoutUrl = await ref
+      final handOff = await ref
           .read(cardsRepositoryProvider)
-          .startAddCard(gatewayName: _preferredGateway());
+          .startAddCard(
+            gatewayName: _preferredGateway(),
+            // The app's own return URL — see [EnvConfig.paymentReturnUrl].
+            redirectUrl: EnvConfig.paymentReturnUrl,
+          );
       if (!mounted) return;
       setState(() {
         _busy = false;
         _handedOff = true;
+        _txRef = handOff.txRef;
       });
-      await openExternalUrl(context, checkoutUrl);
+
+      final outcome = await showCheckout(
+        context,
+        checkoutUrl: handOff.checkoutUrl,
+        redirectUrlPrefix: EnvConfig.paymentReturnUrl,
+        txRef: handOff.txRef,
+        returnHost: EnvConfig.apiHost,
+        title: 'Add card',
+      );
+      if (!mounted) return;
+      // Re-reading the vault is what decides whether a card was really saved —
+      // reaching the redirect only means the page finished.
+      if (outcome == CheckoutOutcome.completed) await _confirmReturn();
     } catch (e, st) {
       if (!mounted) return;
       setState(() => _busy = false);
@@ -148,10 +175,27 @@ class _AddCardSheetState extends ConsumerState<_AddCardSheet> {
     }
   }
 
-  /// Re-reads the card vault; the caller decides whether a new card actually
-  /// appeared — nothing here claims success on its own.
+  /// Verify, then re-read the card vault.
+  ///
+  /// The verify is what makes the card appear: `payment-flows.md` §2 says to
+  /// call `POST /wallet/topup/verify` with the `skf-card-…` reference *before*
+  /// re-fetching `GET /wallet/cards`. Re-reading alone only worked when a
+  /// gateway webhook happened to land first — the race behind a card that
+  /// sometimes wasn't there afterwards. Verify is idempotent, so racing a
+  /// webhook is safe.
+  ///
+  /// A failed verify is not fatal: the vault re-read below is still the thing
+  /// that decides, and a webhook may yet save the card.
   Future<void> _confirmReturn() async {
     setState(() => _busy = true);
+    final txRef = _txRef;
+    if (txRef != null && txRef.isNotEmpty) {
+      try {
+        await ref.read(topupRepositoryProvider).verifyTopup(txRef: txRef);
+      } catch (error) {
+        debugPrint('Add-card verify failed for $txRef: $error');
+      }
+    }
     await ref.read(savedCardsProvider.notifier).refresh();
     if (!mounted) return;
     setState(() => _busy = false);

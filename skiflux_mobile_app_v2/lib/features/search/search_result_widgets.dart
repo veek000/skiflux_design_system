@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/widgets/network_image.dart';
 import '../../shared/widgets/playlist_deck.dart';
 import 'data/recent_searches_store.dart';
 import 'data/search_index.dart';
@@ -67,10 +68,9 @@ class EpisodeResultCard extends StatelessWidget {
                   fit: StackFit.expand,
                   children: [
                     if (episode.hasThumbnail)
-                      Image.network(
-                        episode.thumbnailUrl!,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => const ColoredBox(
+                      SkifluxNetworkImage(
+                        url: episode.thumbnailUrl!,
+                        errorWidget: const ColoredBox(
                           color: SkifluxColors.magenta900,
                         ),
                       )
@@ -152,12 +152,11 @@ class PersonResultRow extends StatelessWidget {
           // Real avatar_url when the payload carries one; icon fallback.
           if (person.avatarUrl != null && person.avatarUrl!.isNotEmpty)
             ClipOval(
-              child: Image.network(
-                person.avatarUrl!,
+              child: SkifluxNetworkImage(
+                url: person.avatarUrl!,
                 width: SkifluxUnit.u40,
                 height: SkifluxUnit.u40,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => const _PersonAvatarFallback(),
+                errorWidget: const _PersonAvatarFallback(),
               ),
             )
           else

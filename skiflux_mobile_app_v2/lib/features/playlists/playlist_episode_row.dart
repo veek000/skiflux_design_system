@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/widgets/network_image.dart';
 import 'data/playlists_store.dart';
 
 /// Episode row shared by the playlist detail page (`198:14183` /
@@ -10,18 +11,26 @@ import 'data/playlists_store.dart';
 /// 128×98 thumb (EP chip, duration chip, 4px progress bar; locked = blur +
 /// centered lock), status + title + views meta, trailing play circle or
 /// coin pill. [playing] renders the `1256:27298` variant — brand100 row
-/// fill, "Playing EP 0X" status, partial progress, no trailing control.
+/// fill, "Playing EP 0X" status, no trailing control.
 class PlaylistEpisodeRow extends StatelessWidget {
   const PlaylistEpisodeRow({
     super.key,
     required this.episode,
     this.onTap,
     this.playing = false,
+    this.progress,
   });
 
   final PlaylistEpisode episode;
   final VoidCallback? onTap;
   final bool playing;
+
+  /// Watch progress, 0–1, from a real player clock. Null draws no bar.
+  ///
+  /// Only the caller that owns the player can supply this. Every unlocked row
+  /// used to render a *full* bar, and the playing row a fixed `0.71` — both
+  /// claimed a watch position the user had never reached.
+  final double? progress;
 
   @override
   Widget build(BuildContext context) {
@@ -45,9 +54,10 @@ class PlaylistEpisodeRow extends StatelessWidget {
       children: [
         _Thumb(
           episode: episode,
-          // Figma: playing row shows a partial fill (90.6/128); completed
-          // and unlocked rows show the full bar (827:35454 / 827:35473).
-          progress: locked ? null : (playing ? 0.71 : 1.0),
+          // Whatever the player actually reports, or nothing. A bar drawn from
+          // a made-up number is worse than no bar: it tells the user they left
+          // off somewhere they never were.
+          progress: progress,
         ),
         Expanded(
           child: Padding(
@@ -72,13 +82,17 @@ class PlaylistEpisodeRow extends StatelessWidget {
                     color: SkifluxColors.contentPrimary,
                   ),
                 ),
-                const SizedBox(height: SkifluxSpacing.spaceXs),
-                Text(
-                  '22k views · 5 hrs ago',
-                  style: SkifluxTypography.bodyP11Regular.copyWith(
-                    color: SkifluxColors.contentTertiary,
+                // Real views and age, or no line at all. This was hardcoded
+                // "22k views · 5 hrs ago" on every row in every season.
+                if (episode.metaLine.isNotEmpty) ...[
+                  const SizedBox(height: SkifluxSpacing.spaceXs),
+                  Text(
+                    episode.metaLine,
+                    style: SkifluxTypography.bodyP11Regular.copyWith(
+                      color: SkifluxColors.contentTertiary,
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
@@ -168,11 +182,17 @@ class _Thumb extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final locked = episode.isLocked;
-    Widget image = Image.asset(
-      // TODO(backend, blocking): replace local placeholder asset with real CDN/backend episode thumbnail URL — expects: String (network URL)
-      'assets/home_video_cover.png',
-      fit: BoxFit.cover,
-    );
+    const fallback = 'assets/home_video_cover.png';
+    final thumbnailUrl = episode.thumbnailUrl;
+    // `Episode.thumbnail_url` is required by the schema, so the asset is a
+    // decode/404 fallback rather than the normal path. Every row rendering the
+    // same stock cover was the giveaway that it was never parsed.
+    Widget image = (thumbnailUrl != null && thumbnailUrl.isNotEmpty)
+        ? SkifluxNetworkImage(
+            url: thumbnailUrl,
+            errorWidget: Image.asset(fallback, fit: BoxFit.cover),
+          )
+        : Image.asset(fallback, fit: BoxFit.cover);
     if (locked) {
       // Figma `827:35485`: 5px backdrop blur + 50% black over the cover.
       image = ImageFiltered(

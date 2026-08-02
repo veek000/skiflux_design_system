@@ -202,8 +202,7 @@ void main() {
       // Past the watchdog ceiling, then a few short pumps for the async
       // restore chain (keychain read → settings hydration → gate decision).
       await tester.pump(const Duration(seconds: 9));
-      await tester.pump(const Duration(milliseconds: 50));
-      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pump(const Duration(milliseconds: 500));
       return container;
     }
 

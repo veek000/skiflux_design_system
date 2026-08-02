@@ -275,8 +275,14 @@ class QuizResultScreen extends ConsumerWidget {
                         type: SkifluxButtonType.secondary,
                         expanded: true,
                         leadingIcon: const Icon(RemixIcons.share_forward_fill),
-                        // Same share modal as home / streaks (not OS sheet).
-                        onPressed: () => showShareSheet(context),
+                        // The device's own share sheet, same as everywhere
+                        // else — the custom eight-button modal did nothing.
+                        onPressed: () => showShareSheet(
+                          context,
+                          title:
+                              'I scored $correct/$total ($percent%) on '
+                              '"${task?.title ?? 'a SkiFlux assessment'}".',
+                        ),
                       ),
                       const SizedBox(height: SkifluxSpacing.spaceS),
                     ],

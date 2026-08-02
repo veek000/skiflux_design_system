@@ -7,11 +7,14 @@ import '../../features/home/data/episodes_repository.dart';
 import '../../features/home/data/home_feed_store.dart';
 import '../../features/home/sheets/comments_sheet.dart';
 import '../../features/home/sheets/more_menu_sheet.dart';
+import '../../features/playlists/data/playlists_store.dart';
+import '../../features/playlists/data/season_providers.dart';
 import '../../features/playlists/playlist_menu_sheet.dart';
 import '../../features/profile/data/library_store.dart';
 import '../error_handling/error_display.dart';
 import '../sheets/description_sheet.dart';
 import '../sheets/share_sheet.dart';
+import 'network_image.dart';
 
 /// Figma: video player card (`325:14149`) — media, progress bar, EP chip,
 /// title/description, action rail (like/comment/save/share/more).
@@ -46,6 +49,7 @@ class VideoFeedCard extends ConsumerStatefulWidget {
     this.borderRadius,
     /// When false (e.g. off-screen PageView page), playback is paused.
     this.isActive = true,
+    this.onOpenEpisode,
   });
 
   /// Preferred: full feed model. When null, legacy named fields are used
@@ -67,6 +71,15 @@ class VideoFeedCard extends ConsumerStatefulWidget {
   /// card plays audio-less video.
   final bool isActive;
 
+  /// Called when the user picks another episode of this season out of the EP
+  /// chip's sheet, and the card is inside a scrollable feed that can show it.
+  ///
+  /// Home passes a callback and the episode is opened *in the feed*. The
+  /// subscriptions episode modal builds this same card with nothing behind it
+  /// to scroll, so it leaves this null and the picked episode opens in the
+  /// player modal instead.
+  final ValueChanged<PlaylistEpisode>? onOpenEpisode;
+
   @override
   ConsumerState<VideoFeedCard> createState() => _VideoFeedCardState();
 }
@@ -75,6 +88,12 @@ class _VideoFeedCardState extends ConsumerState<VideoFeedCard> {
   VideoPlayerController? _controller;
   var _ready = false;
   var _initFailed = false;
+
+  /// Whether the user paused this card by tapping it, as opposed to it being
+  /// paused because it scrolled off screen. Kept apart so scrolling back to a
+  /// card the user paused does not silently resume it.
+  var _userPaused = false;
+
   ViewTracker? _viewTracker;
 
   HomeFeedItem get _item =>
@@ -116,6 +135,10 @@ class _VideoFeedCardState extends ConsumerState<VideoFeedCard> {
       _startViewTrackerIfNeeded();
     }
     if (oldWidget.isActive != widget.isActive) {
+      // Scrolling away ends the manual pause: coming back to a card should
+      // play it, the way it would on first arrival. The flag only protects a
+      // pause for as long as the user is looking at what they paused.
+      if (!widget.isActive && _userPaused) _userPaused = false;
       _syncPlayPause();
       // Page swiped away — post the final position now, not in 10 seconds.
       if (!widget.isActive) _viewTracker?.flush();
@@ -185,10 +208,60 @@ class _VideoFeedCardState extends ConsumerState<VideoFeedCard> {
     final c = _controller;
     if (c == null || !_ready) return;
     if (widget.isActive) {
-      if (!c.value.isPlaying) c.play();
+      // A card the user paused by hand stays paused while it is on screen —
+      // otherwise any rebuild (a tick, a like, a count change) would restart
+      // playback under their finger.
+      if (!c.value.isPlaying && !_userPaused) c.play();
     } else {
       if (c.value.isPlaying) c.pause();
     }
+  }
+
+  /// Tap-to-pause, the TikTok gesture: tap anywhere on the video to stop, tap
+  /// again to resume. The paused state is deliberate, so it survives rebuilds
+  /// and shows a play glyph — a silently frozen frame reads as a broken video.
+  void _togglePlayPause() {
+    final c = _controller;
+    if (c == null || !_ready) return;
+    setState(() {
+      if (c.value.isPlaying) {
+        c.pause();
+        _userPaused = true;
+      } else {
+        c.play();
+        _userPaused = false;
+      }
+    });
+  }
+
+  /// The EP chip: the season this episode belongs to, its siblings, and their
+  /// lock state.
+  ///
+  /// The display hints come off the item so the sheet header reads correctly
+  /// before `GET /seasons/{id}/episodes` returns; [SeasonArg] compares on id
+  /// alone, so this shares a cache entry with the same season opened from a
+  /// profile or a search result.
+  Future<void> _openSeasonSheet(HomeFeedItem item) {
+    final c = _controller;
+    return showSeasonSheet(
+      context,
+      season: SeasonArg(
+        id: item.seasonId!,
+        title: item.seasonTitle,
+        creatorName: item.creatorName,
+        creatorId: item.creatorId,
+        skillworld: item.skillworld,
+      ),
+      playingEpisodeId: item.episodeId,
+      // The playing row's progress bar reads this card's actual clock. It used
+      // to be a hardcoded 0.71 — a watch position the user had never reached.
+      // Null while the controller is uninitialised, which draws no bar rather
+      // than an invented one.
+      playingProgress: (c != null && c.value.isInitialized)
+          ? videoProgressFraction(c.value.position, c.value.duration)
+          : null,
+      onOpenInFeed: widget.onOpenEpisode,
+    );
   }
 
   Future<void> _disposeController() async {
@@ -242,16 +315,21 @@ class _VideoFeedCardState extends ConsumerState<VideoFeedCard> {
           children: [
             // Cover: CDN thumbnail when the feed provides one, else local asset.
             if (item.hasNetworkCover)
-              Image.network(
-                item.coverUrl!,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => Image.asset(
+              SkifluxNetworkImage(
+                url: item.coverUrl!,
+                errorWidget: Image.asset(
                   item.coverAsset,
                   fit: BoxFit.cover,
                   errorBuilder: (_, _, _) => Image.asset(
                     'assets/home_video_cover.png',
                     fit: BoxFit.cover,
                   ),
+                ),
+                // The cover sits under the video; a shimmer would flash behind
+                // every card as the feed scrolls. The card's own brand fill is
+                // the quieter placeholder.
+                placeholder: const ColoredBox(
+                  color: SkifluxColors.contentBrandInactive,
                 ),
               )
             else
@@ -262,37 +340,46 @@ class _VideoFeedCardState extends ConsumerState<VideoFeedCard> {
                     Image.asset('assets/home_video_cover.png', fit: BoxFit.cover),
               ),
             if (showVideo)
-              GestureDetector(
-                onTap: () {
-                  if (_controller!.value.isPlaying) {
-                    _controller!.pause();
-                  } else {
-                    _controller!.play();
-                  }
-                },
-                child: FittedBox(
-                  fit: BoxFit.cover,
-                  clipBehavior: Clip.hardEdge,
-                  child: SizedBox(
-                    width: _controller!.value.size.width,
-                    height: _controller!.value.size.height,
-                    child: VideoPlayer(_controller!),
-                  ),
+              FittedBox(
+                fit: BoxFit.cover,
+                clipBehavior: Clip.hardEdge,
+                child: SizedBox(
+                  width: _controller!.value.size.width,
+                  height: _controller!.value.size.height,
+                  child: VideoPlayer(_controller!),
                 ),
               ),
             // Bottom gradient for legibility (Figma linear overlay → black).
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Color(0x00000000),
-                    Color(0x00000000),
-                    Color(0xFF000000),
-                  ],
-                  stops: [0.0, 0.5, 1.0],
+            // Explicitly transparent to pointers: it covers the whole card, so
+            // anything it might absorb it would absorb everywhere.
+            const IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Color(0x00000000),
+                      Color(0x00000000),
+                      Color(0xFF000000),
+                    ],
+                    stops: [0.0, 0.5, 1.0],
+                  ),
                 ),
+              ),
+            ),
+            // Tap-to-pause, over the media and the gradient but under the
+            // chrome, so the whole frame answers a tap while the EP chip,
+            // "View More" and the action rail keep their own.
+            //
+            // This started life wrapped around the video itself, several
+            // layers down in the stack, and on the feed it never fired. A
+            // dedicated fill layer at a known depth cannot be shadowed by
+            // whatever gets stacked over the media next.
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _togglePlayPause,
               ),
             ),
             if (progress != null)
@@ -301,6 +388,12 @@ class _VideoFeedCardState extends ConsumerState<VideoFeedCard> {
                 left: 0,
                 right: 0,
                 child: _VideoProgressBar(progress: progress),
+              ),
+            // Paused-by-tap glyph. Ignores pointers so the tap that resumes
+            // playback still reaches the video underneath.
+            if (showVideo)
+              IgnorePointer(
+                child: _PausedOverlay(visible: _userPaused),
               ),
             // Bottom content + action rail
             Positioned(
@@ -319,17 +412,20 @@ class _VideoFeedCardState extends ConsumerState<VideoFeedCard> {
                           color: SkifluxColors.backgroundPrimaryBrand,
                           borderRadius: SkifluxRadii.borderPill,
                           child: InkWell(
-                            onTap: () => showPlaylistMenuSheet(
-                              context,
-                              playingEpisodeNumber: int.tryParse(
-                                item.epTag.replaceAll(RegExp(r'[^0-9]'), ''),
-                              ),
-                            ),
+                            // A standalone episode has no season to list. The
+                            // tag still reads as the episode number, but the
+                            // chevron and the tap go away rather than opening
+                            // an empty sheet.
+                            onTap: item.hasSeason
+                                ? () => _openSeasonSheet(item)
+                                : null,
                             borderRadius: SkifluxRadii.borderPill,
                             child: Padding(
-                              padding: const EdgeInsets.only(
+                              padding: EdgeInsets.only(
                                 left: SkifluxSpacing.spaceS,
-                                right: SkifluxSpacing.spaceXs,
+                                right: item.hasSeason
+                                    ? SkifluxSpacing.spaceXs
+                                    : SkifluxSpacing.spaceS,
                                 top: SkifluxSpacing.spaceXs,
                                 bottom: SkifluxSpacing.spaceXs,
                               ),
@@ -343,14 +439,16 @@ class _VideoFeedCardState extends ConsumerState<VideoFeedCard> {
                                           color: SkifluxColors.contentBrand,
                                         ),
                                   ),
-                                  const SizedBox(
-                                    width: SkifluxSpacing.space2xs,
-                                  ),
-                                  const Icon(
-                                    RemixIcons.arrow_right_s_line,
-                                    size: SkifluxSpacing.spaceM,
-                                    color: SkifluxColors.contentBrand,
-                                  ),
+                                  if (item.hasSeason) ...[
+                                    const SizedBox(
+                                      width: SkifluxSpacing.space2xs,
+                                    ),
+                                    const Icon(
+                                      RemixIcons.arrow_right_s_line,
+                                      size: SkifluxSpacing.spaceM,
+                                      color: SkifluxColors.contentBrand,
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),
@@ -408,6 +506,45 @@ class _VideoProgressBar extends StatelessWidget {
               child: const ColoredBox(color: SkifluxColors.contentBrand),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The TikTok pause glyph: a large translucent play triangle centred on the
+/// video while it is paused by tap.
+///
+/// Without it a paused card is just a frozen frame, which reads as a video
+/// that failed to load rather than one the user stopped. It fades and scales
+/// in, and fades out on resume, so a deliberate tap gets a deliberate answer.
+class _PausedOverlay extends StatelessWidget {
+  const _PausedOverlay({required this.visible});
+
+  final bool visible;
+
+  /// Larger than any icon on the token scale — this is a full-screen playback
+  /// affordance, not a control in a row.
+  static const double _glyphSize = 72;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedOpacity(
+      opacity: visible ? 1 : 0,
+      duration: const Duration(milliseconds: 160),
+      curve: Curves.easeOut,
+      child: AnimatedScale(
+        scale: visible ? 1 : 0.8,
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOutBack,
+        child: const Center(
+          child: Icon(
+            RemixIcons.play_fill,
+            size: _glyphSize,
+            // Half-opaque white reads over both bright and dark frames without
+            // a scrim behind it.
+            color: Color(0x99FFFFFF),
+          ),
         ),
       ),
     );
@@ -490,6 +627,11 @@ class _ActionRail extends ConsumerWidget {
         hasEpisode && (savedList?.any((e) => e.id == episodeId) ?? false);
     final liked = engagement?.liked ?? baseLiked;
     final saved = engagement?.saved ?? baseSaved;
+    // Counts move by this session's net delta, never by comparing the toggle
+    // against the refetched membership list — see [engagedCount].
+    final likeDelta = engagement?.likeDelta ?? 0;
+    final saveDelta = engagement?.saveDelta ?? 0;
+    final commentDelta = engagement?.commentDelta ?? 0;
 
     Future<void> toggle(Future<bool> Function(String) action) async {
       try {
@@ -505,7 +647,7 @@ class _ActionRail extends ConsumerWidget {
       children: [
         _LikeButton(
           liked: liked,
-          count: engagedCount(item.likeCount, base: baseLiked, now: liked),
+          count: engagedCount(item.likeCount, likeDelta),
           onTap: hasEpisode
               ? () =>
                   toggle(ref.read(feedEngagementProvider.notifier).toggleLike)
@@ -514,7 +656,7 @@ class _ActionRail extends ConsumerWidget {
         const SizedBox(height: SkifluxSpacing.spaceS),
         _ActionItem(
           icon: RemixIcons.chat_3_fill,
-          count: _railCount(item.commentCount),
+          count: _railCount(engagedCount(item.commentCount, commentDelta)),
           onTap: hasEpisode
               ? () => showCommentsSheet(context, episodeId)
               : null,
@@ -526,7 +668,7 @@ class _ActionRail extends ConsumerWidget {
               ? SkifluxColors.contentBrand
               : SkifluxColors.contentPrimaryInverse,
           count: _railCount(
-            engagedCount(item.saveCount, base: baseSaved, now: saved),
+            engagedCount(item.saveCount, saveDelta),
           ),
           onTap: hasEpisode
               ? () =>
@@ -538,13 +680,23 @@ class _ActionRail extends ConsumerWidget {
           icon: RemixIcons.share_forward_fill,
           // No share count exists on the Episode payload; show none.
           count: '',
-          onTap: () => showShareSheet(context),
+          // The device's own share sheet. This used to open a custom row of
+          // eight branded circles, none of which did anything.
+          onTap: () => showShareSheet(
+            context,
+            title: item.creatorName.isEmpty
+                ? item.title
+                : '${item.title} — @${item.creatorUsername}',
+            url: shareableMediaUrl(item.videoUrl),
+          ),
         ),
         const SizedBox(height: SkifluxSpacing.spaceS),
         GestureDetector(
           onTap: () => showMoreMenuSheet(
             context,
             episodeId: hasEpisode ? episodeId : null,
+            // Downloading needs the whole item, not just the id.
+            item: item,
           ),
           child: const Icon(
             RemixIcons.more_fill,

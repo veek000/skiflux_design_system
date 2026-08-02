@@ -4,8 +4,10 @@ import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/sheets/skiflux_sheet.dart';
 import '../../shared/widgets/load_failure.dart';
+import '../../shared/widgets/loading_skeletons.dart';
 import '../../shared/widgets/video_feed_card.dart';
 import '../home/data/home_feed_store.dart';
+import '../notifications/notification_bell_button.dart';
 import '../notifications/notifications_screen.dart';
 import '../playlists/playlist_screen.dart';
 import '../profile/profile_screen.dart';
@@ -49,13 +51,14 @@ class _SubscriptionsBodyState extends ConsumerState<SubscriptionsBody> {
     );
   }
 
-  /// Loading → spinner; failure → retry panel; loaded-empty → the real empty
-  /// state. Sample creators used to fill the failure case, which read as a
-  /// subscription list the user never built.
+  /// Loading → skeleton rows; failure → retry panel; loaded-empty → the real
+  /// empty state. Sample creators used to fill the failure case, which read as
+  /// a subscription list the user never built.
   Widget _body(SubscriptionsState subs) {
     if (subs.creators.isEmpty) {
       if (subs.isLoading) {
-        return const Center(child: CircularProgressIndicator());
+        // Avatar-led rows, matching the creator list underneath.
+        return const ListRowSkeleton(rows: 6);
       }
       if (subs.error != null) {
         return LoadFailure(
@@ -306,13 +309,7 @@ class SubscriptionsTopBar extends StatelessWidget {
             ),
           ),
           if (showNotification)
-            CircleTapTarget(
-              icon: RemixIcons.notification_3_fill,
-              onTap: onNotification,
-              badge: const SkifluxNotificationBadge(
-                type: SkifluxBadgeType.indicator,
-              ),
-            )
+            NotificationBellButton(onTap: onNotification)
           else
             // Invisible 48px spacer keeps the title optically centered.
             const SizedBox(width: SkifluxUnit.u48),
@@ -612,7 +609,8 @@ class _CreatorChannelHeader extends StatelessWidget {
 /// then the home player inset with rounded corners underneath.
 ///
 /// [showViewPlaylist] hides the link when the modal is opened from the
-/// playlist screen itself (already in the playlist section).
+/// playlist screen itself (already in the playlist section). The link also
+/// hides itself when the episode carries no season to open.
 Future<void> showEpisodePlayerModal(
   BuildContext context,
   SubscriptionEpisode episode, {
@@ -703,6 +701,9 @@ class EpisodePlayerSheet extends ConsumerWidget {
                           creatorId: episode.creatorId.isEmpty
                               ? null
                               : episode.creatorId,
+                          seasonId: episode.season?.id,
+                          seasonTitle: episode.season?.title,
+                          skillworld: episode.season?.skillworld,
                         ),
                       ),
               ),
@@ -750,17 +751,19 @@ class _EpisodePlayerHeader extends StatelessWidget {
                     color: SkifluxColors.contentPrimary,
                   ),
                 ),
-                if (showViewPlaylist)
+                if (showViewPlaylist && episode.season != null)
                   // Figma 1256:29885 — brand/400 link + 16px chevron
                   // (frame font "Outfit" is the known slip → DM Sans).
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: () {
                       // Leave the modal, then open the playlist page.
-                      Navigator.of(context).pop();
-                      Navigator.of(context).push(
+                      final navigator = Navigator.of(context);
+                      navigator.pop();
+                      navigator.push(
                         MaterialPageRoute(
-                          builder: (_) => const PlaylistScreen(),
+                          builder: (_) =>
+                              PlaylistScreen(season: episode.season!),
                         ),
                       );
                     },

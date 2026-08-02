@@ -43,6 +43,15 @@ enum SkifluxErrorKind {
   voicenoteFailed,
   contentLoadFailed,
   settingsSaveFailed,
+
+  /// A download was blocked by the user's own "Download on Wi-Fi only"
+  /// preference. Not a failure — the app did what it was told — so it is a
+  /// toast rather than a modal, and says which setting stopped it.
+  downloadWifiOnly,
+
+  /// An offline download did not finish.
+  downloadFailed,
+
   unknown,
 }
 
@@ -265,6 +274,24 @@ class ErrorHandler {
           uiType: ErrorUiType.modal,
           message: "We couldn't load this. Please try again.",
           kind: SkifluxErrorKind.contentLoadFailed,
+          shouldReportToCrashReporting: true,
+          actionLabel: 'Try Again',
+        );
+      case SkifluxErrorKind.downloadWifiOnly:
+        return const ClassifiedError(
+          uiType: ErrorUiType.toast,
+          // Names the setting, because the app is working as configured and
+          // the user is the only one who can change the answer.
+          message: "You're on mobile data and downloads are set to Wi-Fi only.",
+          kind: SkifluxErrorKind.downloadWifiOnly,
+          // Nothing broke.
+          shouldReportToCrashReporting: false,
+        );
+      case SkifluxErrorKind.downloadFailed:
+        return const ClassifiedError(
+          uiType: ErrorUiType.toast,
+          message: "That download didn't finish. Please try again.",
+          kind: SkifluxErrorKind.downloadFailed,
           shouldReportToCrashReporting: true,
           actionLabel: 'Try Again',
         );

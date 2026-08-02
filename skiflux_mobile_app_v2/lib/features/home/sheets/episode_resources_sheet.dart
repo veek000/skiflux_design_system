@@ -1,98 +1,150 @@
+/// Figma: Episode Resources from More Menu (`1256:27145`).
+///
+/// The files and links the creator attached to this episode, from
+/// `Episode.resources`. This used to be four hardcoded rows —
+/// `design_tokens.fig`, `component_kit.zip`, `episode_notes.pdf`,
+/// `color_styles.xlsx` — shown on every episode in the app, downloadable by
+/// nobody: the button toasted "Downloading…" and did nothing else.
+///
+/// A file downloads through the browser/OS handler and a link opens; both go
+/// through [openExternalUrl] rather than being fetched into the app, because
+/// these are arbitrary documents (Figma files, spreadsheets, ZIPs) that the app
+/// has no viewer for.
+library;
+
 import 'package:flutter/material.dart';
 import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../../shared/sheets/skiflux_sheet.dart';
 import '../../../shared/toast/skiflux_toast.dart';
+import '../../../shared/utils/external_link.dart';
+import '../data/episode_resource.dart';
 
-// Figma: Episode Resources from More Menu (`1256:27145`).
-
-Future<void> showEpisodeResourcesSheet(BuildContext context) {
+Future<void> showEpisodeResourcesSheet(
+  BuildContext context,
+  List<EpisodeResource> resources,
+) {
   return showSkifluxSheet(
     context: context,
-    builder: (_) => const _EpisodeResourcesSheet(),
+    builder: (_) => _EpisodeResourcesSheet(resources: resources),
   );
 }
 
 class _EpisodeResourcesSheet extends StatelessWidget {
-  const _EpisodeResourcesSheet();
+  const _EpisodeResourcesSheet({required this.resources});
 
-  static const _files = <(String, String, IconData)>[
-    ('design_tokens.fig', 'FIG · 4.2 MB', RemixIcons.file_3_fill),
-    ('component_kit.zip', 'ZIP · 12 MB', RemixIcons.file_zip_fill),
-    ('episode_notes.pdf', 'PDF · 890 KB', RemixIcons.file_pdf_fill),
-    ('color_styles.xlsx', 'XLS · 210 KB', RemixIcons.file_excel_fill),
-  ];
+  final List<EpisodeResource> resources;
 
   @override
   Widget build(BuildContext context) {
     return SkifluxSheetShell(
       title: 'Episode Resources',
-      child: ListView.separated(
-        shrinkWrap: true,
-        // Sheet drags down only when the list is at its top.
-        controller: ModalScrollController.of(context),
-        padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
-        itemCount: _files.length,
-        separatorBuilder: (_, _) =>
-            const SizedBox(height: SkifluxSpacing.spaceS),
-        itemBuilder: (context, i) {
-          final (name, meta, icon) = _files[i];
-          return Container(
-            padding: const EdgeInsets.all(SkifluxSpacing.spaceM),
-            decoration: BoxDecoration(
-              color: SkifluxColors.backgroundHover,
-              borderRadius: SkifluxRadii.borderX,
+      count: resources.isEmpty ? null : resources.length,
+      child: resources.isEmpty
+          // The More Menu hides the entry point when there is nothing here, so
+          // this is only reachable if the list emptied in between.
+          ? const Padding(
+              padding: EdgeInsets.all(SkifluxSpacing.space2xl),
+              child: SkifluxEmptyState(
+                icon: Icon(
+                  RemixIcons.folder_open_line,
+                  size: SkifluxEmptyState.iconSize,
+                  color: SkifluxColors.contentBrand,
+                ),
+                title: 'No resources',
+                message:
+                    "This episode doesn't have any files or links attached.",
+              ),
+            )
+          : ListView.separated(
+              shrinkWrap: true,
+              // Sheet drags down only when the list is at its top.
+              controller: ModalScrollController.of(context),
+              padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
+              itemCount: resources.length,
+              separatorBuilder: (_, _) =>
+                  const SizedBox(height: SkifluxSpacing.spaceS),
+              itemBuilder: (context, i) => _ResourceRow(resources[i]),
             ),
-            child: Row(
-              children: [
-                Container(
-                  width: SkifluxUnit.u48,
-                  height: SkifluxUnit.u48,
-                  alignment: Alignment.center,
-                  decoration: const BoxDecoration(
-                    color: SkifluxColors.backgroundPrimaryBrand,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    icon,
-                    size: 20,
-                    color: SkifluxColors.contentBrand,
-                  ),
+    );
+  }
+}
+
+class _ResourceRow extends StatelessWidget {
+  const _ResourceRow(this.resource);
+
+  final EpisodeResource resource;
+
+  Future<void> _open(BuildContext context) async {
+    final url = Uri.tryParse(resource.url ?? '');
+    if (url == null || !url.hasScheme) {
+      SkifluxToast.error(context, "That resource can't be opened");
+      return;
+    }
+    await openExternalUrl(context, url);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: SkifluxColors.backgroundHover,
+      borderRadius: SkifluxRadii.borderX,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => _open(context),
+        child: Padding(
+          padding: const EdgeInsets.all(SkifluxSpacing.spaceM),
+          child: Row(
+            children: [
+              Container(
+                width: SkifluxUnit.u48,
+                height: SkifluxUnit.u48,
+                alignment: Alignment.center,
+                decoration: const BoxDecoration(
+                  color: SkifluxColors.backgroundPrimaryBrand,
+                  shape: BoxShape.circle,
                 ),
-                const SizedBox(width: SkifluxSpacing.spaceM),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name,
-                        style: SkifluxTypography.headingH10Bold.copyWith(
-                          color: SkifluxColors.contentPrimary,
-                        ),
+                child: Icon(
+                  resource.icon,
+                  size: SkifluxUnit.u20,
+                  color: SkifluxColors.contentBrand,
+                ),
+              ),
+              const SizedBox(width: SkifluxSpacing.spaceM),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      resource.displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: SkifluxTypography.headingH10Bold.copyWith(
+                        color: SkifluxColors.contentPrimary,
                       ),
-                      Text(
-                        meta,
-                        style: SkifluxTypography.bodyP11Regular.copyWith(
-                          color: SkifluxColors.contentTertiary,
-                        ),
+                    ),
+                    Text(
+                      resource.metaLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: SkifluxTypography.bodyP11Regular.copyWith(
+                        color: SkifluxColors.contentTertiary,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                IconButton(
-                  onPressed: () {
-                    SkifluxToast.info(context, 'Downloading $name…');
-                  },
-                  icon: const Icon(
-                    RemixIcons.download_2_line,
-                    color: SkifluxColors.contentBrand,
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
+              ),
+              // The glyph says which of the two things the tap will do.
+              Icon(
+                resource.isLink
+                    ? RemixIcons.external_link_line
+                    : RemixIcons.download_2_line,
+                color: SkifluxColors.contentBrand,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

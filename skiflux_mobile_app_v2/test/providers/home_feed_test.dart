@@ -4,7 +4,9 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:skiflux_mobile_app_v2/features/home/data/episodes_repository.dart';
 import 'package:skiflux_mobile_app_v2/features/home/data/home_feed_store.dart';
+import 'package:skiflux_mobile_app_v2/features/profile/data/library_episode.dart';
 import 'package:skiflux_mobile_app_v2/features/profile/data/library_repository.dart';
+import 'package:skiflux_mobile_app_v2/features/profile/data/library_store.dart';
 import 'package:skiflux_mobile_app_v2/shared/network/token_store.dart';
 
 void main() {
@@ -91,18 +93,18 @@ void main() {
 
   group('engagedCount', () {
     test('applies this session\'s delta over the payload count', () {
-      expect(engagedCount(10, base: false, now: false), 10);
-      expect(engagedCount(10, base: false, now: true), 11);
-      expect(engagedCount(10, base: true, now: false), 9);
-      expect(engagedCount(10, base: true, now: true), 10);
+      expect(engagedCount(10, 0), 10);
+      expect(engagedCount(10, 1), 11);
+      expect(engagedCount(10, -1), 9);
+      expect(engagedCount(10, 3), 13);
     });
 
     test('null payload count stays null — no fabricated numbers', () {
-      expect(engagedCount(null, base: false, now: true), isNull);
+      expect(engagedCount(null, 1), isNull);
     });
 
     test('never goes negative', () {
-      expect(engagedCount(0, base: true, now: false), 0);
+      expect(engagedCount(0, -1), 0);
     });
   });
 
@@ -152,6 +154,65 @@ void main() {
           await c.read(feedEngagementProvider.notifier).toggleSave('ep-1');
       expect(saved, isTrue);
       expect(repo.saveToggles, ['ep-1']);
+    });
+
+    test(
+      'the +1 survives the liked-list refetch that follows the toggle',
+      () async {
+        // The regression this whole delta rewrite exists for. Liking
+        // invalidates `likedEpisodesProvider`; the refetched list now contains
+        // the episode, so a count derived from `base != now` collapsed back to
+        // the server number and the user watched their like un-count itself.
+        final repo = _FakeLibraryRepository(likedAfterToggle: true);
+        final c = ProviderContainer(
+          retry: (_, _) => null,
+          overrides: [
+            libraryRepositoryProvider.overrideWithValue(repo),
+            tokenStoreProvider.overrideWithValue(_FakeTokenStore(true)),
+          ],
+        );
+        addTearDown(c.dispose);
+
+        await c.read(likedEpisodesProvider.future);
+        await c.read(feedEngagementProvider.notifier).toggleLike('ep-1');
+
+        // Base state now agrees with the toggle...
+        final refetched = await c.read(likedEpisodesProvider.future);
+        expect(refetched.map((e) => e.id), contains('ep-1'));
+
+        // ...and the count still shows the like the user earned.
+        final delta = c.read(feedEngagementProvider)['ep-1']!.likeDelta;
+        expect(delta, 1);
+        expect(engagedCount(10, delta), 11);
+      },
+    );
+
+    test('a failed toggle rolls the count delta back with the flag', () async {
+      final repo = _FakeLibraryRepository(failToggle: true);
+      final c = withRepo(repo);
+
+      await expectLater(
+        c.read(feedEngagementProvider.notifier).toggleLike('ep-1'),
+        throwsA(isA<Exception>()),
+      );
+
+      // A filled heart next to an unmoved count, or a moved count next to an
+      // empty heart, are both lies — they roll back together.
+      final engagement = c.read(feedEngagementProvider)['ep-1']!;
+      expect(engagement.liked, isFalse);
+      expect(engagement.likeDelta, 0);
+    });
+
+    test('bumpComments moves the rail count the sheet just changed', () {
+      final c = withRepo(_FakeLibraryRepository());
+      final notifier = c.read(feedEngagementProvider.notifier);
+
+      notifier.bumpComments('ep-1', 1);
+      expect(c.read(feedEngagementProvider)['ep-1']!.commentDelta, 1);
+
+      // Deleting your own comment takes it back down.
+      notifier.bumpComments('ep-1', -1);
+      expect(c.read(feedEngagementProvider)['ep-1']!.commentDelta, 0);
     });
   });
 
@@ -276,11 +337,37 @@ void main() {
 
 /// Records toggles, and can fail on demand.
 class _FakeLibraryRepository extends LibraryRepository {
-  _FakeLibraryRepository({this.failToggle = false}) : super(Dio());
+  _FakeLibraryRepository({
+    this.failToggle = false,
+    this.likedAfterToggle = false,
+  }) : super(Dio());
 
   final bool failToggle;
+
+  /// When set, `getLiked()` starts empty and returns `ep-1` once the toggle
+  /// has been posted — the real server behaviour that used to eat the +1.
+  final bool likedAfterToggle;
+
   final List<String> likeToggles = [];
   final List<String> saveToggles = [];
+
+  @override
+  Future<List<LibraryEpisode>> getLiked({
+    int? pageSize,
+    String? skillworld,
+  }) async {
+    if (!likedAfterToggle || likeToggles.isEmpty) return const [];
+    return const [
+      LibraryEpisode(
+        id: 'ep-1',
+        title: 'Colour systems',
+        description: '',
+        creatorName: 'Amara',
+        creatorUsername: 'amara',
+        creatorInitials: 'A',
+      ),
+    ];
+  }
 
   @override
   Future<void> toggleLike(String episodeId) async {

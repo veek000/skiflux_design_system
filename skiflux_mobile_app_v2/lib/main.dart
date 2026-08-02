@@ -7,6 +7,7 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 import 'app/app.dart';
 import 'config/env_config.dart';
 import 'firebase_options.dart';
+import 'shared/network/provider_retry.dart';
 import 'shared/notifications/fcm_service.dart';
 
 Future<void> main() async {
@@ -26,11 +27,23 @@ Future<void> main() async {
         options.environment = EnvConfig.environment;
         options.tracesSampleRate = 1.0;
       },
-      appRunner: () => runApp(const ProviderScope(child: SkifluxMobileAppV2())),
+      appRunner: _run,
     );
   } else {
-    runApp(const ProviderScope(child: SkifluxMobileAppV2()));
+    _run();
   }
+}
+
+void _run() {
+  runApp(
+    // [skifluxRetry] replaces Riverpod 3's default ten-attempt backoff: it
+    // hid every failure behind ~40s of skeleton, and retried 401s hard enough
+    // to spend the refresh tokens that would have recovered the session.
+    const ProviderScope(
+      retry: skifluxRetry,
+      child: SkifluxMobileAppV2(),
+    ),
+  );
 }
 
 Future<void> _initFirebase() async {

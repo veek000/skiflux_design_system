@@ -40,10 +40,19 @@ class CardsRepository extends ApiRepository {
     kind: SkifluxErrorKind.contentLoadFailed,
   );
 
-  /// Starts the hosted save-card flow and returns the checkout URL to open.
+  /// Starts the hosted save-card flow.
+  ///
+  /// Returns the checkout URL **and** the `skf-card-…` reference. The
+  /// reference is not optional bookkeeping: `payment-flows.md` §2 is explicit
+  /// that after the user finishes you "call `POST /wallet/topup/verify` with
+  /// the `tx_ref`, **then** re-fetch `GET /wallet/cards`". Re-reading the
+  /// vault without verifying first only works if a webhook happened to land
+  /// in the meantime, which is exactly the race that makes a saved card
+  /// sometimes not appear.
+  ///
   /// The response is untyped in the spec; a body without a usable URL is a
   /// contract failure, never silently "successful".
-  Future<Uri> startAddCard({
+  Future<AddCardHandOff> startAddCard({
     required String gatewayName,
     String? redirectUrl,
   }) => post(
@@ -53,6 +62,7 @@ class CardsRepository extends ApiRepository {
       'redirect_url': ?redirectUrl,
     },
     parse: (json) {
+      Uri? url;
       for (final key in const [
         'checkout_url',
         'authorization_url',
@@ -63,11 +73,25 @@ class CardsRepository extends ApiRepository {
       ]) {
         final value = json[key];
         if (value is String && value.isNotEmpty) {
-          final uri = Uri.tryParse(value);
-          if (uri != null && uri.hasScheme) return uri;
+          final parsed = Uri.tryParse(value);
+          if (parsed != null && parsed.hasScheme) {
+            url = parsed;
+            break;
+          }
         }
       }
-      throw const FormatException('Add-card response carried no checkout URL');
+      if (url == null) {
+        throw const FormatException(
+          'Add-card response carried no checkout URL',
+        );
+      }
+      final ref = json['tx_ref'] ?? json['reference'];
+      return AddCardHandOff(
+        checkoutUrl: url,
+        // Nullable: the flow still works without it (the vault re-read is the
+        // fallback), it just cannot verify first.
+        txRef: ref is String && ref.isNotEmpty ? ref : null,
+      );
     },
   ).then((v) => v!);
 
@@ -77,6 +101,17 @@ class CardsRepository extends ApiRepository {
     cardSetDefaultPath(id),
     parse: SavedCard.fromJson,
   ).then((v) => v!);
+}
+
+/// What `POST /wallet/cards/add` hands back: the gateway page to open, and
+/// the reference that identifies the attempt.
+class AddCardHandOff {
+  const AddCardHandOff({required this.checkoutUrl, this.txRef});
+
+  final Uri checkoutUrl;
+
+  /// `skf-card-…`. Null when the backend omitted it.
+  final String? txRef;
 }
 
 final cardsRepositoryProvider = Provider<CardsRepository>(

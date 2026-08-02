@@ -3,12 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../../config/env_config.dart';
 import '../../../shared/error_handling/error_display.dart';
 import '../../../shared/error_handling/error_handler.dart';
 import '../../../shared/sheets/skiflux_sheet.dart';
 import '../../../shared/toast/skiflux_toast.dart';
-import '../../../shared/utils/external_link.dart';
+import '../../../shared/webview/checkout_screen.dart';
+import '../../../shared/widgets/loading_skeletons.dart';
 import '../../playlists/data/playlists_store.dart';
+import '../../settings/data/payment_store.dart';
 import '../../wallet/buy_coins_screen.dart'
     show CoinPacksErrorState, TopupPendingBanner;
 import '../../wallet/data/topup_repository.dart';
@@ -23,7 +26,8 @@ import '../../wallet/widgets/coin_widgets.dart';
 // checkout hand-off → `POST /wallet/topup/verify`. The success phase renders
 // only after verify confirms; no coins are ever credited client-side.
 
-enum _PayMethod { card, bank }
+// The payment method is the shared `TopupMethod` rather than a local enum, so
+// this sheet and the full Buy Coins screen offer the same three spec paths.
 
 enum _BuyPhase { packs, payment, pendingCheckout, success }
 
@@ -46,12 +50,21 @@ class _BuyCoinsSheet extends ConsumerStatefulWidget {
 class _BuyCoinsSheetState extends ConsumerState<_BuyCoinsSheet> {
   _BuyPhase _phase = _BuyPhase.packs;
   CoinPack? _selected;
-  _PayMethod _method = _PayMethod.card;
+  TopupMethod _method = TopupMethod.card;
   bool _busy = false;
   TopupInitiation? _handOff;
 
   /// Backend-reported coins credited by verify, when it said.
   Decimal? _coinsCredited;
+
+  /// The card a one-tap charge would use — the vault's default, or its first
+  /// entry. Null when the vault is empty or still loading, which hides the
+  /// saved-card row entirely.
+  SavedCard? get _defaultCard {
+    final cards = ref.watch(savedCardsProvider).value;
+    if (cards == null || cards.isEmpty) return null;
+    return cards.firstWhere((c) => c.isDefault, orElse: () => cards.first);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -89,7 +102,13 @@ class _BuyCoinsSheetState extends ConsumerState<_BuyCoinsSheet> {
             ),
             const SizedBox(height: SkifluxSpacing.spaceL),
             ref.watch(coinPacksProvider).when(
-              loading: () => const Center(child: CircularProgressIndicator()),
+              // Four cards in the two-up grid the packs land in, so the
+              // sheet's height and the Continue button below don't jump.
+              loading: () => const CardGridSkeleton(
+                count: 4,
+                aspectRatio: 1.1,
+                padding: EdgeInsets.zero,
+              ),
               error: (e, st) => CoinPacksErrorState(
                 onRetry: () => ref.invalidate(coinPacksProvider),
               ),
@@ -183,10 +202,9 @@ class _BuyCoinsSheetState extends ConsumerState<_BuyCoinsSheet> {
             ),
             const SizedBox(height: SkifluxSpacing.spaceL),
             PaymentMethodSelector(
-              cardSelected: _method == _PayMethod.card,
-              onChanged: (isCard) => setState(
-                () => _method = isCard ? _PayMethod.card : _PayMethod.bank,
-              ),
+              selected: _method,
+              savedCard: _defaultCard,
+              onChanged: (m) => setState(() => _method = m),
             ),
             const SizedBox(height: SkifluxSpacing.spaceL),
             CoinSummaryCard(
@@ -224,15 +242,23 @@ class _BuyCoinsSheetState extends ConsumerState<_BuyCoinsSheet> {
     );
   }
 
-  /// `POST /wallet/topup/initiate`, then hand off to the gateway checkout.
+  /// `POST /wallet/topup/initiate`, then the gateway's hosted checkout inside
+  /// the app — or, for a saved card, `POST /wallet/topup/charge-card`, which
+  /// the spec describes as one-tap with no checkout redirect at all.
   Future<void> _startCheckout() async {
     final pack = _selected!;
     setState(() => _busy = true);
     try {
+      if (_method == TopupMethod.savedCard) {
+        await _chargeSavedCard(pack);
+        return;
+      }
       final handOff = await ref.read(topupRepositoryProvider).initiateTopup(
             amountFiat: pack.amountFiatWire,
             currency: 'NGN',
-            paymentMethod: _method == _PayMethod.card ? 'card' : 'bank_transfer',
+            paymentMethod: _method.wireValue,
+            // The app's own return URL — see [EnvConfig.paymentReturnUrl].
+            redirectUrl: EnvConfig.paymentReturnUrl,
           );
       if (!mounted) return;
       setState(() {
@@ -240,12 +266,76 @@ class _BuyCoinsSheetState extends ConsumerState<_BuyCoinsSheet> {
         _handOff = handOff;
         _phase = _BuyPhase.pendingCheckout;
       });
-      await openExternalUrl(context, handOff.checkoutUrl);
+
+      final outcome = await showCheckout(
+        context,
+        checkoutUrl: handOff.checkoutUrl,
+        redirectUrlPrefix: EnvConfig.paymentReturnUrl,
+        txRef: handOff.txRef,
+        returnHost: EnvConfig.apiHost,
+        title: 'Buy Skillcoins',
+      );
+      if (!mounted) return;
+      // The gateway finished; whether it succeeded is `verify`'s to say. An
+      // abandoned checkout falls through to the pending phase, which still
+      // offers a manual "I've paid" check.
+      if (outcome == CheckoutOutcome.completed) await _verify();
     } catch (e, st) {
       if (!mounted) return;
       setState(() => _busy = false);
       await ErrorDisplay.show(context, ref, e, stackTrace: st);
     }
+  }
+
+  /// One-tap charge against a stored token. Only a `successful` transaction
+  /// credits coins; `pending`/`initiated` drops into the same verify path as
+  /// hosted checkout, so the user is never asked to pay twice.
+  Future<void> _chargeSavedCard(CoinPack pack) async {
+    final card = _defaultCard;
+    if (card == null) {
+      throw const SkifluxFailure(SkifluxErrorKind.coinPurchaseFailed);
+    }
+    final result = await ref.read(topupRepositoryProvider).chargeCard(
+          amountFiat: pack.amountFiatWire,
+          savedCardId: card.id,
+          currency: 'NGN',
+        );
+    if (!mounted) return;
+
+    final status = result['status']?.toString().toLowerCase();
+    final txRef = result['tx_ref']?.toString();
+
+    if (status == 'successful') {
+      await ref.read(walletProvider.notifier).refreshFromBackend();
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _coinsCredited =
+            Decimal.tryParse(result['amount_skillcoins']?.toString() ?? '') ??
+                Decimal.fromInt(pack.coins);
+        _phase = _BuyPhase.success;
+      });
+      return;
+    }
+
+    if ((status == 'pending' || status == 'initiated') &&
+        txRef != null &&
+        txRef.isNotEmpty) {
+      setState(() {
+        _busy = false;
+        _handOff = TopupInitiation(checkoutUrl: Uri.parse(''), txRef: txRef);
+        _phase = _BuyPhase.pendingCheckout;
+      });
+      await _verify();
+      return;
+    }
+
+    setState(() => _busy = false);
+    await ErrorDisplay.show(
+      context,
+      ref,
+      const SkifluxFailure(SkifluxErrorKind.coinPurchaseFailed),
+    );
   }
 
   // --- Phase 3: waiting for the gateway ---------------------------------

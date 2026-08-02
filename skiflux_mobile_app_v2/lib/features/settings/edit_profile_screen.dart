@@ -9,6 +9,7 @@ import 'package:skiflux_design_system/skiflux_design_system.dart';
 import '../../shared/error_handling/error_display.dart';
 import '../../shared/sheets/skiflux_sheet.dart';
 import '../../shared/toast/skiflux_toast.dart';
+import '../../shared/widgets/network_image.dart';
 import '../profile/data/profile_store.dart';
 
 // Figma: **Settings → Edit Profile** (`1256:19929`).
@@ -226,10 +227,9 @@ class _AvatarPicker extends StatelessWidget {
     if (imagePath != null) {
       avatarBody = Image.file(File(imagePath!), fit: BoxFit.cover);
     } else if (networkUrl != null && networkUrl!.isNotEmpty) {
-      avatarBody = Image.network(
-        networkUrl!,
-        fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => const Icon(
+      avatarBody = SkifluxNetworkImage(
+        url: networkUrl!,
+        errorWidget: const Icon(
           RemixIcons.user_fill,
           size: 40,
           color: SkifluxColors.contentBrand,

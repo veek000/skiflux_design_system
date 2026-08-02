@@ -16,6 +16,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/network/token_store.dart';
 import '../../profile/data/library_repository.dart';
 import '../../profile/data/library_store.dart';
+import 'episode_resource.dart';
 import 'episodes_repository.dart';
 
 /// Whether the home card should play video or show a static image.
@@ -44,6 +45,13 @@ class HomeFeedItem {
     this.commentCount,
     this.saveCount,
     this.durationSeconds,
+    this.seasonId,
+    this.seasonTitle,
+    this.skillworld,
+    this.isLocked = false,
+    this.coinCost = 0,
+    this.resources = const [],
+    this.taskCount = 0,
   });
 
   final FeedContentType type;
@@ -80,6 +88,20 @@ class HomeFeedItem {
   /// `video_duration` in seconds; used by view tracking to decide "completed".
   final int? durationSeconds;
 
+  /// `Episode.season_id` / `season_title` — what the EP chip opens. Null on a
+  /// standalone episode (or a legacy call site), in which case the chip is not
+  /// tappable rather than opening an empty sheet.
+  final String? seasonId;
+  final String? seasonTitle;
+
+  /// `Episode.skillworld`, raw backend value.
+  final String? skillworld;
+
+  /// The server's own `is_locked` (already reconciled with `is_purchased` by
+  /// the parser) and the whole-coin price for the unlock sheet.
+  final bool isLocked;
+  final int coinCost;
+
   bool get isVideo => type == FeedContentType.video;
   bool get isImage => type == FeedContentType.image;
 
@@ -88,6 +110,24 @@ class HomeFeedItem {
       isVideo && videoUrl != null && videoUrl!.isNotEmpty;
 
   bool get hasNetworkCover => coverUrl != null && coverUrl!.isNotEmpty;
+
+  /// True when the EP chip can open a season sheet.
+  bool get hasSeason => seasonId != null && seasonId!.isNotEmpty;
+
+  /// Files and links attached to this episode, from `Episode.resources`.
+  ///
+  /// Empty means empty: the More Menu hides its "Episode Resources" card
+  /// rather than opening a sheet of four hardcoded filenames, which is what it
+  /// used to show on every episode in the app.
+  final List<EpisodeResource> resources;
+
+  /// How many tasks `Episode.tasks` carried. Only the count is kept — the More
+  /// Menu needs to know whether to offer the card, and the task screens fetch
+  /// their own detail.
+  final int taskCount;
+
+  bool get hasResources => resources.isNotEmpty;
+  bool get hasTask => taskCount > 0;
 }
 
 /// `GET /episodes/recommendations`, or an honest loading / empty / error state.
@@ -115,6 +155,35 @@ class HomeFeedNotifier extends AsyncNotifier<List<HomeFeedItem>> {
     // Failures propagate. `AsyncError` is what lets the screen offer a retry;
     // swallowing it here would leave the user with no way to try again.
     return ref.read(episodesRepositoryProvider).getRecommendations();
+  }
+
+  /// Makes [episodeId] a page of this feed and returns its index.
+  ///
+  /// Called when the user picks a sibling episode out of the season sheet
+  /// while watching in home: that has to play *in the feed*, not in a modal.
+  /// If the episode is already loaded its existing index is returned — the
+  /// feed is not reordered under the user. Otherwise it is fetched and
+  /// inserted directly after [afterIndex] so their place in the feed survives.
+  ///
+  /// Throws when the fetch fails (including the 403 `GET /episodes/{id}`
+  /// returns for an unpurchased episode); the caller surfaces it.
+  Future<int> openEpisode(String episodeId, {int afterIndex = -1}) async {
+    final current = state.value ?? const <HomeFeedItem>[];
+    final existing = current.indexWhere((e) => e.episodeId == episodeId);
+    if (existing >= 0) return existing;
+
+    final item = await ref
+        .read(episodesRepositoryProvider)
+        .getEpisode(episodeId);
+
+    // Re-read: the fetch was awaited, so the feed may have changed underneath.
+    final latest = state.value ?? const <HomeFeedItem>[];
+    final already = latest.indexWhere((e) => e.episodeId == episodeId);
+    if (already >= 0) return already;
+
+    final at = (afterIndex + 1).clamp(0, latest.length);
+    state = AsyncData([...latest.sublist(0, at), item, ...latest.sublist(at)]);
+    return at;
   }
 
   /// `POST /episodes/not-interested` — the card disappears from the feed
@@ -155,7 +224,7 @@ double videoProgressFraction(Duration position, Duration duration) {
 
 // ── Like / save engagement ───────────────────────────────────────────
 
-/// This session's like/save toggles, per episode UUID.
+/// This session's like/save toggles and count movement, per episode UUID.
 ///
 /// The `Episode` schema carries `like_count`/`save_count` but no
 /// `is_liked`/`is_saved`, so the base state comes from membership in the
@@ -163,16 +232,43 @@ double videoProgressFraction(Duration position, Duration duration) {
 /// and defaults to false otherwise. Toggles are optimistic against the real
 /// `POST /episodes/like` / `POST /episodes/save` endpoints (both toggles),
 /// roll back on failure, and rethrow so the card can surface the error.
+///
+/// The counts are tracked as explicit **deltas** rather than derived from
+/// `base != now`. Derivation looked equivalent but wasn't: liking invalidates
+/// `likedEpisodesProvider`, the refetched list then contains the episode, base
+/// agrees with the toggle again, and the +1 vanished from the rail a moment
+/// after the user earned it. A delta is only cancelled by the opposite action
+/// or by a feed refresh that brings a fresh server count.
 class EpisodeEngagement {
-  const EpisodeEngagement({this.liked, this.saved});
+  const EpisodeEngagement({
+    this.liked,
+    this.saved,
+    this.likeDelta = 0,
+    this.saveDelta = 0,
+    this.commentDelta = 0,
+  });
 
   /// Null = untouched this session; fall back to membership / payload.
   final bool? liked;
   final bool? saved;
 
-  EpisodeEngagement copyWith({bool? liked, bool? saved}) => EpisodeEngagement(
+  /// Net movement this session, added on top of the payload's count.
+  final int likeDelta;
+  final int saveDelta;
+  final int commentDelta;
+
+  EpisodeEngagement copyWith({
+    bool? liked,
+    bool? saved,
+    int? likeDelta,
+    int? saveDelta,
+    int? commentDelta,
+  }) => EpisodeEngagement(
     liked: liked ?? this.liked,
     saved: saved ?? this.saved,
+    likeDelta: likeDelta ?? this.likeDelta,
+    saveDelta: saveDelta ?? this.saveDelta,
+    commentDelta: commentDelta ?? this.commentDelta,
   );
 }
 
@@ -202,17 +298,29 @@ class FeedEngagementNotifier extends Notifier<Map<String, EpisodeEngagement>> {
 
   /// Toggle like — optimistic, rolled back and rethrown on failure. Returns
   /// the state the UI should show after the flip.
+  ///
+  /// The bool and the delta move together and roll back together, so the rail
+  /// can never show a filled heart next to an unmoved count.
   Future<bool> toggleLike(String episodeId) async {
     final current = isLiked(episodeId);
     final next = !current;
     final before = _of(episodeId);
-    _put(episodeId, before.copyWith(liked: next));
+    _put(
+      episodeId,
+      before.copyWith(
+        liked: next,
+        likeDelta: before.likeDelta + (next ? 1 : -1),
+      ),
+    );
     try {
       await ref.read(libraryRepositoryProvider).toggleLike(episodeId);
       // The liked list is now stale; refetch next time it's shown.
       ref.invalidate(likedEpisodesProvider);
       return next;
     } catch (_) {
+      // Restore the *resolved* prior value, not the untouched null: after a
+      // rejected toggle the rail must state a position rather than fall back
+      // to a membership list the failed write may already have disturbed.
       if (ref.mounted) _put(episodeId, before.copyWith(liked: current));
       rethrow;
     }
@@ -222,7 +330,13 @@ class FeedEngagementNotifier extends Notifier<Map<String, EpisodeEngagement>> {
     final current = isSaved(episodeId);
     final next = !current;
     final before = _of(episodeId);
-    _put(episodeId, before.copyWith(saved: next));
+    _put(
+      episodeId,
+      before.copyWith(
+        saved: next,
+        saveDelta: before.saveDelta + (next ? 1 : -1),
+      ),
+    );
     try {
       await ref.read(libraryRepositoryProvider).toggleSave(episodeId);
       ref.invalidate(savedEpisodesProvider);
@@ -233,6 +347,18 @@ class FeedEngagementNotifier extends Notifier<Map<String, EpisodeEngagement>> {
     }
   }
 
+  /// Move [episodeId]'s comment count by [by] (+1 posted, -1 deleted).
+  ///
+  /// Called by the comments sheet once the server has accepted the write. The
+  /// feed payload's `comment_count` is a snapshot from load time and there is
+  /// no per-episode refetch on the rail, so without this the number the user
+  /// just changed sits still until the whole feed reloads.
+  void bumpComments(String episodeId, int by) {
+    if (by == 0) return;
+    final before = _of(episodeId);
+    _put(episodeId, before.copyWith(commentDelta: before.commentDelta + by));
+  }
+
   static bool _inList(AsyncValue<List<dynamic>> list, String episodeId) {
     final value = list.value;
     if (value == null) return false;
@@ -240,14 +366,16 @@ class FeedEngagementNotifier extends Notifier<Map<String, EpisodeEngagement>> {
   }
 }
 
-/// Count for the rail: payload count plus this session's delta. Null in →
-/// null out, so unknown counts render as no number instead of a fake one.
-int? engagedCount(int? payloadCount, {required bool base, required bool now}) {
+/// Count for the rail: payload count plus this session's delta, clamped at 0.
+///
+/// Null in → null out, so unknown counts render as no number instead of a fake
+/// one. Taking the delta rather than `base`/`now` is the whole point: the
+/// server count and the session's movement are independent, so refetching
+/// `GET /me/liked` no longer silently cancels the +1 the user just earned.
+int? engagedCount(int? payloadCount, int delta) {
   if (payloadCount == null) return null;
-  if (base == now) return payloadCount;
-  if (now) return payloadCount + 1;
-  final decremented = payloadCount - 1;
-  return decremented < 0 ? 0 : decremented;
+  final total = payloadCount + delta;
+  return total < 0 ? 0 : total;
 }
 
 // ── View tracking ────────────────────────────────────────────────────

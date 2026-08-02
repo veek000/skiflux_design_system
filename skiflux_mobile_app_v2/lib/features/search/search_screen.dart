@@ -8,10 +8,12 @@ import '../../shared/error_handling/error_display.dart';
 import '../../shared/error_handling/error_handler.dart';
 import '../../shared/toast/skiflux_toast.dart';
 import '../../shared/widgets/load_failure.dart';
+import '../playlists/data/season_providers.dart';
 import '../playlists/playlist_screen.dart';
 import '../profile/profile_screen.dart';
 import '../profile/public_user_profile_screen.dart';
 import '../subscriptions/data/subscriptions_store.dart';
+import '../subscriptions/subscriptions_screen.dart';
 import 'data/recent_searches_store.dart';
 import 'data/search_index.dart';
 import 'search_result_widgets.dart';
@@ -85,10 +87,25 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     }
   }
 
-  /// Commit the query to history, then open the results screen on [tab].
-  Future<void> _openResults(SearchCategory tab) async {
+  /// Record the current query in Recent Searches.
+  ///
+  /// A search is "used" the moment the user acts on a result, not only when
+  /// they open the full results screen. Every act-on-a-result path below calls
+  /// this, so tapping an episode, creator, user or playlist straight from the
+  /// suggestion list leaves the same history entry that "See all" does —
+  /// previously those taps left none, and the query vanished.
+  ///
+  /// Never per keystroke: the debounced [_runSearch] does not call this, so
+  /// history holds queries the user acted on rather than every prefix they
+  /// typed on the way there.
+  ///
+  /// Returns whether the write landed. [reportFailure] is off for the
+  /// result-tap callers, where the tap's real subject is the thing being
+  /// opened; a persistent store failure still surfaces through the
+  /// [recentSearchesProvider] listener in [build].
+  Future<bool> _commitQuery({bool reportFailure = true}) async {
     final results = _results;
-    if (results.query.isEmpty) return;
+    if (results.query.isEmpty) return false;
     try {
       await ref
           .read(recentSearchesProvider.notifier)
@@ -99,16 +116,23 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               resultCount: results.total,
             ),
           );
+      return true;
     } catch (e, st) {
-      if (!mounted) return;
+      if (!mounted || !reportFailure) return false;
       await ErrorDisplay.show(
         context,
         ref,
         SkifluxFailure(SkifluxErrorKind.searchFailed, cause: e),
         stackTrace: st,
       );
-      return;
+      return false;
     }
+  }
+
+  /// Commit the query to history, then open the results screen on [tab].
+  Future<void> _openResults(SearchCategory tab) async {
+    final results = _results;
+    if (!await _commitQuery()) return;
     if (!mounted) return;
     unawaited(
       Navigator.of(context).push(
@@ -159,6 +183,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   /// `GET /creators/{id}` takes the creator UUID the search payload carries.
   void _openCreatorProfile(PersonResult person) {
     if (person.id.isEmpty) return;
+    unawaited(_commitQuery(reportFailure: false));
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ProfileScreen(creatorId: person.id),
@@ -170,6 +195,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   /// allows a null one, in which case there is nothing honest to open.
   void _openUserProfile(PersonResult person) {
     if (person.username.isEmpty) return;
+    unawaited(_commitQuery(reportFailure: false));
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => PublicUserProfileScreen(username: person.username),
@@ -193,6 +219,46 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       if (!mounted) return;
       await ErrorDisplay.show(context, ref, e, stackTrace: st);
     }
+  }
+
+  /// Search knows a season's id, title and episode count but not its creator —
+  /// `Season` carries none — so [SeasonArg] goes in with the hints it has and
+  /// the screen fills the rest in from the episodes call.
+  void _openPlaylist(PlaylistResult playlist) {
+    unawaited(_commitQuery(reportFailure: false));
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PlaylistScreen(
+          season: SeasonArg(
+            id: playlist.id,
+            title: playlist.title,
+            episodeCount: playlist.episodeCount,
+            skillworld: playlist.skillworld,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// A search result has no feed behind it, so an episode opens in the player
+  /// modal — the counterpart to home's inline behaviour.
+  void _openEpisode(EpisodeResult episode) {
+    unawaited(_commitQuery(reportFailure: false));
+    showEpisodePlayerModal(
+      context,
+      SubscriptionEpisode(
+        id: episode.id,
+        epNumber: episode.epNumber,
+        title: episode.title,
+        creatorUsername: episode.creator,
+        duration: episode.duration,
+        views: episode.views,
+        // Search's `Episode` rows are mapped without `created_at`, so there is
+        // no age to state. Blank, not a guess.
+        postedAgo: '',
+        thumbnailUrl: episode.thumbnailUrl,
+      ),
+    );
   }
 
   @override
@@ -283,7 +349,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     }
     if (_results.query != _query) {
       // Debounce/request still in flight for the current text.
-      return const Center(child: CircularProgressIndicator());
+      return const _SearchLoadingList();
     }
     return _results.isEmpty ? _nothingFoundState() : _overview();
   }
@@ -367,7 +433,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             first: true,
             children: [
               for (final e in r.episodes.take(_previewLimit))
-                EpisodeResultCard(episode: e, onTap: () {}),
+                EpisodeResultCard(
+                  episode: e,
+                  onTap: e.id.isEmpty ? null : () => _openEpisode(e),
+                ),
             ],
           ),
         if (r.creators.isNotEmpty)
@@ -402,9 +471,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               for (final p in r.playlists.take(_previewLimit))
                 PlaylistResultCard(
                   playlist: p,
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const PlaylistScreen()),
-                  ),
+                  onTap: p.id.isEmpty ? null : () => _openPlaylist(p),
                 ),
             ],
           ),
@@ -493,6 +560,63 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// The shape of the results overview while the query is in flight.
+///
+/// A spinner says "something is happening"; these rows say *what* is about to
+/// appear, and they occupy the space the results will, so nothing jumps when
+/// the response lands. Geometry matches [EpisodeResultCard]: a 128×98 thumb
+/// beside three lines of text.
+class _SearchLoadingList extends StatelessWidget {
+  const _SearchLoadingList();
+
+  @override
+  Widget build(BuildContext context) {
+    return SkifluxSkeletonGroup(
+      child: ListView.separated(
+        padding: EdgeInsets.zero,
+        itemCount: 4,
+        separatorBuilder: (_, _) =>
+            const SizedBox(height: SkifluxSpacing.spaceL),
+        itemBuilder: (_, _) => const _SearchRowSkeleton(),
+      ),
+    );
+  }
+}
+
+class _SearchRowSkeleton extends StatelessWidget {
+  const _SearchRowSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox(
+      height: 98,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SkifluxSkeleton(
+            width: 128,
+            height: 98,
+            radius: SkifluxRadii.l,
+          ),
+          SizedBox(width: SkifluxSpacing.spaceM),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SkifluxSkeleton.text(width: 56),
+                SizedBox(height: SkifluxSpacing.spaceXs),
+                SkifluxSkeleton.text(width: double.infinity),
+                SizedBox(height: SkifluxSpacing.spaceXs),
+                SkifluxSkeleton.text(width: 120),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -4,18 +4,18 @@ import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/sheets/confirm_sheet.dart';
 import '../../shared/toast/skiflux_toast.dart';
-import 'data/library_episode.dart';
+import '../../shared/widgets/clear_all_action.dart';
 import 'library_episode_player.dart';
 import 'library_episode_row.dart';
 
 // Figma: **Profile Flow 13** (`1256:24465`) — Downloads. Nav with "Clear
-// all" (negative), search field, "8 videos · 1.2 GB used" storage line,
-// download rows ("112 MB · SD 480p") with a red trash trailing control.
+// all" (negative), search field, storage line, download rows with a red trash
+// trailing control.
 //
-// There is no offline download pipeline and no download endpoint, so this
-// screen starts empty and shows its empty state. It is wired end to end
-// against [LibraryEpisode] so that the day downloads exist, only the source
-// of `_downloads` has to change.
+// Every figure here is now read from disk: the storage line sums real file
+// sizes and each row shows its own. It used to multiply the row count by a
+// hardcoded 112 MB and print "SD 480p" on every row — a resolution nothing
+// had chosen, for files that did not exist.
 
 import 'data/downloads_store.dart';
 
@@ -29,20 +29,20 @@ class DownloadsScreen extends ConsumerStatefulWidget {
 class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
   String _query = '';
 
-  static const int _mbPerVideo = 112;
-
   @override
   Widget build(BuildContext context) {
     final downloads = ref.watch(downloadsProvider);
     final query = _query.trim().toLowerCase();
     final visible = query.isEmpty
         ? downloads
-        : downloads.where((e) => e.title.toLowerCase().contains(query))
+        : downloads
+              .where((d) => d.episode.title.toLowerCase().contains(query))
               .toList();
-    final totalMb = downloads.length * _mbPerVideo;
-    final usedLabel = totalMb >= 1000
-        ? '${(totalMb / 1000).toStringAsFixed(1)} GB'
-        : '$totalMb MB';
+    // Summed from the files themselves. This was `count × 112 MB`, so the
+    // storage line was a fiction that happened to look plausible.
+    final usedLabel = formatBytes(
+      ref.read(downloadsProvider.notifier).totalBytes,
+    );
 
     return Scaffold(
       backgroundColor: SkifluxColors.backgroundPrimary,
@@ -54,14 +54,8 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
           icon: const Icon(RemixIcons.arrow_left_s_line),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        trailing: TextButton(
+        trailing: ClearAllAction(
           onPressed: downloads.isEmpty ? null : _confirmClearAll,
-          child: Text(
-            'Clear all',
-            style: SkifluxTypography.uiButtonMedium.copyWith(
-              color: SkifluxColors.contentNegative,
-            ),
-          ),
         ),
       ),
       body: SafeArea(
@@ -92,8 +86,19 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                 ),
               ),
             Expanded(
+              // Sits under the search field, not centred in the space below
+              // it: [SkifluxEmptyState] already carries its own 48px of
+              // vertical padding, and adding a [Center] on top pushed the
+              // whole thing to the middle of the screen — well below where
+              // Watch History puts the identical state.
               child: visible.isEmpty
-                  ? Center(
+                  // `Align` and not a bare child: this screen's Column is
+                  // `crossAxisAlignment: start`, so the empty state was given
+                  // a loose width constraint, sized to its own text and sat
+                  // against the left edge. Top-centre puts it where Watch
+                  // History has it — same height on the screen, centred.
+                  ? Align(
+                      alignment: Alignment.topCenter,
                       child: SkifluxEmptyState(
                         icon: const Icon(
                           RemixIcons.download_fill,
@@ -116,21 +121,39 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                       itemCount: visible.length,
                       separatorBuilder: (_, _) =>
                           const SizedBox(height: SkifluxSpacing.spaceL),
-                      itemBuilder: (_, i) => LibraryEpisodeRow(
-                        episode: visible[i],
-                        statusLine: '$_mbPerVideo MB · SD 480p',
-                        trailing: IconButton(
-                          padding: EdgeInsets.zero,
-                          onPressed: () => _confirmDelete(visible[i]),
-                          icon: const Icon(
-                            RemixIcons.delete_bin_fill,
-                            size: SkifluxIcons.sizeM,
-                            color: SkifluxColors.contentNegative,
+                      itemBuilder: (_, i) {
+                        final d = visible[i];
+                        return LibraryEpisodeRow(
+                          episode: d.episode,
+                          // The real size on disk. The resolution used to be
+                          // printed as "SD 480p" on every row; the backend
+                          // serves one rendition and never says which, so
+                          // naming one was a guess.
+                          statusLine: switch (d.state) {
+                            DownloadState.downloading =>
+                              'Downloading ${(d.progress * 100).round()}%',
+                            DownloadState.failed =>
+                              d.error ?? 'Download failed',
+                            DownloadState.complete => d.sizeLabel,
+                          },
+                          trailing: IconButton(
+                            padding: EdgeInsets.zero,
+                            onPressed: () => _confirmDelete(d),
+                            icon: const Icon(
+                              RemixIcons.delete_bin_fill,
+                              size: SkifluxIcons.sizeM,
+                              color: SkifluxColors.contentNegative,
+                            ),
                           ),
-                        ),
-                        onTap: () =>
-                            showLibraryEpisodePlayer(context, visible[i]),
-                      ),
+                          // Only a finished file can play.
+                          onTap: d.isComplete
+                              ? () => showLibraryEpisodePlayer(
+                                  context,
+                                  d.episode,
+                                )
+                              : null,
+                        );
+                      },
                     ),
             ),
           ],
@@ -139,7 +162,8 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
     );
   }
 
-  Future<void> _confirmDelete(LibraryEpisode episode) async {
+  Future<void> _confirmDelete(DownloadedEpisode download) async {
+    final episode = download.episode;
     final confirmed = await showConfirmSheet(
       context,
       title: 'Delete this download?',
@@ -150,7 +174,10 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
       icon: RemixIcons.delete_bin_fill,
     );
     if (confirmed != true || !mounted) return;
-    ref.read(downloadsProvider.notifier).removeDownload(episode.id);
+    // Awaited: this deletes a real file now, so the toast should follow the
+    // deletion rather than race it.
+    await ref.read(downloadsProvider.notifier).remove(episode.id);
+    if (!mounted) return;
     SkifluxToast.success(context, 'Download deleted');
   }
 
@@ -166,7 +193,8 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
       icon: RemixIcons.delete_bin_fill,
     );
     if (confirmed != true || !mounted) return;
-    ref.read(downloadsProvider.notifier).clearAll();
+    await ref.read(downloadsProvider.notifier).clearAll();
+    if (!mounted) return;
     SkifluxToast.success(context, 'All downloads cleared');
   }
 }

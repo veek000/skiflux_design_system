@@ -26,7 +26,11 @@ class MeProfileNotifier extends AsyncNotifier<UserProfile?> {
   Future<UserProfile?> _load() async {
     final hasSession = await ref.read(tokenStoreProvider).hasSession();
     if (!hasSession) return null;
-    return ref.read(profileRepositoryProvider).getProfile();
+    try {
+      return await ref.read(profileRepositoryProvider).getProfile();
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<UserProfile?> save({

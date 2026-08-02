@@ -33,6 +33,7 @@ class WatchedEpisodeTask {
     this.timeLimitMinutes,
     this.maxAttempts,
     this.completionCriteria = const {},
+    this.rewardHints = const {},
     this.viewedAt,
     this.submittedAt,
     this.reviewedAt,
@@ -68,6 +69,24 @@ class WatchedEpisodeTask {
   /// opportunistically without inventing them when absent.
   final Map<String, dynamic> completionCriteria;
 
+  /// Everywhere a coin/XP reward could plausibly arrive, flattened into one
+  /// map for [LearningTask] to read.
+  ///
+  /// `WatchedEpisodeTaskItem` declares **no** reward fields — unlike
+  /// `PlatformTaskUser`, which has `xp_reward` and `skillcoin_reward` — so
+  /// there is nothing in the schema to bind to and the reward chips on every
+  /// learning-task card stay hidden against a live backend. Rather than
+  /// invent a number, this gathers the untyped `completion_criteria` blob, any
+  /// `reward`/`rewards` object nested inside it, and any reward-shaped key
+  /// sent at the top level of the row. The moment the backend sends one under
+  /// any of those names the chips appear; until then they stay off.
+  //
+  // TODO(backend, blocking): learning tasks cannot show their reward because
+  // the payload has none. Expects: `xp_reward: int` and
+  // `skillcoin_reward: decimal-string` on WatchedEpisodeTaskItem and
+  // EpisodeTask, matching PlatformTaskUser.
+  final Map<String, dynamic> rewardHints;
+
   final DateTime? viewedAt;
   final DateTime? submittedAt;
   final DateTime? reviewedAt;
@@ -75,6 +94,9 @@ class WatchedEpisodeTask {
   bool get isAssessment => kind.toLowerCase().contains('assess');
 
   factory WatchedEpisodeTask.fromJson(Map<String, dynamic> json) {
+    final criteria = json['completion_criteria'] is Map
+        ? Map<String, dynamic>.from(json['completion_criteria'] as Map)
+        : const <String, dynamic>{};
     return WatchedEpisodeTask(
       id: _string(json['id']) ?? '',
       episodeId: _string(json['episode_id']) ?? '',
@@ -95,14 +117,56 @@ class WatchedEpisodeTask {
       ],
       timeLimitMinutes: _int(json['time_limit_minutes']),
       maxAttempts: _int(json['max_attempts']),
-      completionCriteria: json['completion_criteria'] is Map
-          ? Map<String, dynamic>.from(json['completion_criteria'] as Map)
-          : const {},
+      completionCriteria: criteria,
+      rewardHints: _rewardHints(json, criteria),
       viewedAt: _date(json['viewed_at']),
       submittedAt: _date(json['submitted_at']),
       reviewedAt: _date(json['reviewed_at']),
     );
   }
+
+  /// Collect reward-shaped values from the row, its `completion_criteria`, and
+  /// any `reward` / `rewards` object nested one level inside either.
+  ///
+  /// Innermost wins, because a nested `{"reward": {"xp": 30}}` is a more
+  /// deliberate statement than a stray top-level `xp`. Only scalar values are
+  /// taken — a key holding a list or another map is not a reward.
+  static Map<String, dynamic> _rewardHints(
+    Map<String, dynamic> json,
+    Map<String, dynamic> criteria,
+  ) {
+    final hints = <String, dynamic>{};
+
+    void absorb(Map<String, dynamic> source) {
+      for (final entry in source.entries) {
+        if (!_rewardKeys.contains(entry.key)) continue;
+        final value = entry.value;
+        if (value is num || value is String) hints[entry.key] = value;
+      }
+      for (final key in const ['reward', 'rewards']) {
+        final nested = source[key];
+        if (nested is Map) {
+          absorb(Map<String, dynamic>.from(nested));
+        }
+      }
+    }
+
+    absorb(json);
+    absorb(criteria);
+    return Map.unmodifiable(hints);
+  }
+
+  /// The names a coin or XP reward could arrive under. `PlatformTaskUser` uses
+  /// `xp_reward` / `skillcoin_reward`; the rest are the shorter spellings a
+  /// free-form `completion_criteria` blob is likely to use.
+  static const Set<String> _rewardKeys = {
+    'skillcoin_reward',
+    'skillcoins',
+    'coin_reward',
+    'coins',
+    'xp_reward',
+    'xp',
+  };
 }
 
 /// One multiple-choice question (OpenAPI `AssessmentQuestion`).

@@ -9,6 +9,7 @@ library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../shared/utils/formatting.dart';
 import 'search_repository.dart';
 
 enum SearchCategory { episodes, creators, users, playlists }
@@ -54,7 +55,7 @@ class EpisodeResult {
       epNumber: order is num ? order.toInt() : 0,
       title: (json['title'] as String?) ?? '',
       duration: _durationLabel(durationSeconds),
-      views: '${_countLabel(json['view_count'] is int ? json['view_count'] as int : 0)} views',
+      views: '${countLabel(json['view_count'] is int ? json['view_count'] as int : 0)} views',
       creator: creator is Map ? _string(creator['username']) ?? '' : '',
       thumbnailUrl: _string(json['thumbnail_url']),
     );
@@ -124,7 +125,7 @@ class PersonResult {
     final parts = <String>[
       if (username.isNotEmpty) '@$username',
       if (followersCount != null)
-        '${_countLabel(followersCount!)} subscribers',
+        '${countLabel(followersCount!)} subscribers',
     ];
     return parts.join(' · ');
   }
@@ -274,12 +275,6 @@ String _durationLabel(int seconds) {
   final ss = s.toString().padLeft(2, '0');
   if (h > 0) return '$h:${m.toString().padLeft(2, '0')}:$ss';
   return '$m:$ss';
-}
-
-String _countLabel(int n) {
-  if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
-  if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}k';
-  return '$n';
 }
 
 String? _string(Object? value) {

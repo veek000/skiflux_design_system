@@ -6,6 +6,7 @@
 import 'package:flutter/material.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/widgets/network_image.dart';
 import 'data/library_episode.dart';
 
 class LibraryEpisodeRow extends StatelessWidget {
@@ -217,14 +218,7 @@ class _Thumbnail extends StatelessWidget {
     if (url == null || url.isEmpty) {
       return const ColoredBox(color: SkifluxColors.backgroundDisabled);
     }
-    return Image.network(
-      url,
-      fit: BoxFit.cover,
-      loadingBuilder: (context, child, progress) =>
-          progress == null ? child : const SkifluxSkeleton(radius: 0),
-      errorBuilder: (_, _, _) =>
-          const ColoredBox(color: SkifluxColors.backgroundDisabled),
-    );
+    return SkifluxNetworkImage(url: url);
   }
 
   Widget _pill(String label, {required Color background}) {

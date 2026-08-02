@@ -160,6 +160,45 @@ void main() {
       currentLevel: currentLevel,
     );
 
+    test('podium and table split by rank, not by payload order', () {
+      // The board arrives shuffled — nothing in the spec promises otherwise,
+      // and `resolve` iterates the rows verbatim. Under the old positional
+      // `take(3)`/`skip(3)` this put rank 5 on the podium and started the
+      // table at rank 2.
+      final data = LeaderboardNotifier.resolve(
+        LeaderboardPage(rows: [row(5), row(2), row(4), row(1), row(3)]),
+        null,
+      );
+
+      expect(data.entries.map((e) => e.rank), [1, 2, 3, 4, 5]);
+      expect(data.podium.map((e) => e.rank), [1, 2, 3]);
+      // The table starts at 4th, which is the whole point of the split.
+      expect(data.ranked.map((e) => e.rank), [4, 5]);
+    });
+
+    test('a league with fewer than three learners still splits correctly', () {
+      final data = LeaderboardNotifier.resolve(
+        LeaderboardPage(rows: [row(2), row(1)]),
+        null,
+      );
+
+      expect(data.podium.map((e) => e.rank), [1, 2]);
+      expect(data.ranked, isEmpty);
+    });
+
+    test('rows with an unknown rank sort last and stay off the podium', () {
+      // `parseRow` defaults a missing rank to 0; that is "unknown", not
+      // "better than first".
+      final data = LeaderboardNotifier.resolve(
+        LeaderboardPage(rows: [row(0, username: 'unranked'), row(1), row(2)]),
+        null,
+      );
+
+      expect(data.entries.map((e) => e.rank), [1, 2, 0]);
+      expect(data.podium.map((e) => e.rank), [1, 2]);
+      expect(data.ranked.map((e) => e.username), ['unranked']);
+    });
+
     test("marks the row the backend flagged as the user's", () {
       final data = LeaderboardNotifier.resolve(
         LeaderboardPage(rows: [row(1), row(2, isCurrentUser: true), row(3)]),

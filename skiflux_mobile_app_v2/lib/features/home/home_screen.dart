@@ -9,7 +9,8 @@ import '../../shared/error_handling/error_display.dart';
 import '../../shared/toast/skiflux_toast.dart';
 import '../../shared/widgets/load_failure.dart';
 import '../../shared/widgets/video_feed_card.dart';
-import '../notifications/notifications_screen.dart';
+import '../notifications/notification_bell_button.dart';
+import '../playlists/data/playlists_store.dart';
 import '../profile/my_profile_screen.dart';
 import '../profile/profile_screen.dart';
 import '../search/search_screen.dart';
@@ -109,6 +110,31 @@ class _HomeFeedBodyState extends ConsumerState<_HomeFeedBody> {
     super.dispose();
   }
 
+  /// An episode picked out of the EP chip's season sheet opens *here*, as a
+  /// page of the feed the user is already scrolling — not in a modal on top of
+  /// it. The modal belongs to the surfaces with no feed behind them.
+  ///
+  /// The episode is inserted right after the current page when it isn't
+  /// already loaded, so scrolling back still lands where the user was.
+  Future<void> _openEpisodeInFeed(PlaylistEpisode ep) async {
+    try {
+      final index = await ref
+          .read(homeFeedProvider.notifier)
+          .openEpisode(ep.id, afterIndex: _pageIndex);
+      if (!mounted || !_pageController.hasClients) return;
+      await _pageController.animateToPage(
+        index,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+      );
+    } catch (e, st) {
+      // `GET /episodes/{id}` answers 403 for an episode that still needs
+      // buying, so this is a real message, not a swallowed no-op.
+      if (!mounted) return;
+      await ErrorDisplay.show(context, ref, e, stackTrace: st);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final feed = ref.watch(homeFeedProvider);
@@ -161,6 +187,7 @@ class _HomeFeedBodyState extends ConsumerState<_HomeFeedBody> {
                       item: item,
                       // Only the visible page decodes/plays; off-screen pauses.
                       isActive: index == _pageIndex,
+                      onOpenEpisode: _openEpisodeInFeed,
                     ),
                   ),
                 );
@@ -229,16 +256,9 @@ class _HomeTopBar extends StatelessWidget {
                 : _CreatorChip(item: creator!),
           ),
           const SizedBox(width: SkifluxSpacing.spaceL),
-          // Notifications with badge (294:7951)
-          _CircleIconButton(
-            icon: RemixIcons.notification_3_fill,
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-            ),
-            badge: const SkifluxNotificationBadge(
-              type: SkifluxBadgeType.indicator,
-            ),
-          ),
+          // Notifications with badge (294:7951). The dot is the widget's own
+          // business — it appears only for real unread rows.
+          const NotificationBellButton(),
         ],
       ),
     );
@@ -533,7 +553,6 @@ class _CircleIconButton extends StatelessWidget {
     required this.icon,
     this.onTap,
     this.filled = true,
-    this.badge,
   });
 
   final IconData icon;
@@ -543,13 +562,13 @@ class _CircleIconButton extends StatelessWidget {
   /// trailing arrow is a transparent circle.
   final bool filled;
 
-  /// Optional overlay (e.g. notification dot) anchored to the icon's corner.
-  final Widget? badge;
-
   @override
   Widget build(BuildContext context) {
     // 24px icon box, centered in the 48px circle — matches Figma padding.
-    Widget glyph = SizedBox(
+    // The notification bell no longer builds from here: its dot has a rule
+    // (only real unread rows, only after the list has answered), so it lives
+    // in [NotificationBellButton] instead of a badge slot on this button.
+    final glyph = SizedBox(
       width: SkifluxIcons.sizeM,
       height: SkifluxIcons.sizeM,
       child: Center(
@@ -560,20 +579,6 @@ class _CircleIconButton extends StatelessWidget {
         ),
       ),
     );
-
-    if (badge != null) {
-      glyph = Stack(
-        clipBehavior: Clip.none,
-        children: [
-          glyph,
-          Positioned(
-            top: -SkifluxSpacing.space2xs,
-            right: -SkifluxSpacing.space2xs,
-            child: badge!,
-          ),
-        ],
-      );
-    }
 
     return Material(
       color: filled ? SkifluxColors.backgroundHover : Colors.transparent,

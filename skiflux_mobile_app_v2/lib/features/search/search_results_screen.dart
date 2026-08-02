@@ -4,10 +4,12 @@ import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/error_handling/error_display.dart';
 import '../../shared/toast/skiflux_toast.dart';
+import '../playlists/data/season_providers.dart';
 import '../playlists/playlist_screen.dart';
 import '../profile/profile_screen.dart';
 import '../profile/public_user_profile_screen.dart';
 import '../subscriptions/data/subscriptions_store.dart';
+import '../subscriptions/subscriptions_screen.dart';
 import 'data/search_index.dart';
 import 'search_result_widgets.dart';
 
@@ -61,6 +63,44 @@ class _SearchResultsScreenState extends ConsumerState<SearchResultsScreen> {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => PublicUserProfileScreen(username: person.username),
+      ),
+    );
+  }
+
+  /// Search knows a season's id, title and episode count but not its creator —
+  /// `Season` carries none — so [SeasonArg] goes in with the hints it has and
+  /// the screen fills the rest in from the episodes call.
+  void _openPlaylist(PlaylistResult playlist) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PlaylistScreen(
+          season: SeasonArg(
+            id: playlist.id,
+            title: playlist.title,
+            episodeCount: playlist.episodeCount,
+            skillworld: playlist.skillworld,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// A search result has no feed behind it, so an episode opens in the player
+  /// modal — the counterpart to home's inline behaviour.
+  void _openEpisode(EpisodeResult episode) {
+    showEpisodePlayerModal(
+      context,
+      SubscriptionEpisode(
+        id: episode.id,
+        epNumber: episode.epNumber,
+        title: episode.title,
+        creatorUsername: episode.creator,
+        duration: episode.duration,
+        views: episode.views,
+        // Search's `Episode` rows are mapped without `created_at`, so there is
+        // no age to state. Blank, not a guess.
+        postedAgo: '',
+        thumbnailUrl: episode.thumbnailUrl,
       ),
     );
   }
@@ -170,7 +210,10 @@ class _SearchResultsScreenState extends ConsumerState<SearchResultsScreen> {
     final items = switch (_tab) {
       SearchCategory.episodes => [
         for (final e in _results.episodes)
-          EpisodeResultCard(episode: e, onTap: () {}),
+          EpisodeResultCard(
+            episode: e,
+            onTap: e.id.isEmpty ? null : () => _openEpisode(e),
+          ),
       ],
       SearchCategory.creators => [
         for (final c in _results.creators) _creatorRow(c),
@@ -188,9 +231,7 @@ class _SearchResultsScreenState extends ConsumerState<SearchResultsScreen> {
         for (final p in _results.playlists)
           PlaylistResultCard(
             playlist: p,
-            onTap: () => Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => const PlaylistScreen())),
+            onTap: p.id.isEmpty ? null : () => _openPlaylist(p),
           ),
       ],
     };

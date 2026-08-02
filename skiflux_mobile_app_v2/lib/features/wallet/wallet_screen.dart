@@ -160,10 +160,12 @@ class _BalanceHero extends StatelessWidget {
               ),
               const SizedBox(width: SkifluxSpacing.spaceS),
               if (pendingFirstLoad)
-                const SizedBox(
-                  width: SkifluxUnit.u20,
+                // A bar the width of the number it stands in for, not a
+                // spinner: the balance is one value, and the caption beneath
+                // already says it is loading.
+                const SkifluxSkeleton.text(
+                  width: 96,
                   height: SkifluxUnit.u20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
                 )
               else
                 Text(
