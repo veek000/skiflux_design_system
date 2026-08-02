@@ -10,11 +10,16 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/error_handling/error_display.dart';
+import '../../shared/sheets/confirm_sheet.dart';
+import '../../shared/sheets/success_sheet.dart';
 import '../../shared/toast/skiflux_toast.dart';
 import '../playlists/data/playlists_store.dart' show CoinPack, kCoinRateNaira;
+import 'data/wallet_repository.dart';
 import 'data/wallet_store.dart';
 
 /// Figma draws the coin at 42.243 × 40 (`3664:13267`) — the asset's own
@@ -25,10 +30,53 @@ const double _coinHeight = 40;
 /// `3664:13269`: the amount sits at an untokenised 26.667.
 const double _amountSize = 26.667;
 
-class TransactionDetailsScreen extends StatelessWidget {
+class TransactionDetailsScreen extends ConsumerStatefulWidget {
   const TransactionDetailsScreen({super.key, required this.txn});
 
   final CoinTxn txn;
+
+  @override
+  ConsumerState<TransactionDetailsScreen> createState() =>
+      _TransactionDetailsScreenState();
+}
+
+class _TransactionDetailsScreenState
+    extends ConsumerState<TransactionDetailsScreen> {
+  var _reporting = false;
+
+  Future<void> _reportTransaction() async {
+    final refString = widget.txn.reference ?? 'TXN-${widget.txn.title}';
+    final confirmed = await showConfirmSheet(
+      context,
+      title: 'Report Transaction?',
+      message:
+          'Are you sure you want to report transaction "$refString" to Skiflux Support?',
+      confirmLabel: 'Submit Report',
+      icon: RemixIcons.shield_user_fill,
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _reporting = true);
+    try {
+      final res = await ref
+          .read(walletRepositoryProvider)
+          .reportTransaction(transactionRef: refString);
+      if (!mounted) return;
+      final ticketNum =
+          res['ticket_number'] ?? res['case_id'] ?? refString;
+      await showSuccessSheet(
+        context,
+        title: 'Report Submitted',
+        message:
+            'Your dispute report (#$ticketNum) has been logged with Skiflux Support.',
+      );
+    } catch (error, stackTrace) {
+      if (!mounted) return;
+      await ErrorDisplay.show(context, ref, error, stackTrace: stackTrace);
+    } finally {
+      if (mounted) setState(() => _reporting = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,9 +99,9 @@ class TransactionDetailsScreen extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
               children: [
-                _SummaryCard(txn: txn),
+                _SummaryCard(txn: widget.txn),
                 const SizedBox(height: SkifluxSpacing.spaceL),
-                _DetailCard(txn: txn),
+                _DetailCard(txn: widget.txn),
               ],
             ),
           ),
@@ -73,11 +121,8 @@ class TransactionDetailsScreen extends StatelessWidget {
                   label: 'Report Transaction',
                   type: SkifluxButtonType.secondary,
                   expanded: true,
-                  // TODO(backend, blocking): open a dispute for this entry — expects: POST /wallet/transactions/{reference}/report → {caseId}
-                  onPressed: () => SkifluxToast.info(
-                    context,
-                    'Reporting is coming soon. Contact support for now.',
-                  ),
+                  loading: _reporting,
+                  onPressed: _reporting ? null : _reportTransaction,
                 ),
               ),
             ),

@@ -219,6 +219,21 @@ class WalletRepository extends ApiRepository {
     }
     return const [];
   }
+
+  /// `POST /wallet/transactions/{transaction_ref}/report` — dispute / report a transaction.
+  Future<Map<String, dynamic>> reportTransaction({
+    required String transactionRef,
+    String? reason,
+  }) async {
+    final response = await post(
+      '/wallet/transactions/$transactionRef/report',
+      body: {
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+      },
+      parse: (json) => unwrapObject(json),
+    );
+    return response ?? {};
+  }
 }
 
 final walletRepositoryProvider = Provider<WalletRepository>(

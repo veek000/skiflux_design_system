@@ -51,6 +51,11 @@ Future<void> showShareSheet(
   }
 }
 
+/// Constructs a shareable web / deep link for Skiflux resources.
+String buildSkifluxShareUrl(String type, String id) {
+  return 'https://app.skiflux.com/$type/$id';
+}
+
 /// A media URL that is safe to hand to another app, or null.
 ///
 /// Object-storage links are commonly pre-signed — the query string *is* the
