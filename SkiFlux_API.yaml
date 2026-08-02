@@ -5061,6 +5061,38 @@ paths:
               schema:
                 $ref: '#/components/schemas/PublicCreatorProfile'
           description: ''
+  /api/v1/creators/{creator_id}/episodes:
+    get:
+      operationId: v1_creators_episodes_list
+      description: Returns published episodes for a creator catalogue screen. Includes
+        per-user `is_purchased`, `is_locked`, and `skillcoin_price`.
+      summary: List Creator Published Episodes
+      parameters:
+      - in: path
+        name: creator_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: skillworld
+        schema:
+          type: string
+        description: Optional skillworld filter
+      tags:
+      - User › Creator
+      security:
+      - bearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Episode'
+          description: ''
   /api/v1/creators/{creator_id}/follow/:
     post:
       operationId: v1_creators_follow_create
@@ -5084,6 +5116,38 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ToggleFollowResponse'
+          description: ''
+  /api/v1/creators/{creator_id}/seasons:
+    get:
+      operationId: v1_creators_seasons_list
+      description: Returns published seasons for a creator catalogue / playlists screen.
+        Each season includes a ready-to-use HTTP `cover_url`.
+      summary: List Creator Published Seasons
+      parameters:
+      - in: path
+        name: creator_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: skillworld
+        schema:
+          type: string
+        description: Optional skillworld filter
+      tags:
+      - User › Creator
+      security:
+      - bearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SeasonList'
           description: ''
   /api/v1/creators/following/:
     get:
@@ -5718,6 +5782,50 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/v1/me/app-preferences:
+    get:
+      operationId: v1_me_app_preferences_retrieve
+      description: Returns synced app settings (playback, downloads, language, etc.)
+      summary: Get App Preferences
+      tags:
+      - User › Profile
+      security:
+      - bearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppPreferences'
+          description: ''
+  /api/v1/me/app-preferences/update:
+    patch:
+      operationId: v1_me_app_preferences_update_partial_update
+      summary: Update App Preferences
+      tags:
+      - User › Profile
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAppPreferencesRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAppPreferencesRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAppPreferencesRequest'
+      security:
+      - bearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppPreferences'
+          description: ''
   /api/v1/me/badges:
     get:
       operationId: v1_me_badges_list
@@ -5773,6 +5881,61 @@ paths:
               schema:
                 $ref: '#/components/schemas/BiometricsStatus'
           description: Biometrics toggled.
+  /api/v1/me/creator-notification-preferences/{creator_id}:
+    get:
+      operationId: v1_me_creator_notification_preferences_retrieve
+      description: 'GET returns current mode for a followed creator. PATCH updates
+        mode: all | personalized | none.'
+      summary: Creator Notification Preference
+      parameters:
+      - in: path
+        name: creator_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - User › Profile
+      security:
+      - bearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatorNotificationPreference'
+          description: ''
+    patch:
+      operationId: v1_me_creator_notification_preferences_partial_update
+      parameters:
+      - in: path
+        name: creator_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - User › Profile
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedCreatorNotificationPreferenceUpdateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedCreatorNotificationPreferenceUpdateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedCreatorNotificationPreferenceUpdateRequest'
+      security:
+      - bearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatorNotificationPreference'
+          description: ''
   /api/v1/me/devices:
     post:
       operationId: v1_me_devices_create
@@ -5960,6 +6123,20 @@ paths:
               schema:
                 $ref: '#/components/schemas/NotificationListResponse'
           description: Notification list inside standard envelope `data`.
+  /api/v1/me/notifications/mark-all-read:
+    post:
+      operationId: v1_me_notifications_mark_all_read_create
+      description: Idempotently marks every unread notification for the authenticated
+        user as read. Returns the number of rows updated.
+      summary: Mark all notifications as read
+      tags:
+      - User › Profile
+      security:
+      - bearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/v1/me/platform-tasks:
     get:
       operationId: v1_me_platform_tasks_list
@@ -6409,6 +6586,50 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/v1/profile/me/app-preferences:
+    get:
+      operationId: v1_profile_me_app_preferences_retrieve
+      description: Returns synced app settings (playback, downloads, language, etc.)
+      summary: Get App Preferences
+      tags:
+      - User › Profile
+      security:
+      - bearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppPreferences'
+          description: ''
+  /api/v1/profile/me/app-preferences/update:
+    patch:
+      operationId: v1_profile_me_app_preferences_update_partial_update
+      summary: Update App Preferences
+      tags:
+      - User › Profile
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAppPreferencesRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAppPreferencesRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAppPreferencesRequest'
+      security:
+      - bearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppPreferences'
+          description: ''
   /api/v1/profile/me/badges:
     get:
       operationId: v1_profile_me_badges_list
@@ -6464,6 +6685,61 @@ paths:
               schema:
                 $ref: '#/components/schemas/BiometricsStatus'
           description: Biometrics toggled.
+  /api/v1/profile/me/creator-notification-preferences/{creator_id}:
+    get:
+      operationId: v1_profile_me_creator_notification_preferences_retrieve
+      description: 'GET returns current mode for a followed creator. PATCH updates
+        mode: all | personalized | none.'
+      summary: Creator Notification Preference
+      parameters:
+      - in: path
+        name: creator_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - User › Profile
+      security:
+      - bearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatorNotificationPreference'
+          description: ''
+    patch:
+      operationId: v1_profile_me_creator_notification_preferences_partial_update
+      parameters:
+      - in: path
+        name: creator_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - User › Profile
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedCreatorNotificationPreferenceUpdateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedCreatorNotificationPreferenceUpdateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedCreatorNotificationPreferenceUpdateRequest'
+      security:
+      - bearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatorNotificationPreference'
+          description: ''
   /api/v1/profile/me/devices:
     post:
       operationId: v1_profile_me_devices_create
@@ -6651,6 +6927,20 @@ paths:
               schema:
                 $ref: '#/components/schemas/NotificationListResponse'
           description: Notification list inside standard envelope `data`.
+  /api/v1/profile/me/notifications/mark-all-read:
+    post:
+      operationId: v1_profile_me_notifications_mark_all_read_create
+      description: Idempotently marks every unread notification for the authenticated
+        user as read. Returns the number of rows updated.
+      summary: Mark all notifications as read
+      tags:
+      - User › Profile
+      security:
+      - bearerAuth: []
+      - bearerAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/v1/profile/me/platform-tasks:
     get:
       operationId: v1_profile_me_platform_tasks_list
@@ -7528,6 +7818,42 @@ paths:
                 type: object
                 additionalProperties: {}
           description: ''
+  /api/v1/wallet/transactions/{transaction_ref}/report:
+    post:
+      operationId: v1_wallet_transactions_report_create
+      description: Open a support case for a wallet transaction. Accepts the transaction
+        UUID or reference_id.
+      summary: Report a transaction
+      parameters:
+      - in: path
+        name: transaction_ref
+        schema:
+          type: string
+        required: true
+      tags:
+      - User › Wallet
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionReportRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TransactionReportRequestRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TransactionReportRequestRequest'
+        required: true
+      security:
+      - bearerAuth: []
+      - bearerAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionReportResponse'
+          description: ''
   /api/v1/wallet/withdrawals/accounts:
     post:
       operationId: v1_wallet_withdrawals_accounts_create
@@ -7681,7 +8007,8 @@ paths:
       operationId: v1_wallet_withdrawals_methods_retrieve
       description: 'Enabled withdrawal methods for any account — no geography assumptions.
         The frontend switches on `flow`: `bank_form` renders the bank picker; `hosted_redirect`
-        calls the Connect onboard endpoint and opens the returned URL.'
+        calls the Connect onboard endpoint and opens the returned URL. Includes `withdrawal_fee_percentage`
+        for pre-submit confirmation UI.'
       summary: List Withdrawal Methods
       tags:
       - User › Wallet
@@ -7693,8 +8020,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                additionalProperties: {}
+                $ref: '#/components/schemas/WithdrawalMethodsResponse'
           description: ''
   /api/v1/wallet/withdrawals/request:
     post:
@@ -8157,6 +8483,28 @@ components:
       required:
       - email
       - otp
+    AppPreferences:
+      type: object
+      properties:
+        auto_play_next:
+          type: boolean
+        download_quality:
+          $ref: '#/components/schemas/DownloadQualityEnum'
+        download_on_wifi_only:
+          type: boolean
+        app_language:
+          type: string
+          maxLength: 10
+        save_watch_history:
+          type: boolean
+        personalised_recommendations:
+          type: boolean
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - updated_at
     AppleSocialAuthRequest:
       type: object
       properties:
@@ -8182,32 +8530,6 @@ components:
         feedback:
           type: string
           maxLength: 2000
-    AssessmentQuestion:
-      type: object
-      properties:
-        question_text:
-          type: string
-        option_a:
-          type: string
-        option_b:
-          type: string
-        option_c:
-          type: string
-        option_d:
-          type: string
-        correct_answer:
-          $ref: '#/components/schemas/CorrectAnswerEnum'
-        order:
-          type: integer
-          minimum: 1
-      required:
-      - correct_answer
-      - option_a
-      - option_b
-      - option_c
-      - option_d
-      - order
-      - question_text
     AssessmentQuestionOwner:
       type: object
       properties:
@@ -8273,6 +8595,38 @@ components:
       - option_c
       - option_d
       - order
+      - question_text
+    AssessmentQuestionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        question_text:
+          type: string
+        option_a:
+          type: string
+          maxLength: 500
+        option_b:
+          type: string
+          maxLength: 500
+        option_c:
+          type: string
+          maxLength: 500
+        option_d:
+          type: string
+          maxLength: 500
+        order:
+          type: integer
+          maximum: 32767
+          minimum: 0
+      required:
+      - id
+      - option_a
+      - option_b
+      - option_c
+      - option_d
       - question_text
     AssessmentSubmissionInputRequest:
       type: object
@@ -9055,6 +9409,17 @@ components:
       required:
       - id
       - username
+    CreatorNotificationPreference:
+      type: object
+      properties:
+        creator_id:
+          type: string
+          format: uuid
+        mode:
+          $ref: '#/components/schemas/ModeEnum'
+      required:
+      - creator_id
+      - mode
     CreatorOversightEpisode:
       type: object
       properties:
@@ -9436,6 +9801,16 @@ components:
       description: |-
         * `inbound` - Inbound
         * `outbound` - Outbound
+    DownloadQualityEnum:
+      enum:
+      - high
+      - standard
+      - data_saver
+      type: string
+      description: |-
+        * `high` - High
+        * `standard` - Standard
+        * `data_saver` - Data saver
     Episode:
       type: object
       properties:
@@ -10633,6 +11008,16 @@ components:
       - amount
       - description
       - email
+    ModeEnum:
+      enum:
+      - all
+      - personalized
+      - none
+      type: string
+      description: |-
+        * `all` - all
+        * `personalized` - personalized
+        * `none` - none
     ModerationActionLog:
       type: object
       properties:
@@ -10771,7 +11156,12 @@ components:
           type: string
         body:
           type: string
-        data: {}
+        data:
+          description: 'Deep-link payload. Common keys by type: `followed_creator_new_episode`
+            / `new_comment_on_episode`: episode_id, creator_id; `new_season_from_followed_creator`:
+            season_id, creator_id, skillworld; `task_reminder` / `task_approved_with_coins`
+            / `task_rejected_with_feedback`: episode_id, submission_id; `referral_bonus_credited`:
+            transaction_id; `platform_announcement`: event_type.'
         is_read:
           type: boolean
         created_at:
@@ -10981,6 +11371,23 @@ components:
       - next
       - previous
       - results
+    PatchedAppPreferencesRequest:
+      type: object
+      properties:
+        auto_play_next:
+          type: boolean
+        download_quality:
+          $ref: '#/components/schemas/DownloadQualityEnum'
+        download_on_wifi_only:
+          type: boolean
+        app_language:
+          type: string
+          minLength: 1
+          maxLength: 10
+        save_watch_history:
+          type: boolean
+        personalised_recommendations:
+          type: boolean
     PatchedBadgeCreateRequest:
       type: object
       properties:
@@ -10993,6 +11400,11 @@ components:
           minLength: 1
         is_active:
           type: boolean
+    PatchedCreatorNotificationPreferenceUpdateRequest:
+      type: object
+      properties:
+        mode:
+          $ref: '#/components/schemas/ModeEnum'
     PatchedEpisodeCommentUpdateRequest:
       type: object
       properties:
@@ -11911,6 +12323,10 @@ components:
           type: integer
         is_following:
           type: boolean
+        notification_mode:
+          type: string
+          nullable: true
+          description: Present when is_following is true.
       required:
       - avatar_url
       - bio
@@ -13469,6 +13885,32 @@ components:
       required:
       - episode_id
       - watch_duration_seconds
+    TransactionReportRequestRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 255
+        details:
+          type: string
+          default: ''
+      required:
+      - reason
+    TransactionReportResponse:
+      type: object
+      properties:
+        case_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        ticket_number:
+          type: string
+          nullable: true
+      required:
+      - case_id
+      - status
     TriggerTypeEnum:
       enum:
       - complete_profile
@@ -13705,6 +14147,8 @@ components:
         streak_count:
           type: integer
           readOnly: true
+        is_onboarded:
+          type: boolean
         rank:
           type: integer
           nullable: true
@@ -13737,6 +14181,7 @@ components:
       - first_name
       - goal
       - id
+      - is_onboarded
       - last_name
       - phone
       - rank
@@ -14195,7 +14640,7 @@ components:
         questions:
           type: array
           items:
-            $ref: '#/components/schemas/AssessmentQuestion'
+            $ref: '#/components/schemas/AssessmentQuestionResponse'
           readOnly: true
         time_limit_minutes:
           type: integer
@@ -14326,6 +14771,35 @@ components:
         * `pending` - Pending Verification
         * `verified` - Verified
         * `rejected` - Rejected
+    WithdrawalMethodItem:
+      type: object
+      properties:
+        method:
+          type: string
+        gateway:
+          type: string
+        flow:
+          type: string
+        label:
+          type: string
+      required:
+      - flow
+      - gateway
+      - label
+      - method
+    WithdrawalMethodsResponse:
+      type: object
+      properties:
+        withdrawal_fee_percentage:
+          type: string
+          description: Platform withdrawal fee percentage as a string decimal.
+        methods:
+          type: array
+          items:
+            $ref: '#/components/schemas/WithdrawalMethodItem'
+      required:
+      - methods
+      - withdrawal_fee_percentage
     WithdrawalRequest:
       type: object
       properties:

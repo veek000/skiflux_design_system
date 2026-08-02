@@ -244,6 +244,7 @@ class _HomeTopBar extends StatelessWidget {
           // Search control — Figma: Avatar (background/hover) + search-fill
           _CircleIconButton(
             icon: RemixIcons.search_fill,
+            label: 'Search',
             onTap: () => Navigator.of(
               context,
             ).push(MaterialPageRoute(builder: (_) => const SearchScreen())),
@@ -459,6 +460,7 @@ class _CreatorChipState extends State<_CreatorChip>
           _CircleIconButton(
             icon: RemixIcons.arrow_right_s_line,
             filled: false,
+            label: 'View creator',
             onTap: _displayed.creatorId == null
                 ? null
                 : () => Navigator.of(context).push(
@@ -553,6 +555,7 @@ class _CircleIconButton extends StatelessWidget {
     required this.icon,
     this.onTap,
     this.filled = true,
+    this.label,
   });
 
   final IconData icon;
@@ -561,6 +564,9 @@ class _CircleIconButton extends StatelessWidget {
   /// Figma: search & notification are filled `Background/Hover`; the chip's
   /// trailing arrow is a transparent circle.
   final bool filled;
+
+  /// Accessibility semantic label.
+  final String? label;
 
   @override
   Widget build(BuildContext context) {
@@ -580,7 +586,7 @@ class _CircleIconButton extends StatelessWidget {
       ),
     );
 
-    return Material(
+    final button = Material(
       color: filled ? SkifluxColors.backgroundHover : Colors.transparent,
       shape: const CircleBorder(),
       child: InkWell(
@@ -593,5 +599,15 @@ class _CircleIconButton extends StatelessWidget {
         ),
       ),
     );
+
+    if (label != null && label!.isNotEmpty) {
+      return Semantics(
+        button: true,
+        label: label,
+        child: button,
+      );
+    }
+
+    return button;
   }
 }

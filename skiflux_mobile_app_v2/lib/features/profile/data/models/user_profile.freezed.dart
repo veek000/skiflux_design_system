@@ -15,7 +15,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$UserProfile {
 
- String get id; String get firstName; String get lastName; String get email; String get username; String get bio; String get country; String get phone; String? get avatarUrl; List<String> get goal; List<String> get skillworld; String get status;@DecimalConverter() Decimal? get balance;@DecimalConverter() Decimal? get bonusBalance; int get xp; String get currentLevel; int get streakCount; int? get rank; int get taskDone; int get episodeCompleted; bool get biometricsEnabled;
+ String get id; String get firstName; String get lastName; String get email; String get username; String get bio; String get country; String get phone; String? get avatarUrl; List<String> get goal; List<String> get skillworld; String get status;@DecimalConverter() Decimal? get balance;@DecimalConverter() Decimal? get bonusBalance; int get xp; String get currentLevel; int get streakCount; int? get rank; int get taskDone; int get episodeCompleted; bool get biometricsEnabled;@JsonKey(name: 'is_onboarded') bool get isOnboarded;
 /// Create a copy of UserProfile
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +28,16 @@ $UserProfileCopyWith<UserProfile> get copyWith => _$UserProfileCopyWithImpl<User
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is UserProfile&&(identical(other.id, id) || other.id == id)&&(identical(other.firstName, firstName) || other.firstName == firstName)&&(identical(other.lastName, lastName) || other.lastName == lastName)&&(identical(other.email, email) || other.email == email)&&(identical(other.username, username) || other.username == username)&&(identical(other.bio, bio) || other.bio == bio)&&(identical(other.country, country) || other.country == country)&&(identical(other.phone, phone) || other.phone == phone)&&(identical(other.avatarUrl, avatarUrl) || other.avatarUrl == avatarUrl)&&const DeepCollectionEquality().equals(other.goal, goal)&&const DeepCollectionEquality().equals(other.skillworld, skillworld)&&(identical(other.status, status) || other.status == status)&&(identical(other.balance, balance) || other.balance == balance)&&(identical(other.bonusBalance, bonusBalance) || other.bonusBalance == bonusBalance)&&(identical(other.xp, xp) || other.xp == xp)&&(identical(other.currentLevel, currentLevel) || other.currentLevel == currentLevel)&&(identical(other.streakCount, streakCount) || other.streakCount == streakCount)&&(identical(other.rank, rank) || other.rank == rank)&&(identical(other.taskDone, taskDone) || other.taskDone == taskDone)&&(identical(other.episodeCompleted, episodeCompleted) || other.episodeCompleted == episodeCompleted)&&(identical(other.biometricsEnabled, biometricsEnabled) || other.biometricsEnabled == biometricsEnabled));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is UserProfile&&(identical(other.id, id) || other.id == id)&&(identical(other.firstName, firstName) || other.firstName == firstName)&&(identical(other.lastName, lastName) || other.lastName == lastName)&&(identical(other.email, email) || other.email == email)&&(identical(other.username, username) || other.username == username)&&(identical(other.bio, bio) || other.bio == bio)&&(identical(other.country, country) || other.country == country)&&(identical(other.phone, phone) || other.phone == phone)&&(identical(other.avatarUrl, avatarUrl) || other.avatarUrl == avatarUrl)&&const DeepCollectionEquality().equals(other.goal, goal)&&const DeepCollectionEquality().equals(other.skillworld, skillworld)&&(identical(other.status, status) || other.status == status)&&(identical(other.balance, balance) || other.balance == balance)&&(identical(other.bonusBalance, bonusBalance) || other.bonusBalance == bonusBalance)&&(identical(other.xp, xp) || other.xp == xp)&&(identical(other.currentLevel, currentLevel) || other.currentLevel == currentLevel)&&(identical(other.streakCount, streakCount) || other.streakCount == streakCount)&&(identical(other.rank, rank) || other.rank == rank)&&(identical(other.taskDone, taskDone) || other.taskDone == taskDone)&&(identical(other.episodeCompleted, episodeCompleted) || other.episodeCompleted == episodeCompleted)&&(identical(other.biometricsEnabled, biometricsEnabled) || other.biometricsEnabled == biometricsEnabled)&&(identical(other.isOnboarded, isOnboarded) || other.isOnboarded == isOnboarded));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hashAll([runtimeType,id,firstName,lastName,email,username,bio,country,phone,avatarUrl,const DeepCollectionEquality().hash(goal),const DeepCollectionEquality().hash(skillworld),status,balance,bonusBalance,xp,currentLevel,streakCount,rank,taskDone,episodeCompleted,biometricsEnabled]);
+int get hashCode => Object.hashAll([runtimeType,id,firstName,lastName,email,username,bio,country,phone,avatarUrl,const DeepCollectionEquality().hash(goal),const DeepCollectionEquality().hash(skillworld),status,balance,bonusBalance,xp,currentLevel,streakCount,rank,taskDone,episodeCompleted,biometricsEnabled,isOnboarded]);
 
 @override
 String toString() {
-  return 'UserProfile(id: $id, firstName: $firstName, lastName: $lastName, email: $email, username: $username, bio: $bio, country: $country, phone: $phone, avatarUrl: $avatarUrl, goal: $goal, skillworld: $skillworld, status: $status, balance: $balance, bonusBalance: $bonusBalance, xp: $xp, currentLevel: $currentLevel, streakCount: $streakCount, rank: $rank, taskDone: $taskDone, episodeCompleted: $episodeCompleted, biometricsEnabled: $biometricsEnabled)';
+  return 'UserProfile(id: $id, firstName: $firstName, lastName: $lastName, email: $email, username: $username, bio: $bio, country: $country, phone: $phone, avatarUrl: $avatarUrl, goal: $goal, skillworld: $skillworld, status: $status, balance: $balance, bonusBalance: $bonusBalance, xp: $xp, currentLevel: $currentLevel, streakCount: $streakCount, rank: $rank, taskDone: $taskDone, episodeCompleted: $episodeCompleted, biometricsEnabled: $biometricsEnabled, isOnboarded: $isOnboarded)';
 }
 
 
@@ -48,7 +48,7 @@ abstract mixin class $UserProfileCopyWith<$Res>  {
   factory $UserProfileCopyWith(UserProfile value, $Res Function(UserProfile) _then) = _$UserProfileCopyWithImpl;
 @useResult
 $Res call({
- String id, String firstName, String lastName, String email, String username, String bio, String country, String phone, String? avatarUrl, List<String> goal, List<String> skillworld, String status,@DecimalConverter() Decimal? balance,@DecimalConverter() Decimal? bonusBalance, int xp, String currentLevel, int streakCount, int? rank, int taskDone, int episodeCompleted, bool biometricsEnabled
+ String id, String firstName, String lastName, String email, String username, String bio, String country, String phone, String? avatarUrl, List<String> goal, List<String> skillworld, String status,@DecimalConverter() Decimal? balance,@DecimalConverter() Decimal? bonusBalance, int xp, String currentLevel, int streakCount, int? rank, int taskDone, int episodeCompleted, bool biometricsEnabled,@JsonKey(name: 'is_onboarded') bool isOnboarded
 });
 
 
@@ -65,7 +65,7 @@ class _$UserProfileCopyWithImpl<$Res>
 
 /// Create a copy of UserProfile
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? firstName = null,Object? lastName = null,Object? email = null,Object? username = null,Object? bio = null,Object? country = null,Object? phone = null,Object? avatarUrl = freezed,Object? goal = null,Object? skillworld = null,Object? status = null,Object? balance = freezed,Object? bonusBalance = freezed,Object? xp = null,Object? currentLevel = null,Object? streakCount = null,Object? rank = freezed,Object? taskDone = null,Object? episodeCompleted = null,Object? biometricsEnabled = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? firstName = null,Object? lastName = null,Object? email = null,Object? username = null,Object? bio = null,Object? country = null,Object? phone = null,Object? avatarUrl = freezed,Object? goal = null,Object? skillworld = null,Object? status = null,Object? balance = freezed,Object? bonusBalance = freezed,Object? xp = null,Object? currentLevel = null,Object? streakCount = null,Object? rank = freezed,Object? taskDone = null,Object? episodeCompleted = null,Object? biometricsEnabled = null,Object? isOnboarded = null,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,firstName: null == firstName ? _self.firstName : firstName // ignore: cast_nullable_to_non_nullable
@@ -88,6 +88,7 @@ as int,rank: freezed == rank ? _self.rank : rank // ignore: cast_nullable_to_non
 as int?,taskDone: null == taskDone ? _self.taskDone : taskDone // ignore: cast_nullable_to_non_nullable
 as int,episodeCompleted: null == episodeCompleted ? _self.episodeCompleted : episodeCompleted // ignore: cast_nullable_to_non_nullable
 as int,biometricsEnabled: null == biometricsEnabled ? _self.biometricsEnabled : biometricsEnabled // ignore: cast_nullable_to_non_nullable
+as bool,isOnboarded: null == isOnboarded ? _self.isOnboarded : isOnboarded // ignore: cast_nullable_to_non_nullable
 as bool,
   ));
 }
@@ -173,10 +174,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String firstName,  String lastName,  String email,  String username,  String bio,  String country,  String phone,  String? avatarUrl,  List<String> goal,  List<String> skillworld,  String status, @DecimalConverter()  Decimal? balance, @DecimalConverter()  Decimal? bonusBalance,  int xp,  String currentLevel,  int streakCount,  int? rank,  int taskDone,  int episodeCompleted,  bool biometricsEnabled)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String firstName,  String lastName,  String email,  String username,  String bio,  String country,  String phone,  String? avatarUrl,  List<String> goal,  List<String> skillworld,  String status, @DecimalConverter()  Decimal? balance, @DecimalConverter()  Decimal? bonusBalance,  int xp,  String currentLevel,  int streakCount,  int? rank,  int taskDone,  int episodeCompleted,  bool biometricsEnabled, @JsonKey(name: 'is_onboarded')  bool isOnboarded)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _UserProfile() when $default != null:
-return $default(_that.id,_that.firstName,_that.lastName,_that.email,_that.username,_that.bio,_that.country,_that.phone,_that.avatarUrl,_that.goal,_that.skillworld,_that.status,_that.balance,_that.bonusBalance,_that.xp,_that.currentLevel,_that.streakCount,_that.rank,_that.taskDone,_that.episodeCompleted,_that.biometricsEnabled);case _:
+return $default(_that.id,_that.firstName,_that.lastName,_that.email,_that.username,_that.bio,_that.country,_that.phone,_that.avatarUrl,_that.goal,_that.skillworld,_that.status,_that.balance,_that.bonusBalance,_that.xp,_that.currentLevel,_that.streakCount,_that.rank,_that.taskDone,_that.episodeCompleted,_that.biometricsEnabled,_that.isOnboarded);case _:
   return orElse();
 
 }
@@ -194,10 +195,10 @@ return $default(_that.id,_that.firstName,_that.lastName,_that.email,_that.userna
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String firstName,  String lastName,  String email,  String username,  String bio,  String country,  String phone,  String? avatarUrl,  List<String> goal,  List<String> skillworld,  String status, @DecimalConverter()  Decimal? balance, @DecimalConverter()  Decimal? bonusBalance,  int xp,  String currentLevel,  int streakCount,  int? rank,  int taskDone,  int episodeCompleted,  bool biometricsEnabled)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String firstName,  String lastName,  String email,  String username,  String bio,  String country,  String phone,  String? avatarUrl,  List<String> goal,  List<String> skillworld,  String status, @DecimalConverter()  Decimal? balance, @DecimalConverter()  Decimal? bonusBalance,  int xp,  String currentLevel,  int streakCount,  int? rank,  int taskDone,  int episodeCompleted,  bool biometricsEnabled, @JsonKey(name: 'is_onboarded')  bool isOnboarded)  $default,) {final _that = this;
 switch (_that) {
 case _UserProfile():
-return $default(_that.id,_that.firstName,_that.lastName,_that.email,_that.username,_that.bio,_that.country,_that.phone,_that.avatarUrl,_that.goal,_that.skillworld,_that.status,_that.balance,_that.bonusBalance,_that.xp,_that.currentLevel,_that.streakCount,_that.rank,_that.taskDone,_that.episodeCompleted,_that.biometricsEnabled);case _:
+return $default(_that.id,_that.firstName,_that.lastName,_that.email,_that.username,_that.bio,_that.country,_that.phone,_that.avatarUrl,_that.goal,_that.skillworld,_that.status,_that.balance,_that.bonusBalance,_that.xp,_that.currentLevel,_that.streakCount,_that.rank,_that.taskDone,_that.episodeCompleted,_that.biometricsEnabled,_that.isOnboarded);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -214,10 +215,10 @@ return $default(_that.id,_that.firstName,_that.lastName,_that.email,_that.userna
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String firstName,  String lastName,  String email,  String username,  String bio,  String country,  String phone,  String? avatarUrl,  List<String> goal,  List<String> skillworld,  String status, @DecimalConverter()  Decimal? balance, @DecimalConverter()  Decimal? bonusBalance,  int xp,  String currentLevel,  int streakCount,  int? rank,  int taskDone,  int episodeCompleted,  bool biometricsEnabled)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String firstName,  String lastName,  String email,  String username,  String bio,  String country,  String phone,  String? avatarUrl,  List<String> goal,  List<String> skillworld,  String status, @DecimalConverter()  Decimal? balance, @DecimalConverter()  Decimal? bonusBalance,  int xp,  String currentLevel,  int streakCount,  int? rank,  int taskDone,  int episodeCompleted,  bool biometricsEnabled, @JsonKey(name: 'is_onboarded')  bool isOnboarded)?  $default,) {final _that = this;
 switch (_that) {
 case _UserProfile() when $default != null:
-return $default(_that.id,_that.firstName,_that.lastName,_that.email,_that.username,_that.bio,_that.country,_that.phone,_that.avatarUrl,_that.goal,_that.skillworld,_that.status,_that.balance,_that.bonusBalance,_that.xp,_that.currentLevel,_that.streakCount,_that.rank,_that.taskDone,_that.episodeCompleted,_that.biometricsEnabled);case _:
+return $default(_that.id,_that.firstName,_that.lastName,_that.email,_that.username,_that.bio,_that.country,_that.phone,_that.avatarUrl,_that.goal,_that.skillworld,_that.status,_that.balance,_that.bonusBalance,_that.xp,_that.currentLevel,_that.streakCount,_that.rank,_that.taskDone,_that.episodeCompleted,_that.biometricsEnabled,_that.isOnboarded);case _:
   return null;
 
 }
@@ -229,7 +230,7 @@ return $default(_that.id,_that.firstName,_that.lastName,_that.email,_that.userna
 @JsonSerializable()
 
 class _UserProfile extends UserProfile {
-  const _UserProfile({required this.id, this.firstName = '', this.lastName = '', this.email = '', this.username = '', this.bio = '', this.country = '', this.phone = '', this.avatarUrl, final  List<String> goal = const [], final  List<String> skillworld = const [], this.status = '', @DecimalConverter() this.balance, @DecimalConverter() this.bonusBalance, this.xp = 0, this.currentLevel = '', this.streakCount = 0, this.rank, this.taskDone = 0, this.episodeCompleted = 0, this.biometricsEnabled = false}): _goal = goal,_skillworld = skillworld,super._();
+  const _UserProfile({required this.id, this.firstName = '', this.lastName = '', this.email = '', this.username = '', this.bio = '', this.country = '', this.phone = '', this.avatarUrl, final  List<String> goal = const [], final  List<String> skillworld = const [], this.status = '', @DecimalConverter() this.balance, @DecimalConverter() this.bonusBalance, this.xp = 0, this.currentLevel = '', this.streakCount = 0, this.rank, this.taskDone = 0, this.episodeCompleted = 0, this.biometricsEnabled = false, @JsonKey(name: 'is_onboarded') this.isOnboarded = true}): _goal = goal,_skillworld = skillworld,super._();
   factory _UserProfile.fromJson(Map<String, dynamic> json) => _$UserProfileFromJson(json);
 
 @override final  String id;
@@ -265,6 +266,7 @@ class _UserProfile extends UserProfile {
 @override@JsonKey() final  int taskDone;
 @override@JsonKey() final  int episodeCompleted;
 @override@JsonKey() final  bool biometricsEnabled;
+@override@JsonKey(name: 'is_onboarded') final  bool isOnboarded;
 
 /// Create a copy of UserProfile
 /// with the given fields replaced by the non-null parameter values.
@@ -279,16 +281,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _UserProfile&&(identical(other.id, id) || other.id == id)&&(identical(other.firstName, firstName) || other.firstName == firstName)&&(identical(other.lastName, lastName) || other.lastName == lastName)&&(identical(other.email, email) || other.email == email)&&(identical(other.username, username) || other.username == username)&&(identical(other.bio, bio) || other.bio == bio)&&(identical(other.country, country) || other.country == country)&&(identical(other.phone, phone) || other.phone == phone)&&(identical(other.avatarUrl, avatarUrl) || other.avatarUrl == avatarUrl)&&const DeepCollectionEquality().equals(other._goal, _goal)&&const DeepCollectionEquality().equals(other._skillworld, _skillworld)&&(identical(other.status, status) || other.status == status)&&(identical(other.balance, balance) || other.balance == balance)&&(identical(other.bonusBalance, bonusBalance) || other.bonusBalance == bonusBalance)&&(identical(other.xp, xp) || other.xp == xp)&&(identical(other.currentLevel, currentLevel) || other.currentLevel == currentLevel)&&(identical(other.streakCount, streakCount) || other.streakCount == streakCount)&&(identical(other.rank, rank) || other.rank == rank)&&(identical(other.taskDone, taskDone) || other.taskDone == taskDone)&&(identical(other.episodeCompleted, episodeCompleted) || other.episodeCompleted == episodeCompleted)&&(identical(other.biometricsEnabled, biometricsEnabled) || other.biometricsEnabled == biometricsEnabled));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _UserProfile&&(identical(other.id, id) || other.id == id)&&(identical(other.firstName, firstName) || other.firstName == firstName)&&(identical(other.lastName, lastName) || other.lastName == lastName)&&(identical(other.email, email) || other.email == email)&&(identical(other.username, username) || other.username == username)&&(identical(other.bio, bio) || other.bio == bio)&&(identical(other.country, country) || other.country == country)&&(identical(other.phone, phone) || other.phone == phone)&&(identical(other.avatarUrl, avatarUrl) || other.avatarUrl == avatarUrl)&&const DeepCollectionEquality().equals(other._goal, _goal)&&const DeepCollectionEquality().equals(other._skillworld, _skillworld)&&(identical(other.status, status) || other.status == status)&&(identical(other.balance, balance) || other.balance == balance)&&(identical(other.bonusBalance, bonusBalance) || other.bonusBalance == bonusBalance)&&(identical(other.xp, xp) || other.xp == xp)&&(identical(other.currentLevel, currentLevel) || other.currentLevel == currentLevel)&&(identical(other.streakCount, streakCount) || other.streakCount == streakCount)&&(identical(other.rank, rank) || other.rank == rank)&&(identical(other.taskDone, taskDone) || other.taskDone == taskDone)&&(identical(other.episodeCompleted, episodeCompleted) || other.episodeCompleted == episodeCompleted)&&(identical(other.biometricsEnabled, biometricsEnabled) || other.biometricsEnabled == biometricsEnabled)&&(identical(other.isOnboarded, isOnboarded) || other.isOnboarded == isOnboarded));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hashAll([runtimeType,id,firstName,lastName,email,username,bio,country,phone,avatarUrl,const DeepCollectionEquality().hash(_goal),const DeepCollectionEquality().hash(_skillworld),status,balance,bonusBalance,xp,currentLevel,streakCount,rank,taskDone,episodeCompleted,biometricsEnabled]);
+int get hashCode => Object.hashAll([runtimeType,id,firstName,lastName,email,username,bio,country,phone,avatarUrl,const DeepCollectionEquality().hash(_goal),const DeepCollectionEquality().hash(_skillworld),status,balance,bonusBalance,xp,currentLevel,streakCount,rank,taskDone,episodeCompleted,biometricsEnabled,isOnboarded]);
 
 @override
 String toString() {
-  return 'UserProfile(id: $id, firstName: $firstName, lastName: $lastName, email: $email, username: $username, bio: $bio, country: $country, phone: $phone, avatarUrl: $avatarUrl, goal: $goal, skillworld: $skillworld, status: $status, balance: $balance, bonusBalance: $bonusBalance, xp: $xp, currentLevel: $currentLevel, streakCount: $streakCount, rank: $rank, taskDone: $taskDone, episodeCompleted: $episodeCompleted, biometricsEnabled: $biometricsEnabled)';
+  return 'UserProfile(id: $id, firstName: $firstName, lastName: $lastName, email: $email, username: $username, bio: $bio, country: $country, phone: $phone, avatarUrl: $avatarUrl, goal: $goal, skillworld: $skillworld, status: $status, balance: $balance, bonusBalance: $bonusBalance, xp: $xp, currentLevel: $currentLevel, streakCount: $streakCount, rank: $rank, taskDone: $taskDone, episodeCompleted: $episodeCompleted, biometricsEnabled: $biometricsEnabled, isOnboarded: $isOnboarded)';
 }
 
 
@@ -299,7 +301,7 @@ abstract mixin class _$UserProfileCopyWith<$Res> implements $UserProfileCopyWith
   factory _$UserProfileCopyWith(_UserProfile value, $Res Function(_UserProfile) _then) = __$UserProfileCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String firstName, String lastName, String email, String username, String bio, String country, String phone, String? avatarUrl, List<String> goal, List<String> skillworld, String status,@DecimalConverter() Decimal? balance,@DecimalConverter() Decimal? bonusBalance, int xp, String currentLevel, int streakCount, int? rank, int taskDone, int episodeCompleted, bool biometricsEnabled
+ String id, String firstName, String lastName, String email, String username, String bio, String country, String phone, String? avatarUrl, List<String> goal, List<String> skillworld, String status,@DecimalConverter() Decimal? balance,@DecimalConverter() Decimal? bonusBalance, int xp, String currentLevel, int streakCount, int? rank, int taskDone, int episodeCompleted, bool biometricsEnabled,@JsonKey(name: 'is_onboarded') bool isOnboarded
 });
 
 
@@ -316,7 +318,7 @@ class __$UserProfileCopyWithImpl<$Res>
 
 /// Create a copy of UserProfile
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? firstName = null,Object? lastName = null,Object? email = null,Object? username = null,Object? bio = null,Object? country = null,Object? phone = null,Object? avatarUrl = freezed,Object? goal = null,Object? skillworld = null,Object? status = null,Object? balance = freezed,Object? bonusBalance = freezed,Object? xp = null,Object? currentLevel = null,Object? streakCount = null,Object? rank = freezed,Object? taskDone = null,Object? episodeCompleted = null,Object? biometricsEnabled = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? firstName = null,Object? lastName = null,Object? email = null,Object? username = null,Object? bio = null,Object? country = null,Object? phone = null,Object? avatarUrl = freezed,Object? goal = null,Object? skillworld = null,Object? status = null,Object? balance = freezed,Object? bonusBalance = freezed,Object? xp = null,Object? currentLevel = null,Object? streakCount = null,Object? rank = freezed,Object? taskDone = null,Object? episodeCompleted = null,Object? biometricsEnabled = null,Object? isOnboarded = null,}) {
   return _then(_UserProfile(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,firstName: null == firstName ? _self.firstName : firstName // ignore: cast_nullable_to_non_nullable
@@ -339,6 +341,7 @@ as int,rank: freezed == rank ? _self.rank : rank // ignore: cast_nullable_to_non
 as int?,taskDone: null == taskDone ? _self.taskDone : taskDone // ignore: cast_nullable_to_non_nullable
 as int,episodeCompleted: null == episodeCompleted ? _self.episodeCompleted : episodeCompleted // ignore: cast_nullable_to_non_nullable
 as int,biometricsEnabled: null == biometricsEnabled ? _self.biometricsEnabled : biometricsEnabled // ignore: cast_nullable_to_non_nullable
+as bool,isOnboarded: null == isOnboarded ? _self.isOnboarded : isOnboarded // ignore: cast_nullable_to_non_nullable
 as bool,
   ));
 }

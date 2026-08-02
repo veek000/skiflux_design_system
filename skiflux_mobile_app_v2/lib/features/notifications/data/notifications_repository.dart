@@ -52,6 +52,9 @@ class NotificationsRepository extends ApiRepository {
   /// failure here as "sync it next time", not as a UI error.
   Future<void> markRead(String id) => post(readPath(id));
 
+  /// `POST /me/notifications/mark-all-read` — bulk mark read. Idempotent.
+  Future<void> markAllRead() => post('/me/notifications/mark-all-read');
+
   /// Maps a `NotificationItem` row onto the app's model.
   ///
   /// The documented key is first in every list below; the rest are tolerated

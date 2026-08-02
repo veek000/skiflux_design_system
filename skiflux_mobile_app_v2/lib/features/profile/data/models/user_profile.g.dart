@@ -40,6 +40,7 @@ _UserProfile _$UserProfileFromJson(Map<String, dynamic> json) => _UserProfile(
   taskDone: (json['task_done'] as num?)?.toInt() ?? 0,
   episodeCompleted: (json['episode_completed'] as num?)?.toInt() ?? 0,
   biometricsEnabled: json['biometrics_enabled'] as bool? ?? false,
+  isOnboarded: json['is_onboarded'] as bool? ?? true,
 );
 
 Map<String, dynamic> _$UserProfileToJson(_UserProfile instance) =>
@@ -71,6 +72,7 @@ Map<String, dynamic> _$UserProfileToJson(_UserProfile instance) =>
       'task_done': instance.taskDone,
       'episode_completed': instance.episodeCompleted,
       'biometrics_enabled': instance.biometricsEnabled,
+      'is_onboarded': instance.isOnboarded,
     };
 
 Value? _$JsonConverterFromJson<Json, Value>(

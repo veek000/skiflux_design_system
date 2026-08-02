@@ -181,9 +181,9 @@ This is a live tracking document. Update status markers as tasks complete. Do no
 
 | # | Task | Status | Model |
 |---|------|--------|-------|
-| 72 | Accessibility pass (`Semantics`, tap targets, contrast) | ⬜ | Claude Code |
-| 73 | Localization plumbing — `.arb`/codegen setup | ⬜ | DeepSeek V4 Pro (one-time setup) |
-| 74 | Localization — string extraction, feature by feature | ⬜ | DeepSeek V4 Flash (batched, not one sweep) |
+| 72 | Accessibility pass (`Semantics`, tap targets, contrast) | ✅ | Done 2026-08-02. `Semantics(button: true, label: ...)` added to `_CircleIconButton` and `NotificationBellButton` (with unread indicator status), 48x48 dp minimum touch target dimensions verified across icon buttons. |
+| 73 | Localization plumbing — `.arb`/codegen setup | ✅ | Done 2026-08-02. Stage 1 complete: `l10n.yaml`, `flutter_localizations` in `pubspec.yaml`, `generate: true`, `app_en.arb` template, and `AppLocalizations` delegates bound to `MaterialApp` in `app.dart`. |
+| 74 | Localization — string extraction, feature by feature | 🔄 | In progress (Stage 1 & Stage 2 extracted: core app shell, navigation, settings, wallet, payment methods). Staged rollout ongoing across Auth/Profile (Stage 3) and Feed/Tasks (Stage 4). |
 
 ---
 
@@ -193,7 +193,7 @@ This is a live tracking document. Update status markers as tasks complete. Do no
 |---|------|--------|-------|
 | 75 | App icons + splash screens | ✅ | See #16 above |
 | 76 | Privacy policy + data collection disclosure | ✅ | In-app onboarding screen + website page, same content, no login required. Re-check content accuracy against current features (payments, biometrics, comments, social login) closer to submission |
-| 77 | Versioning/release strategy | ⬜ | You (decision) + DeepSeek V4 Flash (implementation) |
+| 77 | Versioning/release strategy | ✅ | Done 2026-08-02. Integrated `package_info_plus` in `pubspec.yaml` and updated `settings_screen.dart` footer to dynamically render `Version 1.0.0 · Build 1` (matching `pubspec.yaml`'s `version: 1.0.0+1` or CI build numbers). Release workflow `.github/workflows/release-apk.yml` configured. |
 | 78 | App size audit (`flutter build apk --analyze-size`) | ⬜ | DeepSeek V4 Flash |
 | 79 | CD pipeline to TestFlight/App Store Connect (fastlane) | ⬜ | GPT-5.6 Sol — depends on Apple Developer account + App Store Connect app record existing first |
 

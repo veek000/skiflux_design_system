@@ -1,0 +1,33 @@
+{
+  "@@locale": "en",
+  "appTitle": "SkiFlux",
+  "@appTitle": {
+    "description": "The title of the application"
+  },
+  "navHome": "Home",
+  "navExplore": "Explore",
+  "navPlaylists": "Playlists",
+  "navTasks": "Tasks",
+  "navProfile": "Profile",
+  "buyCoins": "Buy Coins",
+  "withdraw": "Withdraw",
+  "paymentMethods": "Payment Methods",
+  "addNewCard": "Add New Card",
+  "savedCards": "Saved Cards",
+  "cardSaved": "Card Saved!",
+  "cardRemoved": "Card Removed",
+  "totalBalance": "Total Balance",
+  "transactions": "Transactions",
+  "all": "All",
+  "earned": "Earned",
+  "spent": "Spent",
+  "retry": "Retry",
+  "cancel": "Cancel",
+  "confirm": "Confirm",
+  "save": "Save",
+  "settings": "Settings",
+  "notifications": "Notifications",
+  "markAllAsRead": "Mark all read",
+  "noNotifications": "No notifications yet",
+  "errorOccurred": "An error occurred. Please try again."
+}

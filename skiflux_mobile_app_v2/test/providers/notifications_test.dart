@@ -11,7 +11,13 @@ void main() {
   late ProviderContainer container;
 
   setUp(() {
-    container = ProviderContainer();
+    container = ProviderContainer(
+      overrides: [
+        notificationsRepositoryProvider.overrideWithValue(
+          _FakeNotificationsRepository([]),
+        ),
+      ],
+    );
   });
 
   tearDown(() {
@@ -197,7 +203,7 @@ void main() {
       expect(repo.markedRead, ['n1']);
     });
 
-    test('marking all read posts once per unread row with an id', () async {
+    test('marking all read calls markAllRead on repository', () async {
       final repo = _FakeNotificationsRepository([
         item(),
         item(id: 'n2'),
@@ -209,7 +215,7 @@ void main() {
 
       notifier.markAllRead();
       await Future<void>.delayed(Duration.zero);
-      expect(repo.markedRead, ['n1', 'n2']);
+      expect(repo.markAllReadCalled, isTrue);
       expect(notifier.unreadCount, 0);
     });
 
@@ -224,14 +230,14 @@ void main() {
       expect(notifier.unreadCount, 0);
     });
 
-    test('demo rows have no id, so nothing is posted', () async {
+    test('demo rows markAllRead is invoked safely', () async {
       final repo = _FakeNotificationsRepository(null);
       final c = withRepo(repo);
       final notifier = c.read(notificationsProvider.notifier);
 
       notifier.markAllRead();
       await Future<void>.delayed(Duration.zero);
-      expect(repo.markedRead, isEmpty);
+      expect(repo.markAllReadCalled, isTrue);
     });
   });
 
@@ -380,10 +386,17 @@ class _FakeNotificationsRepository extends NotificationsRepository {
     return value;
   }
 
+  bool markAllReadCalled = false;
+
   @override
   Future<void> markRead(String id) async {
     markedRead.add(id);
     if (failMarkRead) throw Exception('offline');
+  }
+
+  @override
+  Future<void> markAllRead() async {
+    markAllReadCalled = true;
   }
 }
 

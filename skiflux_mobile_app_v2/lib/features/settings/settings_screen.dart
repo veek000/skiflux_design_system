@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/error_handling/error_display.dart';
@@ -256,11 +257,18 @@ class _Footer extends StatelessWidget {
           ),
         ),
         const SizedBox(height: SkifluxSpacing.spaceXs),
-        Text(
-          'Version 1.0.0 · Build 100',
-          style: SkifluxTypography.bodyP10Regular.copyWith(
-            color: SkifluxColors.contentTertiary,
-          ),
+        FutureBuilder<PackageInfo>(
+          future: PackageInfo.fromPlatform(),
+          builder: (context, snapshot) {
+            final version = snapshot.data?.version ?? '1.0.0';
+            final buildNumber = snapshot.data?.buildNumber ?? '1';
+            return Text(
+              'Version $version · Build $buildNumber',
+              style: SkifluxTypography.bodyP10Regular.copyWith(
+                color: SkifluxColors.contentTertiary,
+              ),
+            );
+          },
         ),
       ],
     );

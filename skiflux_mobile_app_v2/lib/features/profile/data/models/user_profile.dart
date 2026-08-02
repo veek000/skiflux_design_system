@@ -36,6 +36,7 @@ abstract class UserProfile with _$UserProfile {
     @Default(0) int taskDone,
     @Default(0) int episodeCompleted,
     @Default(false) bool biometricsEnabled,
+    @JsonKey(name: 'is_onboarded') @Default(true) bool isOnboarded,
   }) = _UserProfile;
 
   factory UserProfile.fromJson(Map<String, dynamic> json) =>

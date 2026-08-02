@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../l10n/app_localizations.dart';
+
 import '../features/auth/auth_flow.dart';
 import '../features/notifications/data/notifications_store.dart';
 import '../features/notifications/notifications_screen.dart';
@@ -51,6 +53,8 @@ class _SkifluxMobileAppV2State extends ConsumerState<SkifluxMobileAppV2> {
     return MaterialApp(
       navigatorKey: rootNavigatorKey,
       title: 'Skiflux Mobile App V2',
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       debugShowCheckedModeBanner: false,
       theme: SkifluxAppTheme.light,
       home: const AuthFlow(),

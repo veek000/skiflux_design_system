@@ -64,22 +64,26 @@ class NotificationBellButton extends ConsumerWidget {
       );
     }
 
-    return Material(
-      color: SkifluxColors.backgroundHover,
-      shape: const CircleBorder(),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap:
-            onTap ??
-            () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const NotificationsScreen(),
+    return Semantics(
+      button: true,
+      label: unread ? 'Notifications, new unread' : 'Notifications',
+      child: Material(
+        color: SkifluxColors.backgroundHover,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap:
+              onTap ??
+              () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const NotificationsScreen(),
+                ),
               ),
-            ),
-        child: SizedBox(
-          width: SkifluxUnit.u48,
-          height: SkifluxUnit.u48,
-          child: Center(child: glyph),
+          child: SizedBox(
+            width: SkifluxUnit.u48,
+            height: SkifluxUnit.u48,
+            child: Center(child: glyph),
+          ),
         ),
       ),
     );

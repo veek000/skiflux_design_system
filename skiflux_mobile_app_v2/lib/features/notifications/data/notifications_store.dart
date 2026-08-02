@@ -82,18 +82,11 @@ class NotificationsNotifier extends Notifier<List<AppNotification>> {
   int get unreadCount => state.where((n) => n.unread).length;
 
   void markAllRead() {
-    final synced = <String>[];
     for (final n in state) {
-      if (!n.unread) continue;
       n.unread = false;
-      final id = n.id;
-      if (id != null) synced.add(id);
     }
-    // Reassign so listeners rebuild (in-place mutation alone is silent).
     state = List<AppNotification>.of(state);
-    for (final id in synced) {
-      unawaited(_syncRead(id));
-    }
+    unawaited(ref.read(notificationsRepositoryProvider).markAllRead());
   }
 
   void markRead(AppNotification notification) {

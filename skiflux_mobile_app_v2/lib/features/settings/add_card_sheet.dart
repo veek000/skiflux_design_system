@@ -67,8 +67,9 @@ class _AddCardSheetState extends ConsumerState<_AddCardSheet> {
                   ? 'Finish adding your card on the secure page, then come '
                         'back here and tap "I\'ve added my card".'
                   : 'You\'ll be taken to our payment provider\'s secure page '
-                        'to enter your card details. A small verification '
-                        'charge may apply and is refunded automatically.',
+                        'to enter your card details. For Paystack, a small ₦50 '
+                        'card verification charge is made and refunded to your card '
+                        'automatically; for Stripe, it is \$0.00.',
               style: SkifluxTypography.bodyP8Regular.copyWith(
                 color: SkifluxColors.contentSecondary,
               ),

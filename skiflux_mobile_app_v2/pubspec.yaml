@@ -9,6 +9,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
   skiflux_design_system:
     path: ../skiflux_design_system
   cupertino_icons: ^1.0.8
@@ -103,6 +105,8 @@ dependencies:
   cached_network_image: 3.4.1
   # Device storage paths for the offline-download pipeline.
   path_provider: 2.1.6
+  # Dynamic app version and build number for Settings footer.
+  package_info_plus: ^10.2.1
   # Network-type check (wifi vs mobile) so the "download on Wi-Fi only"
   # preference can actually be enforced before a download starts. NOT used for
   # reachability — the connectivity banner stays driven by the app's own dio
@@ -148,6 +152,7 @@ dev_dependencies:
   json_serializable: ^6.9.0
 
 flutter:
+  generate: true
   uses-material-design: true
   assets:
     - assets/home_video_cover.png

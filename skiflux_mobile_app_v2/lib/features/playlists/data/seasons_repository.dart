@@ -90,6 +90,30 @@ class SeasonsRepository extends ApiRepository {
     parse: episodeJsonToPlaylistEpisode,
   );
 
+  /// `GET /creators/{creator_id}/seasons` — published seasons for one creator.
+  Future<List<Playlist>> getCreatorSeasons(
+    String creatorId, {
+    String? skillworld,
+  }) =>
+      getList(
+        '/creators/$creatorId/seasons',
+        parse: seasonJsonToPlaylist,
+        // ignore: use_null_aware_elements
+        query: {if (skillworld != null) 'skillworld': skillworld},
+      );
+
+  /// `GET /creators/{creator_id}/episodes` — published episodes for one creator with lock state.
+  Future<List<PlaylistEpisode>> getCreatorEpisodes(
+    String creatorId, {
+    String? skillworld,
+  }) =>
+      getList(
+        '/creators/$creatorId/episodes',
+        parse: episodeJsonToPlaylistEpisode,
+        // ignore: use_null_aware_elements
+        query: {if (skillworld != null) 'skillworld': skillworld},
+      );
+
   /// A season plus its episodes, which is what every playlist screen needs.
   Future<Playlist> getSeasonWithEpisodes(Playlist season) async {
     final episodes = await getSeasonEpisodes(season.id);
