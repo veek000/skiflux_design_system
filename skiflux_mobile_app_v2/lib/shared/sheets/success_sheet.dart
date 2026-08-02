@@ -9,10 +9,10 @@ import 'skiflux_sheet.dart';
 // idiom as the wallet's purchase/withdrawal success sheets, minus the summary
 // card. Resolves when dismissed.
 
-/// Figma's confirm/success dialog avatar: a 98px circle around a 48px glyph
-/// (29.4px padding). Neither size exists on the token scale.
-const double _avatarSize = 98;
-const double _glyphSize = 48;
+/// Figma's confirm/success dialog avatar: 72px circle around a 36px glyph
+/// for perfectly balanced headerless modal cards.
+const double _avatarSize = 72;
+const double _glyphSize = 36;
 
 Future<void> showSuccessSheet(
   BuildContext context, {
@@ -43,67 +43,56 @@ class _SuccessSheet extends StatelessWidget {
     return SkifluxSheetShell(
       title: '',
       showHeader: false,
-      child: Stack(
-        children: [
-          Padding(
-            // Figma `1256:20233`: 16 at the top of the card, label block inset
-            // a further 16 either side; the sticky button area carries 16/8.
-            padding: const EdgeInsets.fromLTRB(
-              SkifluxSpacing.space2xl,
-              SkifluxSpacing.spaceL,
-              SkifluxSpacing.space2xl,
-              0,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          SkifluxSpacing.spaceXl,
+          SkifluxSpacing.spaceXl,
+          SkifluxSpacing.spaceXl,
+          SkifluxSpacing.spaceS,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: _avatarSize,
+                height: _avatarSize,
+                decoration: const BoxDecoration(
+                  color: SkifluxColors.backgroundPositiveSubtle,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  RemixIcons.check_fill,
+                  size: _glyphSize,
+                  color: SkifluxColors.contentPositiveBold,
+                ),
+              ),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Center(
-                  child: Container(
-                    width: _avatarSize,
-                    height: _avatarSize,
-                    decoration: const BoxDecoration(
-                      color: SkifluxColors.backgroundPositiveSubtle,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      RemixIcons.check_fill,
-                      size: _glyphSize,
-                      color: SkifluxColors.contentPositiveBold,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: SkifluxSpacing.spaceS),
-                Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  style: SkifluxTypography.headingH7Bold.copyWith(
-                    color: SkifluxColors.contentPrimary,
-                  ),
-                ),
-                const SizedBox(height: SkifluxSpacing.spaceXs),
-                Text(
-                  message,
-                  textAlign: TextAlign.center,
-                  style: SkifluxTypography.bodyP8Regular.copyWith(
-                    color: SkifluxColors.contentTertiary,
-                  ),
-                ),
-                const SizedBox(height: SkifluxSpacing.spaceL),
-                SkifluxButton(
-                  label: buttonLabel,
-                  expanded: true,
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-              ],
+            const SizedBox(height: SkifluxSpacing.spaceM),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: SkifluxTypography.headingH7Bold.copyWith(
+                color: SkifluxColors.contentPrimary,
+              ),
             ),
-          ),
-          const Positioned(
-            top: SkifluxSpacing.spaceL,
-            right: SkifluxSpacing.spaceL,
-            child: SkifluxSheetCloseButton(),
-          ),
-        ],
+            const SizedBox(height: SkifluxSpacing.spaceS),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: SkifluxTypography.bodyP8Regular.copyWith(
+                color: SkifluxColors.contentTertiary,
+              ),
+            ),
+            const SizedBox(height: SkifluxSpacing.spaceXl),
+            SkifluxButton(
+              label: buttonLabel,
+              expanded: true,
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ],
+        ),
       ),
     );
   }
