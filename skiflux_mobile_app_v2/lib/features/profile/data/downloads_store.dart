@@ -33,7 +33,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../config/env_config.dart';
 import '../../../shared/error_handling/error_handler.dart';
+import '../../../shared/network/token_store.dart';
 import '../../../shared/notifications/local_notifications.dart';
 import '../../settings/data/settings_store.dart';
 import 'library_episode.dart';
@@ -215,16 +217,24 @@ class DownloadsNotifier extends Notifier<List<DownloadedEpisode>> {
   Future<void> download(LibraryEpisode episode) async {
     if (isDownloaded(episode.id)) return;
 
-    final url = episode.videoUrl;
-    if (url == null || url.isEmpty) {
+    final rawUrl = episode.videoUrl;
+    if (rawUrl == null || rawUrl.isEmpty) {
       throw const SkifluxFailure(SkifluxErrorKind.downloadFailed);
     }
+
+    final url = rawUrl.startsWith('http')
+        ? rawUrl
+        : '${EnvConfig.apiBaseUrl.replaceAll(RegExp(r'/$'), '')}/$rawUrl';
 
     // "Download on Wi-Fi only" was stored and then ignored. Checked before a
     // byte moves, because the whole point of the setting is the data bill.
     if (ref.read(settingsProvider).downloadOnWifiOnly && !await _onWifi()) {
       throw const SkifluxFailure(SkifluxErrorKind.downloadWifiOnly);
     }
+
+    // Ensure notification permissions are requested so download progress & complete notifications show in Android tray.
+    final tray = ref.read(localNotificationsProvider);
+    await tray.requestPermission();
 
     final dir = await getApplicationDocumentsDirectory();
     final folder = Directory('${dir.path}/downloads');
@@ -241,21 +251,23 @@ class DownloadsNotifier extends Notifier<List<DownloadedEpisode>> {
         state: DownloadState.downloading,
       ),
     );
-    // The tray bar, so a transfer stays visible with the app backgrounded.
-    final tray = ref.read(localNotificationsProvider);
     _notifiedPercent[episode.id] = -1;
     unawaited(tray.showProgress(episode.id, episode.title, 0));
 
     try {
-      // A bare Dio: media URLs are absolute and pre-signed, so the API base
-      // URL and auth header do not apply.
+      final tokens = await ref.read(tokenStoreProvider).read();
+      final headers = <String, dynamic>{
+        if (tokens != null) 'Authorization': 'Bearer ${tokens.access}',
+      };
+
       await Dio().download(
         url,
         path,
         cancelToken: cancel,
+        options: Options(headers: headers),
         onReceiveProgress: (received, total) {
           if (total <= 0 || !ref.mounted) return;
-          final fraction = received / total;
+          final fraction = (received / total).clamp(0.0, 1.0);
           _update(
             episode.id,
             (d) => d.copyWith(progress: fraction, bytes: received),
@@ -266,11 +278,27 @@ class DownloadsNotifier extends Notifier<List<DownloadedEpisode>> {
           unawaited(tray.showProgress(episode.id, episode.title, fraction));
         },
       );
+
+      final file = File(path);
+      if (!await file.exists()) {
+        throw const SkifluxFailure(SkifluxErrorKind.downloadFailed);
+      }
+      final fileLength = await file.length();
+      
+      // Reject corrupt 1KB files or HTML/JSON error responses (e.g. 403 Forbidden / 401 Unauthorized HTML)
+      if (fileLength < 5000) {
+        final sample = await file.readAsString().catchError((_) => '');
+        if (sample.contains('<html') || sample.contains('{"detail"') || sample.contains('"error"')) {
+          await file.delete();
+          throw const SkifluxFailure(SkifluxErrorKind.downloadFailed);
+        }
+      }
+
       if (!ref.mounted) return;
       _update(
         episode.id,
         (d) => d.copyWith(
-          bytes: File(path).lengthSync(),
+          bytes: fileLength,
           progress: 1,
           state: DownloadState.complete,
           clearError: true,
@@ -296,7 +324,7 @@ class DownloadsNotifier extends Notifier<List<DownloadedEpisode>> {
       }
       _update(
         episode.id,
-        (d) => d.copyWith(state: DownloadState.failed, error: 'Failed'),
+        (d) => d.copyWith(state: DownloadState.failed, error: 'Download failed'),
       );
       throw const SkifluxFailure(SkifluxErrorKind.downloadFailed);
     } finally {

@@ -204,10 +204,17 @@ class _VideoFeedCardState extends ConsumerState<VideoFeedCard> {
     setState(() {});
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncPlayPause();
+  }
+
   void _syncPlayPause() {
     final c = _controller;
     if (c == null || !_ready) return;
-    if (widget.isActive) {
+    final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
+    if (widget.isActive && isCurrentRoute) {
       // A card the user paused by hand stays paused while it is on screen —
       // otherwise any rebuild (a tick, a like, a count change) would restart
       // playback under their finger.

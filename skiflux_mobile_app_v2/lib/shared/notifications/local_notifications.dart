@@ -62,6 +62,19 @@ class LocalNotifications {
 
   var _initialised = false;
 
+  Future<bool> requestPermission() async {
+    if (!supported) return false;
+    try {
+      await _ensureInitialised();
+      final android = _plugin
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+      return await android?.requestNotificationsPermission() ?? true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _ensureInitialised() async {
     if (_initialised || !supported) return;
     // The same monochrome tray glyph FCM uses (`@drawable/ic_notification`);

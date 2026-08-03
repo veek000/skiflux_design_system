@@ -15,6 +15,7 @@ class LibraryEpisodeRow extends StatelessWidget {
     required this.episode,
     required this.statusLine,
     required this.trailing,
+    this.progress,
     this.onTap,
   });
 
@@ -26,6 +27,9 @@ class LibraryEpisodeRow extends StatelessWidget {
 
   /// Per-screen control: more-menu glyph, trash, bookmark, heart…
   final Widget trailing;
+
+  /// Optional 0-1 download progress fraction for Netflix-style progress.
+  final double? progress;
   final VoidCallback? onTap;
 
   @override
@@ -36,7 +40,7 @@ class LibraryEpisodeRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _Thumbnail(episode: episode),
+          _Thumbnail(episode: episode, progress: progress),
           const SizedBox(width: SkifluxSpacing.spaceM),
           Expanded(
             child: Column(
@@ -77,9 +81,25 @@ class LibraryEpisodeRow extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: SkifluxTypography.bodyP11Regular.copyWith(
-                    color: SkifluxColors.contentTertiary,
+                    color: progress != null
+                        ? SkifluxColors.contentBrand
+                        : SkifluxColors.contentTertiary,
                   ),
                 ),
+                if (progress != null) ...[
+                  const SizedBox(height: SkifluxSpacing.spaceXs),
+                  ClipRRect(
+                    borderRadius: SkifluxRadii.borderPill,
+                    child: LinearProgressIndicator(
+                      value: progress!.clamp(0.0, 1.0),
+                      minHeight: 4,
+                      backgroundColor: SkifluxColors.brand50,
+                      valueColor: const AlwaysStoppedAnimation<Color>(
+                        SkifluxColors.contentBrand,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -145,9 +165,10 @@ class LibraryListSkeleton extends StatelessWidget {
 }
 
 class _Thumbnail extends StatelessWidget {
-  const _Thumbnail({required this.episode});
+  const _Thumbnail({required this.episode, this.progress});
 
   final LibraryEpisode episode;
+  final double? progress;
 
   @override
   Widget build(BuildContext context) {

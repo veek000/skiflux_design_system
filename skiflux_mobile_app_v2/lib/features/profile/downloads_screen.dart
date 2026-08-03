@@ -125,10 +125,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                         final d = visible[i];
                         return LibraryEpisodeRow(
                           episode: d.episode,
-                          // The real size on disk. The resolution used to be
-                          // printed as "SD 480p" on every row; the backend
-                          // serves one rendition and never says which, so
-                          // naming one was a guess.
+                          progress: d.isDownloading ? d.progress : null,
                           statusLine: switch (d.state) {
                             DownloadState.downloading =>
                               'Downloading ${(d.progress * 100).round()}%',
@@ -136,15 +133,31 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                               d.error ?? 'Download failed',
                             DownloadState.complete => d.sizeLabel,
                           },
-                          trailing: IconButton(
-                            padding: EdgeInsets.zero,
-                            onPressed: () => _confirmDelete(d),
-                            icon: const Icon(
-                              RemixIcons.delete_bin_fill,
-                              size: SkifluxIcons.sizeM,
-                              color: SkifluxColors.contentNegative,
-                            ),
-                          ),
+                          trailing: d.isDownloading
+                              ? SizedBox(
+                                  width: SkifluxUnit.u32,
+                                  height: SkifluxUnit.u32,
+                                  child: IconButton(
+                                    padding: EdgeInsets.zero,
+                                    onPressed: () => ref
+                                        .read(downloadsProvider.notifier)
+                                        .remove(d.episode.id),
+                                    icon: const Icon(
+                                      RemixIcons.stop_circle_fill,
+                                      size: SkifluxIcons.sizeM,
+                                      color: SkifluxColors.contentBrand,
+                                    ),
+                                  ),
+                                )
+                              : IconButton(
+                                  padding: EdgeInsets.zero,
+                                  onPressed: () => _confirmDelete(d),
+                                  icon: const Icon(
+                                    RemixIcons.delete_bin_fill,
+                                    size: SkifluxIcons.sizeM,
+                                    color: SkifluxColors.contentNegative,
+                                  ),
+                                ),
                           // Only a finished file can play.
                           onTap: d.isComplete
                               ? () => showLibraryEpisodePlayer(
