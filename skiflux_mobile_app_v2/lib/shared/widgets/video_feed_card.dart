@@ -248,6 +248,7 @@ class _VideoFeedCardState extends ConsumerState<VideoFeedCard> {
       season: SeasonArg(
         id: item.seasonId!,
         title: item.seasonTitle,
+        description: item.description,
         creatorName: item.creatorName,
         creatorId: item.creatorId,
         skillworld: item.skillworld,

@@ -33,6 +33,7 @@ class SeasonArg {
   const SeasonArg({
     required this.id,
     this.title,
+    this.description,
     this.creatorName,
     this.creatorId,
     this.coverUrl,
@@ -44,6 +45,7 @@ class SeasonArg {
   factory SeasonArg.of(Playlist season) => SeasonArg(
     id: season.id,
     title: season.title,
+    description: season.description,
     creatorName: season.creatorName,
     creatorId: season.creatorId,
     coverUrl: season.coverUrl,
@@ -56,6 +58,7 @@ class SeasonArg {
   /// Display hints. Null is honest: the header then shows a skeleton line
   /// rather than a guessed title.
   final String? title;
+  final String? description;
   final String? creatorName;
   final String? creatorId;
   final String? coverUrl;
@@ -107,7 +110,7 @@ class SeasonNotifier extends AsyncNotifier<Playlist> {
       creatorId: arg.creatorId,
       skillworld: arg.skillworld,
       episodes: episodes,
-      description: '',
+      description: arg.description ?? '',
       // `SeasonList` carries no view count and the episodes endpoint carries
       // none for the season as a whole, so the detail line omits it.
       viewsLabel: '',
