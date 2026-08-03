@@ -92,6 +92,7 @@ class _SkifluxMobileAppV2State extends ConsumerState<SkifluxMobileAppV2> {
     final navContext = rootNavigatorKey.currentContext;
     if (navigator == null || navContext == null || !navContext.mounted) {
       _routingToSignIn = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _onSessionLost());
       return;
     }
     ref.invalidate(meProfileProvider);

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lottie/lottie.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../shared/data/session_email_store.dart';
 import '../../shared/error_handling/error_display.dart';
 import '../../shared/network/token_store.dart';
 import '../../shared/notifications/fcm_service.dart';
@@ -173,6 +174,7 @@ class _AuthFlowState extends ConsumerState<AuthFlow> {
       biometricLoginEnabled: () => ref.read(settingsProvider).biometricLogin,
       availableMode: () =>
           ref.read(biometricAuthenticatorProvider).availableMode(),
+      getCachedEmail: () => ref.read(sessionEmailStoreProvider).read(),
     );
     if (!mounted || ref.read(authFlowProvider).stage != AuthStage.splash) {
       return;
@@ -448,27 +450,23 @@ class _SplashScreenState extends State<_SplashScreen>
       // sliver of time before the composition has parsed, and it has to match
       // frame 0 rather than whatever the app's background happens to become.
       backgroundColor: SkifluxColors.white,
-      body: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: _finish,
-        child: SizedBox.expand(
-          child: Lottie.asset(
-            'assets/animations/logo_splash.json',
-            controller: _controller,
-            fit: BoxFit.cover,
-            onLoaded: (composition) {
-              if (!mounted) return;
-              _controller
-                ..duration = composition.duration
-                ..forward();
-            },
-            errorBuilder: (context, error, stackTrace) {
-              // Deferred: `errorBuilder` runs *during* build, and `_finish`
-              // advances the flow — moving the stage from inside build throws.
-              WidgetsBinding.instance.addPostFrameCallback((_) => _finish());
-              return const SizedBox.shrink();
-            },
-          ),
+      body: SizedBox.expand(
+        child: Lottie.asset(
+          'assets/animations/logo_splash.json',
+          controller: _controller,
+          fit: BoxFit.cover,
+          onLoaded: (composition) {
+            if (!mounted) return;
+            _controller
+              ..duration = composition.duration
+              ..forward();
+          },
+          errorBuilder: (context, error, stackTrace) {
+            // Deferred: `errorBuilder` runs *during* build, and `_finish`
+            // advances the flow — moving the stage from inside build throws.
+            WidgetsBinding.instance.addPostFrameCallback((_) => _finish());
+            return const SizedBox.shrink();
+          },
         ),
       ),
     );

@@ -567,31 +567,38 @@ class AuthFlowNotifier extends Notifier<AuthFlowState> {
     required Future<void> Function() settingsReady,
     required bool Function() biometricLoginEnabled,
     required Future<BiometricMode?> Function() availableMode,
+    Future<String?> Function()? getCachedEmail,
   }) async {
     bool session;
     try {
       session = await hasSession();
     } catch (_) {
-      // Unreadable keychain — indistinguishable from signed out, and the
-      // marketing flow is the only screen that works with no session.
       session = false;
     }
-    if (!session) return ColdStartDestination.marketingOnboarding;
     try {
       await settingsReady();
-    } catch (_) {
-      // Defaults it is — biometric stays opt-in.
+    } catch (_) {}
+
+    if (biometricLoginEnabled()) {
+      BiometricMode? mode;
+      try {
+        mode = await availableMode();
+      } catch (_) {
+        mode = null;
+      }
+      if (mode != null) {
+        String? email;
+        try {
+          email = await getCachedEmail?.call();
+        } catch (_) {}
+        if (session || (email != null && email.trim().isNotEmpty)) {
+          return ColdStartDestination.biometricGate;
+        }
+      }
     }
-    if (!biometricLoginEnabled()) return ColdStartDestination.enterApp;
-    BiometricMode? mode;
-    try {
-      mode = await availableMode();
-    } catch (_) {
-      mode = null;
-    }
-    return mode != null
-        ? ColdStartDestination.biometricGate
-        : ColdStartDestination.enterApp;
+
+    if (!session) return ColdStartDestination.marketingOnboarding;
+    return ColdStartDestination.enterApp;
   }
 
   /// Runs [action] with the submitting flag held, advancing to [next] on
