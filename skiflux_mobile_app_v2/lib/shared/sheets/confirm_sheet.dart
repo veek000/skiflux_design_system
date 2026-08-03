@@ -114,7 +114,7 @@ class _ConfirmSheet extends StatelessWidget {
             const SizedBox(height: SkifluxSpacing.spaceS),
             SkifluxButton(
               label: cancelLabel,
-              type: SkifluxButtonType.tertiary,
+              type: SkifluxButtonType.secondary,
               expanded: true,
               onPressed: () => Navigator.of(context).pop(false),
             ),
