@@ -448,23 +448,27 @@ class _SplashScreenState extends State<_SplashScreen>
       // sliver of time before the composition has parsed, and it has to match
       // frame 0 rather than whatever the app's background happens to become.
       backgroundColor: SkifluxColors.white,
-      body: SizedBox.expand(
-        child: Lottie.asset(
-          'assets/animations/logo_splash.json',
-          controller: _controller,
-          fit: BoxFit.cover,
-          onLoaded: (composition) {
-            if (!mounted) return;
-            _controller
-              ..duration = composition.duration
-              ..forward();
-          },
-          errorBuilder: (context, error, stackTrace) {
-            // Deferred: `errorBuilder` runs *during* build, and `_finish`
-            // advances the flow — moving the stage from inside build throws.
-            WidgetsBinding.instance.addPostFrameCallback((_) => _finish());
-            return const SizedBox.shrink();
-          },
+      body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _finish,
+        child: SizedBox.expand(
+          child: Lottie.asset(
+            'assets/animations/logo_splash.json',
+            controller: _controller,
+            fit: BoxFit.cover,
+            onLoaded: (composition) {
+              if (!mounted) return;
+              _controller
+                ..duration = composition.duration
+                ..forward();
+            },
+            errorBuilder: (context, error, stackTrace) {
+              // Deferred: `errorBuilder` runs *during* build, and `_finish`
+              // advances the flow — moving the stage from inside build throws.
+              WidgetsBinding.instance.addPostFrameCallback((_) => _finish());
+              return const SizedBox.shrink();
+            },
+          ),
         ),
       ),
     );
