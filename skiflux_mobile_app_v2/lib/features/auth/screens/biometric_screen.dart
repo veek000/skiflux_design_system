@@ -154,9 +154,11 @@ class _BiometricScreenState extends ConsumerState<BiometricScreen> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: SkifluxSpacing.spaceL,
-              vertical: SkifluxSpacing.spaceS,
+            padding: const EdgeInsets.fromLTRB(
+              SkifluxSpacing.spaceL,
+              SkifluxSpacing.spaceL,
+              SkifluxSpacing.spaceL,
+              SkifluxSpacing.spaceM,
             ),
             child: Column(
               children: [
