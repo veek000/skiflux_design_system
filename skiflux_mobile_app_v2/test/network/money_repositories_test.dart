@@ -79,6 +79,7 @@ void main() {
         'amount_fiat': '1100.00',
         'currency': 'NGN',
         'payment_method': 'card',
+        'channel': 'card',
       });
       expect(result.txRef, 'SKF-1');
       expect(result.checkoutUrl.toString(), 'https://checkout.paystack.com/abc');
@@ -435,3 +436,4 @@ void main() {
     });
   });
 }
+
