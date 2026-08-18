@@ -23,22 +23,27 @@ void main() {
         overrides: [
           leaderboardRepositoryProvider.overrideWithValue(repo),
           tokenStoreProvider.overrideWithValue(_FakeTokenStore(signedIn)),
-          profileRepositoryProvider.overrideWithValue(_FakeProfileRepository(me)),
+          profileRepositoryProvider.overrideWithValue(
+            _FakeProfileRepository(me),
+          ),
         ],
       );
       addTearDown(c.dispose);
       return c;
     }
 
-    LeaderboardRow row(int rank, {String? username, bool isCurrentUser = false}) =>
-        LeaderboardRow(
-          rank: rank,
-          firstName: 'User',
-          lastName: '$rank',
-          username: username ?? 'user$rank',
-          xp: 1000 - rank,
-          isCurrentUser: isCurrentUser,
-        );
+    LeaderboardRow row(
+      int rank, {
+      String? username,
+      bool isCurrentUser = false,
+    }) => LeaderboardRow(
+      rank: rank,
+      firstName: 'User',
+      lastName: '$rank',
+      username: username ?? 'user$rank',
+      xp: 1000 - rank,
+      isCurrentUser: isCurrentUser,
+    );
 
     test('signed out resolves empty without calling the API', () async {
       final repo = _FakeLeaderboardRepository(const LeaderboardPage(rows: []));
@@ -198,11 +203,11 @@ void main() {
       // `parseRow` defaults a missing rank to 0; that used to leave the podium
       // empty. Highest XP must still take 1st.
       final data = LeaderboardNotifier.resolve(
-        LeaderboardPage(
+        const LeaderboardPage(
           rows: [
-            const LeaderboardRow(username: 'low', xp: 100),
-            const LeaderboardRow(username: 'high', xp: 900),
-            const LeaderboardRow(username: 'mid', xp: 500),
+            LeaderboardRow(username: 'low', xp: 100),
+            LeaderboardRow(username: 'high', xp: 900),
+            LeaderboardRow(username: 'mid', xp: 500),
           ],
         ),
         null,
@@ -215,11 +220,11 @@ void main() {
 
     test('podium follows XP when server ranks disagree with scores', () {
       final data = LeaderboardNotifier.resolve(
-        LeaderboardPage(
+        const LeaderboardPage(
           rows: [
-            const LeaderboardRow(rank: 1, username: 'low', xp: 100),
-            const LeaderboardRow(rank: 2, username: 'high', xp: 900),
-            const LeaderboardRow(rank: 3, username: 'mid', xp: 500),
+            LeaderboardRow(rank: 1, username: 'low', xp: 100),
+            LeaderboardRow(rank: 2, username: 'high', xp: 900),
+            LeaderboardRow(rank: 3, username: 'mid', xp: 500),
           ],
         ),
         null,
@@ -246,7 +251,13 @@ void main() {
 
     test('falls back to matching the profile username', () {
       final data = LeaderboardNotifier.resolve(
-        LeaderboardPage(rows: [row(1), row(2, username: 'Me'), row(3)]),
+        LeaderboardPage(
+          rows: [
+            row(1),
+            row(2, username: 'Me'),
+            row(3),
+          ],
+        ),
         profile(username: '@me'),
       );
 
@@ -258,29 +269,16 @@ void main() {
     test('matches the signed-in learner by id when username is empty', () {
       // Schema marks username nullable — id is the reliable key.
       final data = LeaderboardNotifier.resolve(
-        LeaderboardPage(
+        const LeaderboardPage(
           rows: [
-            const LeaderboardRow(
-              id: 'u-1',
-              rank: 1,
-              username: '',
-              xp: 500,
-            ),
-            const LeaderboardRow(
-              id: 'u-me',
-              rank: 2,
-              username: '',
-              xp: 400,
-            ),
+            LeaderboardRow(id: 'u-1', rank: 1, username: '', xp: 500),
+            LeaderboardRow(id: 'u-me', rank: 2, username: '', xp: 400),
           ],
         ),
         profile(id: 'u-me', username: ''),
       );
 
-      expect(
-        data.entries.singleWhere((e) => e.isCurrentUser).id,
-        'u-me',
-      );
+      expect(data.entries.singleWhere((e) => e.isCurrentUser).id, 'u-me');
       expect(data.currentRank, 2);
     });
 
@@ -289,7 +287,11 @@ void main() {
       // cached profile as the identity source.
       final data = LeaderboardNotifier.resolve(
         LeaderboardPage(
-          rows: [row(1), row(2, username: 'veek'), row(3)],
+          rows: [
+            row(1),
+            row(2, username: 'veek'),
+            row(3),
+          ],
           myPosition: row(2, username: '@Veek', currentLevel: 'Master'),
         ),
         profile(username: 'someone-else'),
@@ -330,10 +332,7 @@ void main() {
       );
 
       expect(data.entries.any((e) => e.isCurrentUser), isTrue);
-      expect(
-        data.entries.singleWhere((e) => e.isCurrentUser).rank,
-        88,
-      );
+      expect(data.entries.singleWhere((e) => e.isCurrentUser).rank, 88);
       expect(data.currentRank, 88);
     });
 
@@ -353,10 +352,7 @@ void main() {
       );
 
       expect(data.entries.where((e) => e.isCurrentUser), hasLength(1));
-      expect(
-        data.entries.singleWhere((e) => e.isCurrentUser).username,
-        'veek',
-      );
+      expect(data.entries.singleWhere((e) => e.isCurrentUser).username, 'veek');
       expect(data.entries[2].isCurrentUser, isFalse);
       // Username match on the board wins over the stale cached rank.
       expect(data.currentRank, 4);
@@ -379,10 +375,7 @@ void main() {
         profile(username: 'veek', rank: 12),
       );
 
-      expect(
-        data.entries.singleWhere((e) => e.isCurrentUser).rank,
-        4,
-      );
+      expect(data.entries.singleWhere((e) => e.isCurrentUser).rank, 4);
       expect(data.currentRank, 4);
       // Rank 4 of 100 → (100-4)/(100-1) ≈ 97%.
       expect(data.betterThanPercent, 97);
@@ -390,18 +383,18 @@ void main() {
     });
     test('when ranks are renumbered by XP, the pill uses the new place', () {
       final data = LeaderboardNotifier.resolve(
-        LeaderboardPage(
+        const LeaderboardPage(
           rows: [
-            const LeaderboardRow(rank: 1, username: 'low', xp: 100),
-            const LeaderboardRow(rank: 2, username: 'high', xp: 900),
-            const LeaderboardRow(
+            LeaderboardRow(rank: 1, username: 'low', xp: 100),
+            LeaderboardRow(rank: 2, username: 'high', xp: 900),
+            LeaderboardRow(
               rank: 3,
               username: 'me',
               xp: 500,
               isCurrentUser: true,
             ),
           ],
-          myPosition: const LeaderboardRow(
+          myPosition: LeaderboardRow(
             rank: 3,
             username: 'me',
             xp: 500,
@@ -418,30 +411,33 @@ void main() {
       expect(data.atPodiumPlace(2)?.isCurrentUser, isTrue);
     });
 
-    test('synthesizes a self row from the profile when the board omits you', () {
-      final data = LeaderboardNotifier.resolve(
-        LeaderboardPage(rows: [row(1)]),
-        profile(
-          id: 'me-id',
-          username: 'nobody',
-          rank: 31,
-          xp: 220,
-          currentLevel: 'Novice',
-        ),
-      );
+    test(
+      'synthesizes a self row from the profile when the board omits you',
+      () {
+        final data = LeaderboardNotifier.resolve(
+          LeaderboardPage(rows: [row(1)]),
+          profile(
+            id: 'me-id',
+            username: 'nobody',
+            rank: 31,
+            xp: 220,
+            currentLevel: 'Novice',
+          ),
+        );
 
-      // Must appear as yourself — never leave the board without the learner.
-      expect(data.entries.where((e) => e.isCurrentUser), hasLength(1));
-      expect(
-        data.entries.singleWhere((e) => e.isCurrentUser).username,
-        'nobody',
-      );
-      // Pill keeps the profile's global standing.
-      expect(data.currentRank, 31);
-      expect(data.currentLevel, 'Novice');
-      // And must not re-flag the unrelated #1 as you.
-      expect(data.entries.first.isCurrentUser, isFalse);
-    });
+        // Must appear as yourself — never leave the board without the learner.
+        expect(data.entries.where((e) => e.isCurrentUser), hasLength(1));
+        expect(
+          data.entries.singleWhere((e) => e.isCurrentUser).username,
+          'nobody',
+        );
+        // Pill keeps the profile's global standing.
+        expect(data.currentRank, 31);
+        expect(data.currentLevel, 'Novice');
+        // And must not re-flag the unrelated #1 as you.
+        expect(data.entries.first.isCurrentUser, isFalse);
+      },
+    );
 
     test('derives better-than-percent from the rank — no field carries it', () {
       // Rank 3 of 5 beats 2 of the other 4 → 50%.
@@ -479,7 +475,10 @@ void main() {
       // No total: a bare-array body knows the page size, not the population.
       expect(
         percentOf(
-          LeaderboardPage(rows: [row(1)], myPosition: row(4, username: 'g')),
+          LeaderboardPage(
+            rows: [row(1)],
+            myPosition: row(4, username: 'g'),
+          ),
         ),
         isNull,
       );
@@ -667,7 +666,11 @@ void main() {
       final row = LeaderboardRepository.parseRow({
         'rank': 5,
         'total_xp': 3760,
-        'user': {'first_name': 'Uche', 'last_name': 'Draws', 'username': 'uche'},
+        'user': {
+          'first_name': 'Uche',
+          'last_name': 'Draws',
+          'username': 'uche',
+        },
       });
 
       expect(row.rank, 5);
@@ -697,13 +700,24 @@ void main() {
         'Master',
       );
       // Absent rather than guessed when the row omits it.
-      expect(LeaderboardRepository.parseRow({'username': 'a'}).currentLevel, '');
+      expect(
+        LeaderboardRepository.parseRow({'username': 'a'}).currentLevel,
+        '',
+      );
     });
 
     test('reads the "this is you" flag under any of its likely names', () {
-      for (final key in const ['is_current_user', 'is_me', 'is_self', 'is_you']) {
+      for (final key in const [
+        'is_current_user',
+        'is_me',
+        'is_self',
+        'is_you',
+      ]) {
         expect(
-          LeaderboardRepository.parseRow({'username': 'a', key: true}).isCurrentUser,
+          LeaderboardRepository.parseRow({
+            'username': 'a',
+            key: true,
+          }).isCurrentUser,
           isTrue,
           reason: key,
         );
@@ -713,7 +727,10 @@ void main() {
         LeaderboardRepository.parseRow({'is_me': 'true'}).isCurrentUser,
         isTrue,
       );
-      expect(LeaderboardRepository.parseRow({'is_me': 1}).isCurrentUser, isTrue);
+      expect(
+        LeaderboardRepository.parseRow({'is_me': 1}).isCurrentUser,
+        isTrue,
+      );
       expect(
         LeaderboardRepository.parseRow({'username': 'a'}).isCurrentUser,
         isFalse,
@@ -768,4 +785,3 @@ class _FakeProfileRepository extends ProfileRepository {
     return value;
   }
 }
-

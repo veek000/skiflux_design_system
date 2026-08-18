@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+ï»¿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:skiflux/app/app.dart';
@@ -32,9 +32,10 @@ void main() {
 
     // Chrome is up regardless of whether recommendations arrived.
     expect(find.text('Home'), findsOneWidget);
-    // With no backend the feed has nothing in it, and it must stay that way —
+    // With no backend the feed has nothing in it, and it must stay that way -
     // "Amara Design" was one of the seeded creators that used to appear here.
     expect(find.text('Amara Design'), findsNothing);
   });
 }
+
 
