@@ -4,8 +4,11 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/widgets/loading_skeletons.dart';
+import '../playlists/data/playlists_store.dart';
 import 'data/badge_catalogue.dart';
 import 'data/badges_repository.dart';
+import 'data/models/user_profile.dart';
+import 'data/profile_store.dart';
 
 // Figma: **Profile Flow 05** (`1256:25179`) — Badges screen. "3 of 8 badges
 // earned" + brand progress track + "40% Earned" label, then Earned and
@@ -28,14 +31,20 @@ class DisplayBadge {
   final String asset;
 }
 
-/// The whole catalogue, every badge locked, then flipped to earned for each one
-/// the backend listed.
+/// The whole catalogue, every badge locked, then flipped to earned for each
+/// name the backend listed **or** that [hints] clearly unlocks on the client.
 ///
 /// Matching is on the badge's display name, normalised — `Badge` carries no
 /// slug. A name the backend sends that this build has no art for is simply not
-/// shown; a name it omits stays locked.
-List<DisplayBadge> buildDisplayBadges(List<UserBadge> earnedBadges) {
-  final earned = {for (final ub in earnedBadges) badgeKey(ub.badge.name)};
+/// shown.
+List<DisplayBadge> buildDisplayBadges(
+  List<UserBadge> earnedBadges, {
+  BadgeProgressHints hints = const BadgeProgressHints(),
+}) {
+  final earned = {
+    for (final ub in earnedBadges) badgeKey(ub.badge.name),
+    for (final name in inferredEarnedBadgeNames(hints)) badgeKey(name),
+  };
 
   return [
     for (final entry in kBadgeAssets.entries)
@@ -48,6 +57,16 @@ List<DisplayBadge> buildDisplayBadges(List<UserBadge> earnedBadges) {
         asset: entry.value,
       ),
   ];
+}
+
+BadgeProgressHints badgeHintsFromProfile(UserProfile? profile, {int coins = 0}) {
+  if (profile == null) return BadgeProgressHints(coins: coins);
+  return BadgeProgressHints(
+    taskDone: profile.taskDone,
+    streakCount: profile.streakCount,
+    coins: coins,
+    episodeCompleted: profile.episodeCompleted,
+  );
 }
 
 class BadgesScreen extends ConsumerWidget {
@@ -97,7 +116,12 @@ class BadgesScreen extends ConsumerWidget {
                 ),
               ),
               data: (earnedBadges) {
-                final badges = buildDisplayBadges(earnedBadges);
+                final profile = ref.watch(meProfileProvider).value;
+                final coins = ref.watch(playlistsProvider).skillCoins;
+                final badges = buildDisplayBadges(
+                  earnedBadges,
+                  hints: badgeHintsFromProfile(profile, coins: coins),
+                );
                 final earned = badges.where((b) => b.earned).toList();
                 final locked = badges.where((b) => !b.earned).toList();
                 final total = badges.length;

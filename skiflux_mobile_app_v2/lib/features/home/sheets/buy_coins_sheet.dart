@@ -17,6 +17,7 @@ import '../../wallet/buy_coins_screen.dart'
 import '../../wallet/data/topup_repository.dart';
 import '../../wallet/data/wallet_store.dart';
 import '../../wallet/widgets/coin_widgets.dart';
+import '../../wallet/widgets/payment_handoff_sheet.dart';
 
 // Figma: Other Video Player Flow 04 → 03 → 02
 // (`1256:27567` packs → `1256:27688` payment → `1256:27814` success).
@@ -245,8 +246,21 @@ class _BuyCoinsSheetState extends ConsumerState<_BuyCoinsSheet> {
   /// `POST /wallet/topup/initiate`, then the gateway's hosted checkout inside
   /// the app — or, for a saved card, `POST /wallet/topup/charge-card`, which
   /// the spec describes as one-tap with no checkout redirect at all.
+  ///
+  /// Confirmed first, exactly as the full-screen flow does, so the last thing
+  /// the user sees before either branch is the same statement of what is about
+  /// to be charged.
   Future<void> _startCheckout() async {
     final pack = _selected!;
+    final confirmed = await confirmTopupPayment(
+      context,
+      pack: pack,
+      method: _method,
+      savedCard: _defaultCard,
+      gatewayName: kTopupGateway,
+      currency: kTopupCurrency,
+    );
+    if (!mounted || !confirmed) return;
     setState(() => _busy = true);
     try {
       if (_method == TopupMethod.savedCard) {
@@ -255,7 +269,8 @@ class _BuyCoinsSheetState extends ConsumerState<_BuyCoinsSheet> {
       }
       final handOff = await ref.read(topupRepositoryProvider).initiateTopup(
             amountFiat: pack.amountFiatWire,
-            currency: 'NGN',
+            currency: kTopupCurrency,
+            gatewayName: kTopupGateway,
             paymentMethod: _method.wireValue,
             // The app's own return URL — see [EnvConfig.paymentReturnUrl].
             redirectUrl: EnvConfig.paymentReturnUrl,
@@ -298,7 +313,7 @@ class _BuyCoinsSheetState extends ConsumerState<_BuyCoinsSheet> {
     final result = await ref.read(topupRepositoryProvider).chargeCard(
           amountFiat: pack.amountFiatWire,
           savedCardId: card.id,
-          currency: 'NGN',
+          currency: kTopupCurrency,
         );
     if (!mounted) return;
 

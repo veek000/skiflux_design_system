@@ -5,6 +5,12 @@
 /// seeded sample content: the request failed, the user saw a plausible feed /
 /// balance / streak, and had no way to tell it apart from the real thing or
 /// any way to retry. This says what happened and offers the retry instead.
+///
+/// **Session expiry is not handled here.** When a 401 kills the session,
+/// [AuthGate.declareSessionLost] arms reauth and the app shell navigates —
+/// this panel must not also push the password form (that race left users on
+/// a broken feed). For a session-expired error the copy still explains why
+/// load failed; the shell is already routing away.
 library;
 
 import 'package:flutter/material.dart';
@@ -33,6 +39,11 @@ class LoadFailure extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final classified = ref.read(errorHandlerProvider).classify(error);
+    // Session expiry: the shell is navigating to sign-in. Keep the panel
+    // passive (no competing "Log in" navigation) so there is only one path.
+    final sessionExpired =
+        classified.kind == SkifluxErrorKind.sessionExpired;
+
     return Center(
       child: SingleChildScrollView(
         child: Column(
@@ -40,23 +51,24 @@ class LoadFailure extends ConsumerWidget {
           children: [
             SkifluxEmptyState(
               icon: Icon(
-                icon,
+                sessionExpired ? RemixIcons.lock_password_line : icon,
                 size: SkifluxEmptyState.iconSize,
                 color: SkifluxColors.contentBrand,
               ),
-              title: title,
+              title: sessionExpired ? 'Session expired' : title,
               message: classified.message,
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: SkifluxSpacing.spaceL,
+            if (!sessionExpired)
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: SkifluxSpacing.spaceL,
+                ),
+                child: SkifluxButton(
+                  label: 'Try again',
+                  type: SkifluxButtonType.secondary,
+                  onPressed: onRetry,
+                ),
               ),
-              child: SkifluxButton(
-                label: 'Try again',
-                type: SkifluxButtonType.secondary,
-                onPressed: onRetry,
-              ),
-            ),
           ],
         ),
       ),

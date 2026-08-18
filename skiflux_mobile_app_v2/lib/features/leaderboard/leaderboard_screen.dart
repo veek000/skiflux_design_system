@@ -362,7 +362,7 @@ class _Podium extends StatelessWidget {
   /// screen width. That overlap is exactly what these labels were previously
   /// moved above the avatar to escape.
   static const double _svgScale = _svgH / 216;
-  static const double _firstStep = _svgH - 22.2031 * _svgScale;
+  static const double _firstStep = _svgH - 0 * _svgScale;
   static const double _secondStep = _svgH - 48.7402 * _svgScale;
   static const double _thirdStep = _svgH - 73.6758 * _svgScale;
 

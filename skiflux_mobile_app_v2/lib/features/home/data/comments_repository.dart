@@ -44,14 +44,44 @@ class CommentsRepository extends ApiRepository {
   );
 
   /// `POST /episodes/comment` — multipart voice note from the recorded file.
-  Future<void> postVoiceComment(String episodeId, String audioFilePath) =>
-      guard(() async {
-        final form = FormData.fromMap({
-          'episode_id': episodeId,
-          'audio_file': await MultipartFile.fromFile(audioFilePath),
-        });
-        await dio.post<dynamic>('/episodes/comment', data: form);
-      }, kind: SkifluxErrorKind.voicenoteFailed);
+  ///
+  /// Returns the created [CommentItem] when the response body is a comment
+  /// object (or `{data: …}` envelope); `null` when the server answers 204 /
+  /// an empty body — the store then relies on a list reload.
+  Future<CommentItem?> postVoiceComment(
+    String episodeId,
+    String audioFilePath,
+  ) => guard(() async {
+    final form = FormData.fromMap({
+      'episode_id': episodeId,
+      'audio_file': await MultipartFile.fromFile(audioFilePath),
+    });
+    final response = await dio.post<dynamic>('/episodes/comment', data: form);
+    return _tryParseComment(response.data);
+  }, kind: SkifluxErrorKind.voicenoteFailed);
+
+  /// Best-effort parse of a create-comment response. Never throws for shape —
+  /// a body we cannot read just means "reload the list".
+  static CommentItem? _tryParseComment(Object? data) {
+    Map<String, dynamic>? map;
+    if (data is Map) {
+      map = Map<String, dynamic>.from(data);
+      final inner = map['data'];
+      if (inner is Map) map = Map<String, dynamic>.from(inner);
+    }
+    if (map == null || map.isEmpty) return null;
+    // Need at least an id or an audio_url / text to treat this as a comment.
+    if (map['id'] == null &&
+        map['audio_url'] == null &&
+        map['text'] == null) {
+      return null;
+    }
+    try {
+      return CommentItem.fromJson(map);
+    } catch (_) {
+      return null;
+    }
+  }
 
   /// `POST /comments/like` — like/unlike toggle (`CommentActionRequest`).
   Future<void> toggleCommentLike(int commentId) => post<void>(

@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -10,6 +11,8 @@ import 'package:skiflux_mobile_app_v2/features/auth/auth_flow.dart';
 import 'package:skiflux_mobile_app_v2/features/auth/data/auth_store.dart';
 import 'package:skiflux_mobile_app_v2/features/auth/data/biometric_store.dart';
 import 'package:skiflux_mobile_app_v2/features/auth/data/legal_documents.dart';
+import 'package:skiflux_mobile_app_v2/features/profile/data/models/user_profile.dart';
+import 'package:skiflux_mobile_app_v2/features/profile/data/profile_repository.dart';
 import 'package:skiflux_mobile_app_v2/features/settings/data/settings_store.dart';
 import 'package:skiflux_mobile_app_v2/shared/network/auth_tokens.dart';
 import 'package:skiflux_mobile_app_v2/shared/network/token_store.dart';
@@ -78,6 +81,18 @@ class _FakeSecureStorage extends FlutterSecureStorage {
   }
 }
 
+/// The biometric gate now shows the returning account's own picture, so it
+/// reads `meProfileProvider` — which without this override reaches for the real
+/// `GET /me/profile`, fails, and leaves Riverpod's default retry holding a
+/// timer past the end of the test.
+class _FakeProfileRepository extends ProfileRepository {
+  _FakeProfileRepository() : super(Dio());
+
+  @override
+  Future<UserProfile> getProfile() async =>
+      const UserProfile(id: 'me', username: 'veek');
+}
+
 /// Mounts [AuthFlow] already past the splash.
 ///
 /// The splash now runs a 5s Lottie composition and advances on *its*
@@ -98,6 +113,7 @@ Future<ProviderContainer> _pumpAtOnboarding(
       biometricAuthenticatorProvider.overrideWithValue(
         _FakeBiometrics(biometrics),
       ),
+      profileRepositoryProvider.overrideWithValue(_FakeProfileRepository()),
     ],
   );
   addTearDown(container.dispose);
@@ -186,6 +202,7 @@ void main() {
           biometricAuthenticatorProvider.overrideWithValue(
             _FakeBiometrics(biometrics),
           ),
+          profileRepositoryProvider.overrideWithValue(_FakeProfileRepository()),
         ],
       );
       addTearDown(container.dispose);

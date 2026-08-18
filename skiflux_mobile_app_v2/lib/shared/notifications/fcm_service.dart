@@ -24,6 +24,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../firebase_options.dart';
+import 'local_notifications.dart';
 
 /// Background isolate entry point for FCM.
 ///
@@ -43,6 +44,23 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     'title=${message.notification?.title} '
     'body=${message.notification?.body}',
   );
+
+  // Data-only messages never get an OS tray line. Mirror them locally so
+  // background delivery is still visible. Messages that already carry a
+  // `notification` payload are left to the system to avoid duplicates.
+  if (message.notification != null) return;
+  final title = (message.data['title'] as String?)?.trim();
+  final body = (message.data['body'] as String?)?.trim() ??
+      (message.data['message'] as String?)?.trim();
+  if (body == null || body.isEmpty) return;
+  try {
+    await LocalNotifications().showPush(
+      title: (title != null && title.isNotEmpty) ? title : 'Skiflux',
+      body: body,
+    );
+  } catch (e, st) {
+    debugPrint('FCM background local notify failed: $e\n$st');
+  }
 }
 
 /// Thin wrapper around [FirebaseMessaging].
@@ -62,19 +80,28 @@ class FcmService {
 
   StreamSubscription<RemoteMessage>? _foregroundSub;
   StreamSubscription<RemoteMessage>? _openedSub;
+  StreamSubscription<String>? _tokenRefreshSub;
 
   /// Called when a notification arrives while the app is in the foreground.
   /// The app shell sets this to [SkifluxToast.info]; tests set it to a list
   /// collector. Null = drop the message (still debug-logged).
-  void Function(String message)? onForegroundDisplay;
+  ///
+  /// [title] / [body] are both filled so the tray can show a proper heading
+  /// instead of a generic "Skiflux" over the body alone.
+  void Function({required String title, required String body})?
+      onForegroundDisplay;
 
   /// Called when the user taps a notification, from background or a cold
   /// launch. The app shell sets this to open the Notifications screen.
   /// Null = the tap only opens the app, which is the pre-routing behaviour.
   void Function(RemoteMessage message)? onNotificationTap;
 
-  /// Last known FCM registration token, if any. Debug / inspection only —
-  /// backend registration is still blocked on endpoint confirmation.
+  /// Called whenever FCM rotates the registration token. The app shell
+  /// re-POSTs to `POST /me/devices` so the backend does not keep pushing to a
+  /// dead token after an app reinstall / OS refresh.
+  void Function(String token)? onTokenRefresh;
+
+  /// Last known FCM registration token, if any.
   String? lastToken;
 
   /// Whether the last [requestPermission] call granted alert/banner display.
@@ -83,11 +110,10 @@ class FcmService {
 
   /// Request notification permission.
   ///
-  /// **Product decision still pending:** do **not** call this at cold start.
-  /// On iOS the system prompt is shown **once ever** — if the user declines,
-  /// recovery requires a trip to Settings. Call this from a deliberate UX
-  /// moment (e.g. after first meaningful action, or a dedicated enable
-  /// screen) once product picks one.
+  /// **Do not call this at cold start.** On iOS the system prompt is shown
+  /// **once ever** — if the user declines, recovery requires a trip to
+  /// Settings. Call from a deliberate UX moment (soft pre-prompt after
+  /// sign-in).
   ///
   /// Never throws: failure / plugin missing → `false` ("notifications
   /// unavailable").
@@ -103,6 +129,15 @@ class FcmService {
           settings.authorizationStatus == AuthorizationStatus.authorized ||
               settings.authorizationStatus == AuthorizationStatus.provisional;
       permissionGranted = granted;
+      // iOS otherwise swallows foreground pushes (no banner, no sound) even
+      // when authorised — the toast alone is easy to miss.
+      if (granted && !kIsWeb) {
+        await _messaging.setForegroundNotificationPresentationOptions(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+      }
       debugPrint(
         'FCM permission: ${settings.authorizationStatus} granted=$granted',
       );
@@ -146,7 +181,7 @@ class FcmService {
     }
   }
 
-  /// Wire the three message surfaces. Safe to call once after
+  /// Wire the message surfaces + token refresh. Safe to call once after
   /// [Firebase.initializeApp]; idempotent re-attach cancels prior subs.
   ///
   /// Never throws.
@@ -154,6 +189,7 @@ class FcmService {
     try {
       await _foregroundSub?.cancel();
       await _openedSub?.cancel();
+      await _tokenRefreshSub?.cancel();
 
       _foregroundSub = FirebaseMessaging.onMessage.listen(
         handleForegroundMessage,
@@ -171,6 +207,17 @@ class FcmService {
         handleNotificationTap,
         onError: (Object e, StackTrace st) {
           debugPrint('FCM onMessageOpenedApp error: $e\n$st');
+        },
+      );
+
+      _tokenRefreshSub = _messaging.onTokenRefresh.listen(
+        (token) {
+          lastToken = token;
+          debugPrint('FCM token refreshed');
+          onTokenRefresh?.call(token);
+        },
+        onError: (Object e, StackTrace st) {
+          debugPrint('FCM onTokenRefresh error: $e\n$st');
         },
       );
     } catch (e, st) {
@@ -197,19 +244,33 @@ class FcmService {
   /// Display path for a foreground [RemoteMessage]. Public so fakes/tests can
   /// exercise the same copy selection without constructing a platform message.
   void handleForegroundMessage(RemoteMessage message) {
-    deliverForegroundCopy(_copyFor(message));
+    deliverForegroundCopy(
+      title: _titleFor(message),
+      body: _bodyFor(message),
+    );
   }
 
-  /// Display path when the toast copy is already known (tests / fakes).
-  void deliverForegroundCopy(String text) {
-    debugPrint('FCM foreground display: "$text"');
-    onForegroundDisplay?.call(text);
+  /// Display path when the toast/tray copy is already known (tests / fakes).
+  void deliverForegroundCopy({required String title, required String body}) {
+    debugPrint('FCM foreground display: "$title" / "$body"');
+    onForegroundDisplay?.call(title: title, body: body);
   }
 
-  static String _copyFor(RemoteMessage message) {
-    final body = message.notification?.body?.trim();
+  static String _titleFor(RemoteMessage message) {
     final title = message.notification?.title?.trim();
+    if (title != null && title.isNotEmpty) return title;
+    final dataTitle = (message.data['title'] as String?)?.trim();
+    if (dataTitle != null && dataTitle.isNotEmpty) return dataTitle;
+    return 'Skiflux';
+  }
+
+  static String _bodyFor(RemoteMessage message) {
+    final body = message.notification?.body?.trim();
     if (body != null && body.isNotEmpty) return body;
+    final dataBody = (message.data['body'] as String?)?.trim() ??
+        (message.data['message'] as String?)?.trim();
+    if (dataBody != null && dataBody.isNotEmpty) return dataBody;
+    final title = message.notification?.title?.trim();
     if (title != null && title.isNotEmpty) return title;
     return 'You have a new notification';
   }
@@ -234,8 +295,10 @@ class FcmService {
   Future<void> dispose() async {
     await _foregroundSub?.cancel();
     await _openedSub?.cancel();
+    await _tokenRefreshSub?.cancel();
     _foregroundSub = null;
     _openedSub = null;
+    _tokenRefreshSub = null;
   }
 }
 

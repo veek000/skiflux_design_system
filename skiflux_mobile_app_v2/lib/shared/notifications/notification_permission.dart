@@ -28,6 +28,7 @@ import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../sheets/skiflux_sheet.dart';
 import 'fcm_service.dart';
+import 'local_notifications.dart';
 
 /// Set once the OS-level prompt has actually been shown. It cannot be shown
 /// again on iOS, so this stops the app pretending otherwise.
@@ -75,6 +76,12 @@ Future<bool> maybeAskForNotificationPermission(
   // before awaiting — a crash mid-prompt must not earn a second ask.
   await prefs.setBool(_kOsPromptSpent, true);
   final granted = await ref.read(fcmServiceProvider).requestPermission();
+
+  // Android 13+ also needs the local-notifications runtime grant for tray
+  // lines we post ourselves (foreground push mirror, download progress).
+  if (granted) {
+    await ref.read(localNotificationsProvider).requestPermission();
+  }
 
   // A grant can produce a token where there was none (iOS registers with APNs
   // only after authorisation), so re-probe rather than waiting for the next

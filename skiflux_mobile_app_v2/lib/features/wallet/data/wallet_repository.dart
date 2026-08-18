@@ -228,7 +228,10 @@ class WalletRepository extends ApiRepository {
     final response = await post(
       '/wallet/transactions/$transactionRef/report',
       body: {
-        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+        'reason': (reason != null && reason.trim().isNotEmpty) 
+            ? reason.trim() 
+            : 'User reported transaction from mobile app',
+        'details': '',
       },
       parse: (json) => unwrapObject(json),
     );

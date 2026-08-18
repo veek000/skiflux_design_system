@@ -120,8 +120,8 @@ class ErrorHandler {
     if (error is SkifluxErrorKind) return error;
     if (error is SkifluxFailure) return error.kind;
 
-    // Lightweight heuristics for common Dart / platform failures before a
-    // real API layer exists. Prefer explicit [SkifluxFailure] from features.
+    // Lightweight heuristics for common Dart / platform failures.
+    // Prefer explicit [SkifluxFailure] from features.
     final text = error.toString().toLowerCase();
     if (error is TimeoutException ||
         text.contains('timeout') ||

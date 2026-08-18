@@ -61,10 +61,16 @@ void main() {
       );
 
       final data = await c.read(leaderboardProvider.future);
-      expect(data.entries, hasLength(2));
+      // Rows from `results`, plus `my_position` appended so the learner is
+      // visible when they rank below the page.
+      expect(data.entries, hasLength(3));
       expect(data.entries.first.name, 'User 1');
       expect(data.entries.first.initials, 'U1');
       expect(data.entries.first.handle, '@user1');
+      expect(
+        data.entries.singleWhere((e) => e.isCurrentUser).username,
+        'ghost',
+      );
       expect(data.currentRank, 7);
       // Derived from rank 7 of 100, not sent.
       expect(data.betterThanPercent, 94);
@@ -238,9 +244,9 @@ void main() {
       expect(data.currentLevel, 'Master');
     });
 
-    test('marks the row holding my_position rank when nothing else does', () {
-      // A league-filtered page whose rows carry no matching handle: the rank is
-      // the only thing left to identify the row by.
+    test('appends my_position when no row matches by identity', () {
+      // League-filtered pages may omit the signed-in handle from `results`.
+      // Append — never paint rank 3 as "you" just because the numbers match.
       final data = LeaderboardNotifier.resolve(
         LeaderboardPage(
           rows: [row(1), row(2), row(3)],
@@ -249,11 +255,15 @@ void main() {
         profile(username: 'nobody'),
       );
 
-      expect(data.entries[2].isCurrentUser, isTrue);
+      expect(data.entries.where((e) => e.isCurrentUser), hasLength(1));
+      expect(
+        data.entries.singleWhere((e) => e.isCurrentUser).username,
+        'ghost',
+      );
       expect(data.currentRank, 3);
     });
 
-    test('a rank outside the page highlights nothing but still shows', () {
+    test('appends my_position when the rank falls outside the page', () {
       // The whole point of my_position being sent beside `results`.
       final data = LeaderboardNotifier.resolve(
         LeaderboardPage(
@@ -263,8 +273,37 @@ void main() {
         null,
       );
 
-      expect(data.entries.any((e) => e.isCurrentUser), isFalse);
+      expect(data.entries.any((e) => e.isCurrentUser), isTrue);
+      expect(
+        data.entries.singleWhere((e) => e.isCurrentUser).rank,
+        88,
+      );
       expect(data.currentRank, 88);
+    });
+
+    test('stale profile.rank must not hijack another learner\'s row', () {
+      // Regression: profile said #3 while the board's #3 was a 1k+ XP peer;
+      // the signed-in user (~700 XP) never appeared as themselves.
+      final data = LeaderboardNotifier.resolve(
+        LeaderboardPage(
+          rows: [
+            row(1, username: 'top'),
+            row(2, username: 'second'),
+            row(3, username: 'third'),
+            row(4, username: 'veek'),
+          ],
+        ),
+        profile(username: 'veek', rank: 3),
+      );
+
+      expect(data.entries.where((e) => e.isCurrentUser), hasLength(1));
+      expect(
+        data.entries.singleWhere((e) => e.isCurrentUser).username,
+        'veek',
+      );
+      expect(data.entries[2].isCurrentUser, isFalse);
+      // Username match on the board wins over the stale cached rank.
+      expect(data.currentRank, 4);
     });
 
     test("uses the profile's cached rank when the payload omits one", () {
@@ -273,8 +312,10 @@ void main() {
         profile(username: 'nobody', rank: 31, currentLevel: 'Novice'),
       );
 
+      // Pill number only — must not highlight the unrelated rank-1 row.
       expect(data.currentRank, 31);
       expect(data.currentLevel, 'Novice');
+      expect(data.entries.any((e) => e.isCurrentUser), isFalse);
     });
 
     test('derives better-than-percent from the rank — no field carries it', () {

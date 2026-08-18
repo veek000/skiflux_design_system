@@ -28,6 +28,7 @@ library;
 
 import 'package:dio/dio.dart';
 
+import '../error_handling/error_handler.dart';
 import 'api_exception.dart';
 
 /// The app's provider retry policy.
@@ -55,6 +56,15 @@ const _backoff = <Duration>[
 /// tried a refresh and failed, so retrying only spends more refresh tokens.
 /// Nor is any 4xx — the request was wrong and will be wrong again.
 bool _isTransient(Object error) {
+  // Repositories rethrow as [SkifluxFailure] — check the typed kind first so a
+  // session-expired 401 never burns more refresh tokens on automatic retry.
+  if (error is SkifluxFailure) {
+    return switch (error.kind) {
+      SkifluxErrorKind.networkTimeout ||
+      SkifluxErrorKind.noConnection => true,
+      _ => false,
+    };
+  }
   if (error is ApiException) {
     final status = error.statusCode;
     // No status at all means the request never reached the server.

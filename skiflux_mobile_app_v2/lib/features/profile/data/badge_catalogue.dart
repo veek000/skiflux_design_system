@@ -5,12 +5,12 @@
 /// colour) or locked (desaturated). The backend supplies no artwork; it only
 /// answers *which* badges a learner has.
 ///
-/// **Earned means "the backend listed it."** `GET /me/badges` returns
-/// `UserBadge[]`, and every entry in that response is an award (each carries
-/// its own `earned_at`). `Badge.is_active` is a **platform** flag from the
-/// admin badge CRUD — it says the badge is enabled for the product, not that
-/// this learner holds it. Filtering on it would silently un-earn a badge for
-/// everyone the moment an admin retired it.
+/// **Earned means "the backend listed it," plus clear local progress.**
+/// `GET /me/badges` returns `UserBadge[]` (each with `earned_at`). The badges
+/// screen also unions [inferredEarnedBadgeNames] from profile stats so a
+/// completed first task / 3-day streak is not stuck locked when awarding
+/// lags. `Badge.is_active` is a **platform** flag from admin CRUD — not
+/// "this learner holds it".
 library;
 
 import '../public_user_profile_screen.dart';
@@ -76,4 +76,42 @@ List<ProfileBadgeItem> badgeItemsFor(Iterable<String> earnedNames) {
       if (earned.contains(badgeKey(entry.key)))
         ProfileBadgeItem(entry.key, entry.value),
   ];
+}
+
+/// Profile stats that can unlock catalogue badges on the client when the
+/// backend has not yet listed them under `GET /me/badges`.
+///
+/// Stopgap until server-side awarding is reliable — the UI should not stay
+/// fully locked after the learner has clearly met a requirement.
+class BadgeProgressHints {
+  const BadgeProgressHints({
+    this.taskDone = 0,
+    this.streakCount = 0,
+    this.coins = 0,
+    this.episodeCompleted = 0,
+  });
+
+  final int taskDone;
+  final int streakCount;
+  final int coins;
+  final int episodeCompleted;
+}
+
+/// Catalogue badge names inferred from [hints], for union with API awards.
+///
+/// Only returns names that exist in [kBadgeAssets]. Does not invent new
+/// badges or override a stricter server denial — the screen unions these
+/// with whatever `GET /me/badges` already returned.
+Set<String> inferredEarnedBadgeNames(BadgeProgressHints hints) {
+  final names = <String>{};
+  if (hints.taskDone >= 1) names.add('First Task Completed');
+  if (hints.streakCount >= 3) names.add('3 Days Streak');
+  if (hints.streakCount >= 10) names.add('10 Days Streak');
+  if (hints.coins >= 500) names.add('Big Earner');
+  // Speed Learner / Super Fan / Referral Pro need signals we do not have
+  // locally (same-day episode count, like count, referral count).
+  return {
+    for (final name in names)
+      if (kBadgeAssets.containsKey(name)) name,
+  };
 }

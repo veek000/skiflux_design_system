@@ -7,6 +7,7 @@ import 'package:skiflux_design_system/skiflux_design_system.dart';
 
 import '../../shared/data/session_email_store.dart';
 import '../../shared/error_handling/error_display.dart';
+import '../../shared/network/api_client.dart';
 import '../../shared/network/token_store.dart';
 import '../../shared/notifications/fcm_service.dart';
 import '../../shared/notifications/notification_permission.dart';
@@ -35,7 +36,14 @@ import 'screens/signup_screen.dart';
 const _demoEmail = 'veek@nexacorp.io';
 
 class AuthFlow extends ConsumerStatefulWidget {
-  const AuthFlow({super.key});
+  const AuthFlow({super.key, this.startAt = AuthStage.splash});
+
+  /// Where this stack should land instead of the brand splash.
+  ///
+  /// Used when the in-app auth guard kicks the user out for an expired
+  /// session — they already saw the splash on cold start; bouncing through it
+  /// again before the password form just delays re-auth.
+  final AuthStage startAt;
 
   @override
   ConsumerState<AuthFlow> createState() => _AuthFlowState();
@@ -51,7 +59,24 @@ class _AuthFlowState extends ConsumerState<AuthFlow> {
   @override
   void initState() {
     super.initState();
+    // Tell the central gate we own the stack: in-app 401 reauth must not
+    // push a second AuthFlow over biometric / password screens.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(authGateProvider.notifier).enterAuthStack();
+      if (widget.startAt != AuthStage.splash) {
+        ref.read(authFlowProvider.notifier).show(widget.startAt);
+      }
+    });
     unawaited(_resolveAppleAvailability());
+  }
+
+  @override
+  void dispose() {
+    // Best-effort: if this AuthFlow is replaced by another AuthFlow (session
+    // lost → sign-in), the new instance re-enters the stack. If it is replaced
+    // by Home, leaveAuthStack runs in _enterApp before push.
+    super.dispose();
   }
 
   Future<void> _resolveAppleAvailability() async {
@@ -108,6 +133,8 @@ class _AuthFlowState extends ConsumerState<AuthFlow> {
   /// Leaves the flow for the app itself, dropping the auth state on the way so
   /// a later sign-out starts from the splash rather than mid-flow.
   void _enterApp() {
+    // In-app 401s must be allowed to arm reauth again.
+    ref.read(authGateProvider.notifier).leaveAuthStack();
     // Kick off Tier-1 remote loads (profile, wallet, feed, missions, FCM).
     unawaited(_bootstrapSessionData());
     ref.invalidate(authFlowProvider);
@@ -126,19 +153,23 @@ class _AuthFlowState extends ConsumerState<AuthFlow> {
     // before the user opens the Notifications screen — otherwise the badge
     // stays dark until the one place that would have shown it is visited.
     unawaited(ref.read(notificationsProvider.notifier).refreshFromBackend());
-    final fcm = ref.read(fcmServiceProvider);
-    await fcm.registerTokenWithBackend((token) {
-      return ref.read(devicesRepositoryProvider).registerDevice(token: token);
-    });
-
     // Ask *after* sign-in, never at cold start: the iOS prompt is once-ever,
     // and a soft pre-prompt guards it (see maybeAskForNotificationPermission).
     // Deferred a beat so it lands on the home screen this flow just pushed,
     // rather than over the auth screen that is on its way out.
+    //
+    // Do **not** call [FcmService.requestPermission] before the soft sheet —
+    // that used to spend the once-ever OS prompt with no explainer.
     if (!mounted) return;
     await Future<void>.delayed(const Duration(milliseconds: 600));
     if (!mounted) return;
     await maybeAskForNotificationPermission(context, ref);
+
+    final fcm = ref.read(fcmServiceProvider);
+    await fcm.getToken();
+    await fcm.registerTokenWithBackend((token) {
+      return ref.read(devicesRepositoryProvider).registerDevice(token: token);
+    });
   }
 
   /// Onboarding "Login" — branch on settings + capability **before** any
@@ -192,7 +223,28 @@ class _AuthFlowState extends ConsumerState<AuthFlow> {
               ref.read(biometricAuthenticatorProvider).availableMode(),
         );
       case ColdStartDestination.enterApp:
+        // Same gate as biometric: keychain presence is not a live session.
+        unawaited(_enterAppIfSessionValid());
+    }
+  }
+
+  /// Cold-start / non-biometric path into Home — only after the **central**
+  /// [AuthGate] proves the stored pair still works. Dead tokens stay on the
+  /// auth stack (password form); the gate does not navigate.
+  Future<void> _enterAppIfSessionValid() async {
+    final validation =
+        await ref.read(authGateProvider.notifier).ensureValidSession();
+    if (!mounted) return;
+    switch (validation) {
+      case SessionValidation.valid:
         _enterApp();
+      case SessionValidation.none:
+      case SessionValidation.invalid:
+        SkifluxToast.info(
+          context,
+          'Your session expired. Please sign in again.',
+        );
+        ref.read(authFlowProvider.notifier).show(AuthStage.signIn);
     }
   }
 
@@ -228,19 +280,34 @@ class _AuthFlowState extends ConsumerState<AuthFlow> {
   /// A successful biometric prompt.
   ///
   /// Biometrics authorise reuse of the session already on the device — the spec
-  /// has no endpoint that trades a fingerprint for tokens. So a pass with an
-  /// empty keychain (first run, or a session cleared by a failed refresh) must
-  /// land on the password form rather than a signed-out Home.
+  /// has no endpoint that trades a fingerprint for tokens. Validation goes
+  /// through the **central** [AuthGate] only:
+  /// - refresh OK → real login (fresh access token), then Home;
+  /// - no tokens / refresh rejected → password form on this same stack.
+  ///
+  /// Never navigates to Home with dead tokens (that used to show as
+  /// "couldn't load video" instead of session expired).
   Future<void> _onBiometricVerified() async {
     final notifier = ref.read(authFlowProvider.notifier);
-    if (await notifier.hasSession()) {
-      if (!mounted) return;
-      _enterApp();
-      return;
-    }
+    final validation =
+        await ref.read(authGateProvider.notifier).ensureValidSession();
     if (!mounted) return;
-    SkifluxToast.info(context, 'Sign in once more to re-enable quick unlock.');
-    notifier.usePasswordInstead();
+    switch (validation) {
+      case SessionValidation.valid:
+        _enterApp();
+      case SessionValidation.none:
+        SkifluxToast.info(
+          context,
+          'Sign in once more to re-enable quick unlock.',
+        );
+        notifier.usePasswordInstead();
+      case SessionValidation.invalid:
+        SkifluxToast.info(
+          context,
+          'Your session expired. Please sign in with your password.',
+        );
+        notifier.usePasswordInstead();
+    }
   }
 
   /// "Switch accounts" — ends the current session before offering the form, so

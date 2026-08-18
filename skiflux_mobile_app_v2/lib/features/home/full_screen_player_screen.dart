@@ -6,10 +6,12 @@
 /// survive — close, and the playback-speed circle — over a white ground, with
 /// the progress bar pinned to the bottom.
 ///
-/// It plays the episode it was opened for. It used to render a bundled
-/// placeholder image and a progress bar frozen at a hardcoded 100/393 of the
-/// way through, whatever was actually playing behind it.
+/// It plays the episode it was opened for. Prefer [sharedController] from the
+/// feed card so Full Screen continues at the same timestamp (TikTok-style);
+/// without one it creates its own player (and used to always start at 0:00).
 library;
+
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,6 +20,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../shared/widgets/network_image.dart';
 import '../playlists/data/playlists_store.dart';
+import '../profile/data/downloads_store.dart';
 import 'data/home_feed_store.dart';
 import 'sheets/playback_speed_sheet.dart';
 
@@ -30,11 +33,20 @@ const double _videoAspect = 393 / 654;
 const double _control = SkifluxUnit.u48;
 
 class FullScreenPlayerScreen extends ConsumerStatefulWidget {
-  const FullScreenPlayerScreen({super.key, this.item});
+  const FullScreenPlayerScreen({
+    super.key,
+    this.item,
+    this.sharedController,
+  });
 
   /// The episode to play. Null only when opened without one, in which case the
   /// screen says so rather than showing a stock frame.
   final HomeFeedItem? item;
+
+  /// Live controller from the feed card. When set, this screen does **not**
+  /// create or dispose a player — it just attaches a [VideoPlayer] and keeps
+  /// going from the current position. The feed reclaims it on pop.
+  final VideoPlayerController? sharedController;
 
   @override
   ConsumerState<FullScreenPlayerScreen> createState() =>
@@ -46,6 +58,7 @@ class _FullScreenPlayerScreenState
   VideoPlayerController? _controller;
   var _ready = false;
   var _failed = false;
+  var _ownsController = false;
 
   /// Paused by tapping the video, as in the feed.
   var _userPaused = false;
@@ -57,10 +70,37 @@ class _FullScreenPlayerScreenState
   }
 
   Future<void> _start() async {
+    final shared = widget.sharedController;
+    if (shared != null && shared.value.isInitialized) {
+      // Seamless handoff: same clock, same buffer, no seek-to-zero.
+      // The more-menu route usually paused the feed player — resume here so
+      // opening Full Screen does not leave a frozen frame.
+      _controller = shared;
+      _ownsController = false;
+      shared.addListener(_onTick);
+      await shared.setPlaybackSpeed(ref.read(playerPrefsProvider).speed);
+      if (!mounted) return;
+      setState(() {
+        _ready = true;
+        _userPaused = false;
+      });
+      await shared.play();
+      return;
+    }
+
     final url = widget.item?.videoUrl;
     if (url == null || url.isEmpty) return;
-    final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+    final episodeId = widget.item?.episodeId;
+    final localPath = episodeId == null
+        ? null
+        : ref.read(downloadsProvider.notifier).filePathFor(episodeId);
+    final localFile = localPath != null ? File(localPath) : null;
+    final useLocal = localFile != null && await localFile.exists();
+    final controller = useLocal
+        ? VideoPlayerController.file(localFile)
+        : VideoPlayerController.networkUrl(Uri.parse(url));
     _controller = controller;
+    _ownsController = true;
     controller.addListener(_onTick);
     try {
       await controller.initialize();
@@ -109,7 +149,8 @@ class _FullScreenPlayerScreenState
     final c = _controller;
     _controller = null;
     c?.removeListener(_onTick);
-    c?.dispose();
+    // Never dispose a borrowed feed controller — the card still owns it.
+    if (_ownsController) c?.dispose();
     super.dispose();
   }
 

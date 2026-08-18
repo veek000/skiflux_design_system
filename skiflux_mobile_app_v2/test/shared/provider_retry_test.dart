@@ -49,6 +49,35 @@ void main() {
       expect(skifluxRetry(0, _api(401)), isNull);
     });
 
+    test('never retries a typed sessionExpired SkifluxFailure', () {
+      // Repositories throw SkifluxFailure, not ApiException — the policy must
+      // recognise the kind so a dead session does not burn more refresh tokens.
+      expect(
+        skifluxRetry(
+          0,
+          const SkifluxFailure(SkifluxErrorKind.sessionExpired),
+        ),
+        isNull,
+      );
+    });
+
+    test('retries typed transport SkifluxFailures', () {
+      expect(
+        skifluxRetry(
+          0,
+          const SkifluxFailure(SkifluxErrorKind.networkTimeout),
+        ),
+        isNotNull,
+      );
+      expect(
+        skifluxRetry(
+          0,
+          const SkifluxFailure(SkifluxErrorKind.noConnection),
+        ),
+        isNotNull,
+      );
+    });
+
     test('never retries other 4xx', () {
       for (final status in [400, 403, 404, 409, 422]) {
         expect(

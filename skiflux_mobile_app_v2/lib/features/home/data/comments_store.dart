@@ -113,12 +113,16 @@ class CommentItem {
   bool get isReply => parentId != null;
 
   CommentItem copyWith({
+    int? id,
     int? likeCount,
     bool? isLiked,
     SkifluxCommentAuthor? author,
     String? message,
+    String? audioPath,
+    String? audioUrl,
+    bool clearAudioPath = false,
   }) => CommentItem(
-    id: id,
+    id: id ?? this.id,
     parentId: parentId,
     author: author ?? this.author,
     body: body,
@@ -126,8 +130,8 @@ class CommentItem {
     handle: handle,
     avatarUrl: avatarUrl,
     message: message ?? this.message,
-    audioPath: audioPath,
-    audioUrl: audioUrl,
+    audioPath: clearAudioPath ? null : (audioPath ?? this.audioPath),
+    audioUrl: audioUrl ?? this.audioUrl,
     timeLabel: timeLabel,
     likeCount: likeCount ?? this.likeCount,
     isLiked: isLiked ?? this.isLiked,
@@ -211,9 +215,19 @@ class CommentsNotifier extends Notifier<CommentsState> {
   /// is theirs beyond doubt even if the name check below cannot prove it.
   final Set<int> _ownIds = <int>{};
 
+  /// Local voice-note files recorded this session, keyed by server comment id.
+  /// Survives `_load` so a reload that only returns `audio_url` does not leave
+  /// the just-sent note unplayable.
+  final Map<int, String> _localAudioById = <int, String>{};
+
+  /// Path of a voice note that has been uploaded but not yet claimed a server
+  /// id (between optimistic append and `_loadAndClaimNew`).
+  String? _pendingLocalAudio;
+
   void init(String episodeId) {
     if (_episodeId == episodeId) return;
     _episodeId = episodeId;
+    _pendingLocalAudio = null;
     state = const CommentsState(comments: [], isLoading: true);
     _load();
   }
@@ -235,7 +249,9 @@ class CommentsNotifier extends Notifier<CommentsState> {
           .read(commentsRepositoryProvider)
           .getComments(episodeId);
       if (!ref.mounted) return;
-      final flat = _resolveOwnership(_flatten(page.results));
+      final flat = _resolveOwnership(
+        _withLocalAudio(_flatten(page.results)),
+      );
       // Rows beyond this page still count toward the header total.
       final beyondPage = page.count - page.results.length;
       state = state.copyWith(
@@ -317,12 +333,59 @@ class CommentsNotifier extends Notifier<CommentsState> {
   /// The reload itself cannot know: [_resolveOwnership] runs inside [_load]
   /// with the id set as it was *before* the send. So the ids are diffed
   /// afterwards and ownership re-applied.
+  ///
+  /// Also re-attaches any session-local voice file paths: the GET payload only
+  /// carries `audio_url`, and dropping the recorder's path was what made a
+  /// just-sent note unplayable after refresh.
   Future<void> _loadAndClaimNew() async {
     final before = _currentIds();
+    // Snapshot paths from the optimistic list before `_load` replaces it.
+    for (final c in state.comments) {
+      final id = c.id;
+      final path = c.audioPath;
+      if (id != null && path != null && path.isNotEmpty) {
+        _localAudioById[id] = path;
+      }
+    }
+    final pendingPath = _pendingLocalAudio;
+
     await _load();
     if (!ref.mounted) return;
     _rememberOwnIds(before);
-    state = state.copyWith(comments: _resolveOwnership(state.comments));
+
+    final newIds = _currentIds().difference(before);
+    if (pendingPath != null && pendingPath.isNotEmpty) {
+      for (final id in newIds) {
+        _localAudioById.putIfAbsent(id, () => pendingPath);
+      }
+      // If the reload did not surface a new id (backend lag), keep pending so
+      // a later refresh can still attach it; clear once at least one new id
+      // claimed it, or when no voice rows need it.
+      if (newIds.isNotEmpty) _pendingLocalAudio = null;
+    }
+
+    state = state.copyWith(
+      comments: _resolveOwnership(_withLocalAudio(state.comments)),
+    );
+  }
+
+  /// Overlay session-local recorder paths onto voicenote rows that only have
+  /// a remote `audio_url` (or nothing yet).
+  List<CommentItem> _withLocalAudio(List<CommentItem> comments) {
+    if (_localAudioById.isEmpty && _pendingLocalAudio == null) {
+      return comments;
+    }
+    return List.unmodifiable([
+      for (final c in comments)
+        if (c.body == SkifluxCommentBody.voicenote &&
+            (c.audioPath == null || c.audioPath!.isEmpty))
+          c.copyWith(
+            audioPath: (c.id != null ? _localAudioById[c.id!] : null) ??
+                _pendingLocalAudio,
+          )
+        else
+          c,
+    ]);
   }
 
   void setComposeState(SkifluxComposeState value) {
@@ -420,21 +483,46 @@ class CommentsNotifier extends Notifier<CommentsState> {
     );
     final before = state.comments;
     final beforeCount = state.totalCount;
+    _pendingLocalAudio = path;
     state = state.copyWith(
       comments: [...before, optimistic],
       totalCount: beforeCount + 1,
       composeState: SkifluxComposeState.idle,
     );
     try {
-      await ref
+      final created = await ref
           .read(commentsRepositoryProvider)
           .postVoiceComment(episodeId, path);
-      // Reload so the sent note picks up its server id — without one it can be
-      // neither edited, deleted, liked nor replied to, and reopening the sheet
-      // would drop the local `audioPath` and leave it unplayable.
+
+      // Prefer the created row when the POST returns one — attach the local
+      // recorder path immediately so playback never depends on a race with
+      // GET /comments.
+      if (created != null && ref.mounted) {
+        final id = created.id;
+        if (id != null) {
+          _ownIds.add(id);
+          _localAudioById[id] = path;
+          _pendingLocalAudio = null;
+        }
+        final playable = created.copyWith(
+          author: SkifluxCommentAuthor.own,
+          audioPath: path,
+        );
+        state = state.copyWith(
+          comments: [
+            for (final c in before) c,
+            playable,
+          ],
+          totalCount: beforeCount + 1,
+        );
+      }
+
+      // Still refresh for ids / ordering / remote audio_url, but keep local
+      // paths via `_withLocalAudio`.
       unawaited(_loadAndClaimNew());
       ref.read(feedEngagementProvider.notifier).bumpComments(episodeId, 1);
     } catch (_) {
+      _pendingLocalAudio = null;
       if (ref.mounted) {
         state = state.copyWith(comments: before, totalCount: beforeCount);
       }

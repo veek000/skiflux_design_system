@@ -31,6 +31,21 @@ const kTopupVerifyPath = '/wallet/topup/verify';
 /// (`saved_card_id` + `amount_fiat` required); returns `PaymentTransaction`.
 const kTopupChargeCardPath = '/wallet/topup/charge-card';
 
+/// The currency and gateway every top-up in this app is sent with.
+///
+/// Named rather than inlined at each call site because the pre-payment
+/// confirmation sheet quotes them back to the user: a sheet that says
+/// "Paystack · NGN" over a request carrying something else would be a lie
+/// about money, and two screens each with their own literal is how that
+/// happens.
+///
+/// TODO(backend, tracker #36): payment-flows.md §1.1 says the real axis is
+/// currency + gateway from [kTopupMethodsPath] and "the frontend must never
+/// hardcode gateways". Until Buy Coins is reworked onto that payload, these
+/// two are the app's single source of truth.
+const kTopupCurrency = 'NGN';
+const kTopupGateway = 'paystack';
+
 /// Result of `POST /wallet/topup/initiate`.
 ///
 /// The spec leaves the body untyped, so parsing is tolerant about key names
@@ -165,6 +180,7 @@ class TopupRepository extends ApiRepository {
           'currency': ?currency,
           'gateway_name': ?gatewayName,
           'payment_method': ?paymentMethod,
+          'channel': ?paymentMethod,
           'save_card': ?saveCard,
           'idempotency_key': ?idempotencyKey,
           'redirect_url': ?redirectUrl,

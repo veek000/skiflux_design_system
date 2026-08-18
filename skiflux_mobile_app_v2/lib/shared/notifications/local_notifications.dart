@@ -47,6 +47,9 @@ class LocalNotifications {
   static const _generalChannelName = 'General';
   static const _generalChannelDescription = 'Episodes, tasks, rewards';
 
+  /// Payload stamped on general/push tray lines so a tap opens Notifications.
+  static const openNotificationsPayload = 'open_notifications';
+
   /// Fixed id so repeated taps replace the test rather than stack ten of them.
   static const _testId = 424242;
 
@@ -61,6 +64,10 @@ class LocalNotifications {
   }
 
   var _initialised = false;
+
+  /// Fired when the user taps a local notification (foreground or cold start).
+  /// The app shell opens the Notifications screen for [openNotificationsPayload].
+  void Function(String? payload)? onNotificationTap;
 
   Future<bool> requestPermission() async {
     if (!supported) return false;
@@ -82,7 +89,17 @@ class LocalNotifications {
     const settings = InitializationSettings(
       android: AndroidInitializationSettings('ic_notification'),
     );
-    await _plugin.initialize(settings: settings);
+    await _plugin.initialize(
+      settings: settings,
+      onDidReceiveNotificationResponse: (response) {
+        onNotificationTap?.call(response.payload);
+      },
+    );
+    // Cold start from a tray tap (app was killed).
+    final launch = await _plugin.getNotificationAppLaunchDetails();
+    if (launch?.didNotificationLaunchApp == true) {
+      onNotificationTap?.call(launch!.notificationResponse?.payload);
+    }
     _initialised = true;
   }
 
@@ -160,23 +177,36 @@ class LocalNotifications {
   ///
   /// Uses the app's general channel rather than the downloads one, so it is
   /// silenced by the same switch a real notification would be.
-  Future<bool> sendTest() async {
+  Future<bool> sendTest() => showPush(
+        title: 'Test notification',
+        body: 'If you can read this, notifications are working.',
+        id: _testId,
+      );
+
+  /// Tray line for a push that arrived while the app is in the foreground
+  /// (or a data-only FCM message in the background isolate).
+  ///
+  /// Android only — iOS still relies on APNs presentation. Returns false when
+  /// nothing could be posted so callers can fall back to an in-app toast.
+  Future<bool> showPush({
+    required String title,
+    required String body,
+    int? id,
+  }) async {
     if (!supported) return false;
     try {
       await _ensureInitialised();
       final android = _plugin
           .resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin>();
-      // Android 13+ needs the runtime grant before `notify()` does anything.
-      // Asking here rather than assuming keeps the button honest on a device
-      // where the permission was never granted.
       final granted = await android?.areNotificationsEnabled() ?? true;
       if (!granted) return false;
 
       await _plugin.show(
-        id: _testId,
-        title: 'Test notification',
-        body: 'If you can read this, notifications are working.',
+        id: id ?? DateTime.now().millisecondsSinceEpoch & 0x3FFFFFFF,
+        title: title,
+        body: body,
+        payload: openNotificationsPayload,
         notificationDetails: const NotificationDetails(
           android: AndroidNotificationDetails(
             _generalChannelId,
@@ -189,7 +219,7 @@ class LocalNotifications {
       );
       return true;
     } catch (error) {
-      debugPrint('Test notification not shown: $error');
+      debugPrint('Push notification not shown: $error');
       return false;
     }
   }

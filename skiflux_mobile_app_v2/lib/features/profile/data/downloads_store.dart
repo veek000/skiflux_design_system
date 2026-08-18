@@ -38,6 +38,7 @@ import '../../../shared/error_handling/error_handler.dart';
 import '../../../shared/network/token_store.dart';
 import '../../../shared/notifications/local_notifications.dart';
 import '../../settings/data/settings_store.dart';
+import 'hls_offline_downloader.dart';
 import 'library_episode.dart';
 
 enum DownloadState { downloading, complete, failed }
@@ -239,7 +240,14 @@ class DownloadsNotifier extends Notifier<List<DownloadedEpisode>> {
     final dir = await getApplicationDocumentsDirectory();
     final folder = Directory('${dir.path}/downloads');
     if (!await folder.exists()) await folder.create(recursive: true);
-    final path = '${folder.path}/${episode.id}${_extensionOf(url)}';
+
+    // HLS needs a per-episode folder (playlist + many segments). Progressive
+    // MP4 stays a single file beside it.
+    final hls = isHlsUrl(url);
+    final episodeDir = Directory('${folder.path}/${episode.id}');
+    final path = hls
+        ? '${episodeDir.path}/index.m3u8'
+        : '${folder.path}/${episode.id}${_extensionOf(url)}';
 
     final cancel = CancelToken();
     _inFlight[episode.id] = cancel;
@@ -259,56 +267,102 @@ class DownloadsNotifier extends Notifier<List<DownloadedEpisode>> {
       final headers = <String, dynamic>{
         if (tokens != null) 'Authorization': 'Bearer ${tokens.access}',
       };
+      final dio = Dio();
 
-      await Dio().download(
-        url,
-        path,
-        cancelToken: cancel,
-        options: Options(headers: headers),
-        onReceiveProgress: (received, total) {
-          if (total <= 0 || !ref.mounted) return;
-          final fraction = (received / total).clamp(0.0, 1.0);
-          _update(
-            episode.id,
-            (d) => d.copyWith(progress: fraction, bytes: received),
-          );
-          final percent = (fraction * 100).round();
-          if (_notifiedPercent[episode.id] == percent) return;
-          _notifiedPercent[episode.id] = percent;
-          unawaited(tray.showProgress(episode.id, episode.title, fraction));
-        },
-      );
+      late final int fileLength;
+      late final String finalPath;
 
-      final file = File(path);
-      if (!await file.exists()) {
-        throw const SkifluxFailure(SkifluxErrorKind.downloadFailed);
-      }
-      final fileLength = await file.length();
-      
-      // Reject corrupt 1KB files or HTML/JSON error responses (e.g. 403 Forbidden / 401 Unauthorized HTML)
-      if (fileLength < 5000) {
-        final sample = await file.readAsString().catchError((_) => '');
-        if (sample.contains('<html') || sample.contains('{"detail"') || sample.contains('"error"')) {
-          await file.delete();
+      if (hls) {
+        if (await episodeDir.exists()) {
+          await episodeDir.delete(recursive: true);
+        }
+        await episodeDir.create(recursive: true);
+        final package = await downloadHlsOffline(
+          playlistUrl: url,
+          destDir: episodeDir,
+          dio: dio,
+          cancelToken: cancel,
+          headers: headers,
+          onProgress: (fraction, received) {
+            if (!ref.mounted) return;
+            _update(
+              episode.id,
+              (d) => d.copyWith(progress: fraction, bytes: received),
+            );
+            final percent = (fraction * 100).round();
+            if (_notifiedPercent[episode.id] == percent) return;
+            _notifiedPercent[episode.id] = percent;
+            unawaited(tray.showProgress(episode.id, episode.title, fraction));
+          },
+        );
+        finalPath = package.playlistPath;
+        fileLength = package.bytes;
+        // A "complete" pack that is still just a tiny remote playlist is the
+        // old 1KB-link bug — refuse to mark it downloaded.
+        if (fileLength < 50000) {
           throw const SkifluxFailure(SkifluxErrorKind.downloadFailed);
+        }
+      } else {
+        finalPath = path;
+        await dio.download(
+          url,
+          path,
+          cancelToken: cancel,
+          options: Options(headers: headers),
+          onReceiveProgress: (received, total) {
+            if (total <= 0 || !ref.mounted) return;
+            final fraction = (received / total).clamp(0.0, 1.0);
+            _update(
+              episode.id,
+              (d) => d.copyWith(progress: fraction, bytes: received),
+            );
+            final percent = (fraction * 100).round();
+            if (_notifiedPercent[episode.id] == percent) return;
+            _notifiedPercent[episode.id] = percent;
+            unawaited(tray.showProgress(episode.id, episode.title, fraction));
+          },
+        );
+
+        final file = File(path);
+        if (!await file.exists()) {
+          throw const SkifluxFailure(SkifluxErrorKind.downloadFailed);
+        }
+        fileLength = await file.length();
+
+        // Reject HTML/JSON error bodies masquerading as media.
+        if (fileLength < 5000) {
+          final sample = await file.readAsString().catchError((_) => '');
+          if (sample.contains('<html') ||
+              sample.contains('{"detail"') ||
+              sample.contains('"error"') ||
+              sample.trimLeft().startsWith('#EXTM3U')) {
+            await file.delete();
+            throw const SkifluxFailure(SkifluxErrorKind.downloadFailed);
+          }
         }
       }
 
       if (!ref.mounted) return;
       _update(
         episode.id,
-        (d) => d.copyWith(
+        (d) => DownloadedEpisode(
+          episode: d.episode,
+          filePath: finalPath,
           bytes: fileLength,
           progress: 1,
           state: DownloadState.complete,
-          clearError: true,
         ),
       );
       unawaited(tray.showComplete(episode.id, episode.title));
       await _persist();
     } catch (error) {
-      // A partial file is dead weight: nothing can play it, and the registry
+      // A partial pack is dead weight: nothing can play it, and the registry
       // would count its bytes toward the storage line.
+      try {
+        if (await episodeDir.exists()) {
+          await episodeDir.delete(recursive: true);
+        }
+      } catch (_) {}
       final partial = File(path);
       if (await partial.exists()) await partial.delete();
       if (cancel.isCancelled) {
@@ -356,6 +410,12 @@ class DownloadsNotifier extends Notifier<List<DownloadedEpisode>> {
     await _persist();
     if (entry == null) return;
     try {
+      // HLS packs live in downloads/{id}/; drop the whole folder when present.
+      final parent = File(entry.filePath).parent;
+      if (parent.path.endsWith(episodeId) && await parent.exists()) {
+        await parent.delete(recursive: true);
+        return;
+      }
       final file = File(entry.filePath);
       if (await file.exists()) await file.delete();
     } catch (error) {

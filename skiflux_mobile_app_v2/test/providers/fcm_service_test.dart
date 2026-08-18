@@ -32,7 +32,6 @@ class FakeFcmService extends FcmService {
   Future<String?> getToken() async {
     tokenCalls += 1;
     lastToken = token;
-    // Fakes never POST — backend registration TODO lives only on real FcmService.
     return token;
   }
 
@@ -42,9 +41,9 @@ class FakeFcmService extends FcmService {
   }
 
   @override
-  void deliverForegroundCopy(String text) {
-    displayed.add(text);
-    onForegroundDisplay?.call(text);
+  void deliverForegroundCopy({required String title, required String body}) {
+    displayed.add(body);
+    onForegroundDisplay?.call(title: title, body: body);
   }
 }
 
@@ -110,16 +109,21 @@ void main() {
     test('foreground message invokes onForegroundDisplay callback', () async {
       final fake = FakeFcmService();
       final seen = <String>[];
-      fake.onForegroundDisplay = seen.add;
+      fake.onForegroundDisplay = ({required title, required body}) {
+        seen.add('$title|$body');
+      };
 
-      fake.deliverForegroundCopy('New episode unlocked');
+      fake.deliverForegroundCopy(
+        title: 'New episode',
+        body: 'New episode unlocked',
+      );
 
       expect(fake.displayed, ['New episode unlocked']);
-      expect(seen, ['New episode unlocked']);
+      expect(seen, ['New episode|New episode unlocked']);
     });
 
     testWidgets(
-      'foreground message surfaces via SkifluxToast.info',
+      'toast message surfaces via SkifluxToast.info',
       (tester) async {
         final fake = FakeFcmService();
         await tester.pumpWidget(
@@ -131,8 +135,8 @@ void main() {
                 body: Builder(
                   builder: (context) {
                     // Wire the same path the app shell uses.
-                    fake.onForegroundDisplay = (message) {
-                      SkifluxToast.info(context, message);
+                    fake.onForegroundDisplay = ({required title, required body}) {
+                      SkifluxToast.info(context, body);
                     };
                     return const Text('host');
                   },
@@ -142,7 +146,10 @@ void main() {
           ),
         );
 
-        fake.deliverForegroundCopy('Download complete');
+        fake.deliverForegroundCopy(
+          title: 'Download',
+          body: 'Download complete',
+        );
         await tester.pump();
 
         expect(find.text('Download complete'), findsOneWidget);

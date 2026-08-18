@@ -539,20 +539,24 @@ class _WatchHistoryRail extends ConsumerWidget {
 }
 
 /// Three card silhouettes at the real 128×98 thumbnail size.
+///
+/// Uses a horizontal [ListView] (same as the loaded rail) instead of a [Row].
+/// Three 128px cards + gaps are wider than a typical phone content area
+/// (~328px after page padding), so a Row overflowed by ~88px and flashed the
+/// yellow/black stripe before history loaded.
 class _WatchHistoryRailSkeleton extends StatelessWidget {
   const _WatchHistoryRailSkeleton();
 
   @override
   Widget build(BuildContext context) {
-    return const SkifluxSkeletonGroup(
-      child: Row(
-        children: [
-          _WatchHistoryCardSkeleton(),
-          SizedBox(width: SkifluxSpacing.spaceL),
-          _WatchHistoryCardSkeleton(),
-          SizedBox(width: SkifluxSpacing.spaceL),
-          _WatchHistoryCardSkeleton(),
-        ],
+    return SkifluxSkeletonGroup(
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: 3,
+        separatorBuilder: (_, _) =>
+            const SizedBox(width: SkifluxSpacing.spaceL),
+        itemBuilder: (_, _) => const _WatchHistoryCardSkeleton(),
       ),
     );
   }

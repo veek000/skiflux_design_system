@@ -7,6 +7,7 @@ import 'package:skiflux_design_system/skiflux_design_system.dart';
 import '../l10n/app_localizations.dart';
 
 import '../features/auth/auth_flow.dart';
+import '../features/auth/data/auth_store.dart';
 import '../features/notifications/data/notifications_store.dart';
 import '../features/notifications/notifications_screen.dart';
 import '../features/profile/data/devices_repository.dart';
@@ -15,6 +16,7 @@ import '../shared/network/api_client.dart';
 import '../shared/network/connectivity_banner.dart';
 import '../shared/network/token_store.dart';
 import '../shared/notifications/fcm_service.dart';
+import '../shared/notifications/local_notifications.dart';
 import '../shared/toast/skiflux_toast.dart';
 
 /// Shared navigator key so FCM foreground toasts can resolve a
@@ -23,8 +25,10 @@ final rootNavigatorKey = GlobalKey<NavigatorState>();
 
 /// Root widget: wires the Skiflux theme to the screen flow.
 ///
-/// [ConsumerStatefulWidget] so the FCM shell can attach listeners once a
-/// [BuildContext] with a [ScaffoldMessenger] is available (foreground toasts).
+/// **Auth reauth is central.** [authGateProvider] is the only signal that
+/// routes the user back to the password form after an in-app session death.
+/// Screens never push auth routes on 401 — that raced with this listener and
+/// left users staring at "couldn't load video" instead of sign-in.
 class SkifluxMobileAppV2 extends ConsumerStatefulWidget {
   const SkifluxMobileAppV2({super.key});
 
@@ -35,19 +39,20 @@ class SkifluxMobileAppV2 extends ConsumerStatefulWidget {
 class _SkifluxMobileAppV2State extends ConsumerState<SkifluxMobileAppV2> {
   var _fcmAttached = false;
 
+  /// One in-flight reauth navigation — concurrent 401s only arm the gate once,
+  /// but the listen can still fire while a push is already underway.
+  var _routingToSignIn = false;
+
   @override
   Widget build(BuildContext context) {
-    // The session ended while the app was open — the access token expired and
-    // the refresh was rejected, so [AuthInterceptor] cleared the keychain.
-    //
-    // Nothing listened to this signal before, which is why an expired session
-    // was invisible: the tokens were gone but the app stayed on Home, every
-    // provider quietly took its "no session" branch, and the user was left
-    // looking at empty states and skeletons with no way to understand why.
-    ref.listen(sessionLostProvider, (previous, next) {
-      // The provider is created at 0; only an actual increment is an expiry.
-      if (previous == null || next <= previous) return;
-      _onSessionLost();
+    // THE single reauth listener. [AuthGate.declareSessionLost] is the only
+    // writer of needsReauth; biometric/cold-start never set it.
+    ref.listen<AuthGateState>(authGateProvider, (previous, next) {
+      if (!next.needsReauth) return;
+      if (previous?.generation == next.generation && previous?.needsReauth == true) {
+        return;
+      }
+      _routeToSignIn(next.reauthMessage);
     });
 
     return MaterialApp(
@@ -59,48 +64,48 @@ class _SkifluxMobileAppV2State extends ConsumerState<SkifluxMobileAppV2> {
       theme: SkifluxAppTheme.light,
       home: const AuthFlow(),
       builder: (context, child) {
-        // Attach after the first frame so ScaffoldMessenger is reachable.
-        // Permission is intentionally NOT requested here — iOS prompt is
-        // once-ever; product still picks the moment (see FcmService).
         if (!_fcmAttached) {
           _fcmAttached = true;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             unawaited(_attachFcm());
           });
         }
-        // Above every route, so the offline bar survives navigation — the
-        // condition it reports is not tied to one screen.
         return ConnectivityBanner(child: child ?? const SizedBox.shrink());
       },
     );
   }
 
-  /// Guards against a burst: several screens can 401 at once, and each one
-  /// signals. One trip to sign-in is enough.
-  var _routingToSignIn = false;
-
-  /// Send the user back to sign-in, saying why.
-  ///
-  /// The keychain is already clear by the time this runs — the interceptor
-  /// does that before signalling — so this is navigation and cleanup, not
-  /// sign-out. The cached profile goes with it: leaving it would greet the
-  /// next sign-in with the previous account's name.
-  void _onSessionLost() {
+  /// Replace the whole stack with the password form. Idempotent.
+  void _routeToSignIn(String? message) {
     if (_routingToSignIn) return;
     _routingToSignIn = true;
+
     final navigator = rootNavigatorKey.currentState;
     final navContext = rootNavigatorKey.currentContext;
     if (navigator == null || navContext == null || !navContext.mounted) {
       _routingToSignIn = false;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _onSessionLost());
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _routeToSignIn(message),
+      );
       return;
     }
+
     ref.invalidate(meProfileProvider);
-    SkifluxToast.info(navContext, 'Your session expired. Please sign in again.');
+    final gate = ref.read(authGateProvider.notifier);
+    // Auth stack is about to own the UI — suppress further reauth arms until
+    // the user is back in the app after a successful sign-in.
+    gate.enterAuthStack();
+    gate.markReauthHandled();
+
+    final copy = message ?? 'Your session expired. Please sign in again.';
+    SkifluxToast.info(navContext, copy);
+
     unawaited(
       navigator
           .pushAndRemoveUntil(
-            MaterialPageRoute<void>(builder: (_) => const AuthFlow()),
+            MaterialPageRoute<void>(
+              builder: (_) => const AuthFlow(startAt: AuthStage.signIn),
+            ),
             (route) => false,
           )
           .whenComplete(() => _routingToSignIn = false),
@@ -109,35 +114,64 @@ class _SkifluxMobileAppV2State extends ConsumerState<SkifluxMobileAppV2> {
 
   Future<void> _attachFcm() async {
     final fcm = ref.read(fcmServiceProvider);
-    fcm.onForegroundDisplay = (message) {
+    final local = ref.read(localNotificationsProvider);
+
+    fcm.onForegroundDisplay = ({required title, required body}) {
       final navContext = rootNavigatorKey.currentContext;
-      if (navContext == null || !navContext.mounted) return;
-      SkifluxToast.info(navContext, message);
-    };
-    fcm.onNotificationTap = (_) {
-      final navContext = rootNavigatorKey.currentContext;
-      if (navContext == null || !navContext.mounted) return;
-      // The list is the honest destination for every notification type: the
-      // tapped one is in it, and the ones with nowhere else to go ("Welcome
-      // to Skiflux") belong there and nowhere else. The payload is logged but
-      // not switched on — `NotificationItem.data` is typed `{}` in the spec,
-      // so per-type deep links would be guesswork.
+      if (navContext != null && navContext.mounted) {
+        SkifluxToast.info(navContext, body);
+      }
+      // Android tray while foregrounded — FCM alone only surfaces a toast
+      // here, so the shade stayed empty for in-app arrivals.
+      unawaited(local.showPush(title: title, body: body));
       unawaited(ref.read(notificationsProvider.notifier).refreshFromBackend());
-      Navigator.of(navContext).push(
-        MaterialPageRoute<void>(builder: (_) => const NotificationsScreen()),
-      );
     };
+    fcm.onNotificationTap = (_) => _openNotificationsScreen();
+    fcm.onTokenRefresh = (token) {
+      unawaited(_registerDeviceToken(token));
+    };
+
+    // Local tray taps for general/push lines only — download progress
+    // notifications carry no payload and must not hijack this route.
+    local.onNotificationTap = (payload) {
+      if (payload == LocalNotifications.openNotificationsPayload) {
+        _openNotificationsScreen();
+      }
+    };
+    // Ensure the plugin is initialised so cold-start tap details are read.
+    unawaited(local.requestPermission());
+
     await fcm.attachListeners();
-    // Token probe only — no permission prompt at cold start.
     await fcm.getToken();
-    // Register with backend when a session already exists (cold start).
     await _maybeRegisterDevice(fcm);
+  }
+
+  /// Opens [NotificationsScreen] without stacking duplicates when the user
+  /// already has it on top (bell + tray tap + FCM tap can race).
+  void _openNotificationsScreen() {
+    final navigator = rootNavigatorKey.currentState;
+    if (navigator == null) return;
+    unawaited(ref.read(notificationsProvider.notifier).refreshFromBackend());
+    if (NotificationsScreen.isOpen) return;
+    navigator.push(
+      MaterialPageRoute<void>(
+        settings: const RouteSettings(name: NotificationsScreen.routeName),
+        builder: (_) => const NotificationsScreen(),
+      ),
+    );
   }
 
   Future<void> _maybeRegisterDevice(FcmService fcm) async {
     if (!await ref.read(tokenStoreProvider).hasSession()) return;
-    await fcm.registerTokenWithBackend((token) {
-      return ref.read(devicesRepositoryProvider).registerDevice(token: token);
-    });
+    await fcm.registerTokenWithBackend(_registerDeviceToken);
+  }
+
+  Future<void> _registerDeviceToken(String token) async {
+    if (!await ref.read(tokenStoreProvider).hasSession()) return;
+    try {
+      await ref.read(devicesRepositoryProvider).registerDevice(token: token);
+    } catch (e, st) {
+      debugPrint('Device token register failed: $e\n$st');
+    }
   }
 }

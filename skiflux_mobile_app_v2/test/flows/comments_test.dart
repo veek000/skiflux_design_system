@@ -336,6 +336,24 @@ void main() {
       expect(row.audioPath, '/tmp/note.m4a');
       expect(repo.voicePosts, [('ep-1', '/tmp/note.m4a')]);
     });
+
+    test('local audioPath survives the post-upload reload', () async {
+      final repo = _FakeCommentsRepository();
+      final c = withRepo(repo);
+      c.read(commentsProvider.notifier).init('ep-1');
+      await pumpEventQueue();
+
+      await c.read(commentsProvider.notifier).addVoiceNote('/tmp/keep.m4a');
+      // Let the unawaited `_loadAndClaimNew` finish — previously this wiped
+      // the recorder path and left only a remote URL (or nothing).
+      await pumpEventQueue();
+
+      final row = c.read(commentsProvider).comments.single;
+      expect(row.body, SkifluxCommentBody.voicenote);
+      expect(row.id, isNotNull);
+      expect(row.audioPath, '/tmp/keep.m4a');
+      expect(row.audioUrl, isNotNull);
+    });
   });
 }
 
@@ -384,9 +402,23 @@ class _FakeCommentsRepository extends CommentsRepository {
   }
 
   @override
-  Future<void> postVoiceComment(String episodeId, String audioFilePath) async {
+  Future<CommentItem?> postVoiceComment(
+    String episodeId,
+    String audioFilePath,
+  ) async {
     if (failVoice) throw Exception('rejected');
     voicePosts.add((episodeId, audioFilePath));
+    // Echo like the real backend so reload + local-path merge can be tested.
+    final created = CommentItem.fromJson(
+      commentJson(
+        id: 2000 + voicePosts.length,
+        first: 'You',
+        last: '',
+        audioUrl: 'https://cdn.skiflux.test/note.m4a',
+      ),
+    );
+    comments = [...comments, created];
+    return created.copyWith(audioPath: audioFilePath);
   }
 
   @override

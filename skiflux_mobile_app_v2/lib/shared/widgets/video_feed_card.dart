@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
@@ -5,11 +7,13 @@ import 'package:video_player/video_player.dart';
 
 import '../../features/home/data/episodes_repository.dart';
 import '../../features/home/data/home_feed_store.dart';
+import '../../features/home/full_screen_player_screen.dart';
 import '../../features/home/sheets/comments_sheet.dart';
 import '../../features/home/sheets/more_menu_sheet.dart';
 import '../../features/playlists/data/playlists_store.dart';
 import '../../features/playlists/data/season_providers.dart';
 import '../../features/playlists/playlist_menu_sheet.dart';
+import '../../features/profile/data/downloads_store.dart';
 import '../../features/profile/data/library_store.dart';
 import '../error_handling/error_display.dart';
 import '../sheets/description_sheet.dart';
@@ -94,6 +98,10 @@ class _VideoFeedCardState extends ConsumerState<VideoFeedCard> {
   /// card the user paused does not silently resume it.
   var _userPaused = false;
 
+  /// True while [FullScreenPlayerScreen] is using [_controller]. The feed
+  /// must not pause/dispose it or mount a second [VideoPlayer] on top.
+  var _playerHandedOff = false;
+
   ViewTracker? _viewTracker;
 
   HomeFeedItem get _item =>
@@ -166,7 +174,18 @@ class _VideoFeedCardState extends ConsumerState<VideoFeedCard> {
   Future<void> _startControllerIfNeeded() async {
     if (!_item.hasPlayableVideo) return;
     final url = _item.videoUrl!;
-    final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+    // Prefer a finished offline pack so Downloads (and any other surface that
+    // opens this card) keep working with data off. Falls back to streaming.
+    final episodeId = _item.episodeId;
+    final localPath = episodeId == null
+        ? null
+        : ref.read(downloadsProvider.notifier).filePathFor(episodeId);
+    final localFile = localPath != null ? File(localPath) : null;
+    final useLocal = localFile != null && await localFile.exists();
+
+    final controller = useLocal
+        ? VideoPlayerController.file(localFile)
+        : VideoPlayerController.networkUrl(Uri.parse(url));
     _controller = controller;
     controller.addListener(_onControllerTick);
     try {
@@ -213,6 +232,8 @@ class _VideoFeedCardState extends ConsumerState<VideoFeedCard> {
   void _syncPlayPause() {
     final c = _controller;
     if (c == null || !_ready) return;
+    // Full screen owns the clock — pausing here would freeze FS mid-play.
+    if (_playerHandedOff) return;
     final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
     if (widget.isActive && isCurrentRoute) {
       // A card the user paused by hand stays paused while it is on screen —
@@ -222,6 +243,37 @@ class _VideoFeedCardState extends ConsumerState<VideoFeedCard> {
     } else {
       if (c.value.isPlaying) c.pause();
     }
+  }
+
+  /// More menu → Full Screen: hand the live controller over so playback
+  /// continues at the same timestamp (and resumes the same way on close).
+  Future<void> _openMoreMenu(HomeFeedItem item, String? episodeId) async {
+    final result = await showMoreMenuSheet(
+      context,
+      episodeId: episodeId,
+      item: item,
+    );
+    if (!mounted || result != MoreMenuResult.fullScreen) return;
+
+    final c = _controller;
+    setState(() => _playerHandedOff = true);
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => FullScreenPlayerScreen(
+          item: item,
+          sharedController: (c != null && c.value.isInitialized) ? c : null,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    setState(() {
+      _playerHandedOff = false;
+      // Mirror whatever pause state full screen left the shared player in.
+      if (c != null && c.value.isInitialized) {
+        _userPaused = !c.value.isPlaying;
+      }
+    });
+    _syncPlayPause();
   }
 
   /// Tap-to-pause, the TikTok gesture: tap anywhere on the video to stop, tap
@@ -289,7 +341,11 @@ class _VideoFeedCardState extends ConsumerState<VideoFeedCard> {
     final c = _controller;
     _controller = null;
     c?.removeListener(_onControllerTick);
-    c?.dispose();
+    // If full screen still holds the shared controller, disposing here would
+    // kill mid-handoff. That only happens if the card is torn down under FS
+    // (feed page disposed); FS then owns a disposed controller — rare. Prefer
+    // disposing when we still own it so we do not leak on normal exits.
+    if (!_playerHandedOff) c?.dispose();
     super.dispose();
   }
 
@@ -311,7 +367,10 @@ class _VideoFeedCardState extends ConsumerState<VideoFeedCard> {
   Widget build(BuildContext context) {
     final item = _item;
     final progress = _progress;
-    final showVideo = _ready && _controller != null && !_initFailed;
+    // Hide the feed [VideoPlayer] while full screen is using the same
+    // controller — two attachments on one controller glitch on some devices.
+    final showVideo =
+        _ready && _controller != null && !_initFailed && !_playerHandedOff;
 
     return ClipRRect(
       borderRadius: widget.borderRadius ?? SkifluxRadii.borderL,
@@ -477,7 +536,13 @@ class _VideoFeedCardState extends ConsumerState<VideoFeedCard> {
                     ),
                   ),
                   const SizedBox(width: SkifluxSpacing.spaceS),
-                  _ActionRail(item: item),
+                  _ActionRail(
+                    item: item,
+                    onMoreTap: () => _openMoreMenu(
+                      item,
+                      item.episodeId?.isNotEmpty == true ? item.episodeId : null,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -615,9 +680,10 @@ class _FeedDescription extends StatelessWidget {
 }
 
 class _ActionRail extends ConsumerWidget {
-  const _ActionRail({required this.item});
+  const _ActionRail({required this.item, required this.onMoreTap});
 
   final HomeFeedItem item;
+  final VoidCallback onMoreTap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -700,12 +766,7 @@ class _ActionRail extends ConsumerWidget {
         ),
         const SizedBox(height: SkifluxSpacing.spaceS),
         GestureDetector(
-          onTap: () => showMoreMenuSheet(
-            context,
-            episodeId: hasEpisode ? episodeId : null,
-            // Downloading needs the whole item, not just the id.
-            item: item,
-          ),
+          onTap: onMoreTap,
           child: const Icon(
             RemixIcons.more_fill,
             size: SkifluxUnit.u32,

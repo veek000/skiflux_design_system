@@ -36,10 +36,17 @@ class _DescriptionSheet extends StatelessWidget {
       child: SingleChildScrollView(
         controller: ModalScrollController.of(context),
         padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
-        child: Text(
-          description,
-          style: SkifluxTypography.bodyP10Regular.copyWith(
-            color: SkifluxColors.contentTertiary,
+        // Sheet Column defaults to CrossAxisAlignment.center, so a Text that
+        // only takes its intrinsic width reads as centered. Force full width
+        // + start alignment to match Figma (left-aligned body copy).
+        child: SizedBox(
+          width: double.infinity,
+          child: Text(
+            description,
+            textAlign: TextAlign.start,
+            style: SkifluxTypography.bodyP10Regular.copyWith(
+              color: SkifluxColors.contentTertiary,
+            ),
           ),
         ),
       ),

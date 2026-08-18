@@ -315,15 +315,21 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
   ) {
     final data = session.comments[index];
     final isVoice = data.body == SkifluxCommentBody.voicenote;
-    // A note recorded this session already has a local file. One reloaded from
-    // the server arrives as a URL, so it is downloaded into the app cache and
-    // played from there — the player takes a path, never a URL.
-    final remoteUrl = data.audioPath == null ? data.audioUrl : null;
-    final cached = isVoice && remoteUrl != null
-        ? ref.watch(voiceNoteCacheProvider(remoteUrl)).value
+    // Prefer a session-local recorder path. Otherwise download `audio_url`
+    // into the cache — the player takes a path, never a URL.
+    final remoteUrl = (data.audioPath == null || data.audioPath!.isEmpty)
+        ? data.audioUrl
         : null;
-    final audioPath = data.audioPath ?? cached;
+    final cacheAsync = isVoice && remoteUrl != null
+        ? ref.watch(voiceNoteCacheProvider(remoteUrl))
+        : null;
+    final audioPath = data.audioPath ?? cacheAsync?.value;
     final playable = isVoice && audioPath != null;
+    final caching = isVoice &&
+        !playable &&
+        remoteUrl != null &&
+        cacheAsync != null &&
+        cacheAsync.isLoading;
     final isOwn = data.author == SkifluxCommentAuthor.own;
     // Every write needs a confirmed backend id; optimistic rows have none yet.
     final confirmed = data.id != null;
@@ -339,7 +345,11 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
           : null,
       timeLabel: data.timeLabel,
       playing: playable && session.playingIndex == index,
-      onPlayToggle: playable ? () => notifier.togglePlay(index) : null,
+      onPlayToggle: playable
+          ? () => notifier.togglePlay(index)
+          : caching
+              ? () => SkifluxToast.info(context, 'Loading voice note…')
+              : null,
       onPlaybackComplete: playable ? notifier.clearPlaying : null,
       // A note that can't be prepared used to fail silently — static bars, no
       // sound, no explanation.

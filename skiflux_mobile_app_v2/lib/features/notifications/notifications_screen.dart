@@ -40,6 +40,14 @@ const Map<String, IconData> _kNotificationIcons = {
 class NotificationsScreen extends ConsumerStatefulWidget {
   const NotificationsScreen({super.key});
 
+  /// Route name used by the app shell to avoid stacking duplicate screens
+  /// when a tray tap and the bell race.
+  static const routeName = '/notifications';
+
+  /// True while any [NotificationsScreen] is mounted. Checked before pushing
+  /// from FCM / local-notification taps.
+  static bool isOpen = false;
+
   @override
   ConsumerState<NotificationsScreen> createState() =>
       _NotificationsScreenState();
@@ -51,10 +59,17 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
   @override
   void initState() {
     super.initState();
+    NotificationsScreen.isOpen = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       unawaited(ref.read(notificationsProvider.notifier).refreshFromBackend());
     });
+  }
+
+  @override
+  void dispose() {
+    NotificationsScreen.isOpen = false;
+    super.dispose();
   }
 
   @override

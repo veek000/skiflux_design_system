@@ -15,6 +15,7 @@ import '../settings/data/payment_store.dart';
 import 'data/topup_repository.dart';
 import 'data/wallet_store.dart';
 import 'widgets/coin_widgets.dart';
+import 'widgets/payment_handoff_sheet.dart';
 
 // Figma: **Profile Flow 10 / 01** (`1256:24781` / `1256:25179`) — the
 // full-screen Buy Coins reached from the wallet hub.
@@ -222,6 +223,10 @@ class BuyCoinsScreenState extends ConsumerState<BuyCoinsScreen> {
   /// Starts the real top-up. Nothing is credited here — only `verify` (or the
   /// charge response's own `successful` status) does that.
   ///
+  /// Both branches confirm first ([confirmTopupPayment]): this is the point of
+  /// no return in either direction, since hosted checkout hands the user to a
+  /// gateway page and the saved-card branch charges a stored token outright.
+  ///
   /// The spec gives two shapes:
   ///
   ///  * **Hosted checkout** (`POST /wallet/topup/initiate`) for a new card or a
@@ -236,6 +241,15 @@ class BuyCoinsScreenState extends ConsumerState<BuyCoinsScreen> {
       if (pack == null) {
         throw const SkifluxFailure(SkifluxErrorKind.coinPurchaseFailed);
       }
+      final confirmed = await confirmTopupPayment(
+        context,
+        pack: pack,
+        method: _method,
+        savedCard: _defaultCard,
+        gatewayName: kTopupGateway,
+        currency: kTopupCurrency,
+      );
+      if (!mounted || !confirmed) return;
       if (_method == TopupMethod.savedCard) {
         await _chargeSavedCard(pack);
         return;
@@ -243,7 +257,8 @@ class BuyCoinsScreenState extends ConsumerState<BuyCoinsScreen> {
       setState(() => _busy = true);
       final handOff = await ref.read(topupRepositoryProvider).initiateTopup(
             amountFiat: pack.amountFiatWire,
-            currency: 'NGN',
+            currency: kTopupCurrency,
+            gatewayName: kTopupGateway,
             paymentMethod: _method.wireValue,
             // "`redirect_url` — where the gateway sends the user afterwards
             // (your app page)" — payment-flows.md §1.2. The page does not
@@ -297,7 +312,7 @@ class BuyCoinsScreenState extends ConsumerState<BuyCoinsScreen> {
     final result = await ref.read(topupRepositoryProvider).chargeCard(
           amountFiat: pack.amountFiatWire,
           savedCardId: card.id,
-          currency: 'NGN',
+          currency: kTopupCurrency,
         );
     if (!mounted) return;
 

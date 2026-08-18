@@ -16,6 +16,10 @@ import 'package:flutter/material.dart';
 import 'package:modal_bottom_sheet/modal_bottom_sheet.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import 'package:dio/dio.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+
 import '../../../shared/sheets/skiflux_sheet.dart';
 import '../../../shared/toast/skiflux_toast.dart';
 import '../../../shared/utils/external_link.dart';
@@ -71,18 +75,57 @@ class _EpisodeResourcesSheet extends StatelessWidget {
   }
 }
 
-class _ResourceRow extends StatelessWidget {
+class _ResourceRow extends StatefulWidget {
   const _ResourceRow(this.resource);
 
   final EpisodeResource resource;
 
-  Future<void> _open(BuildContext context) async {
-    final url = Uri.tryParse(resource.url ?? '');
+  @override
+  State<_ResourceRow> createState() => _ResourceRowState();
+}
+
+class _ResourceRowState extends State<_ResourceRow> {
+  var _downloading = false;
+
+  Future<void> _open() async {
+    final urlString = widget.resource.url ?? '';
+    final url = Uri.tryParse(urlString);
     if (url == null || !url.hasScheme) {
       SkifluxToast.error(context, "That resource can't be opened");
       return;
     }
-    await openExternalUrl(context, url);
+
+    if (widget.resource.isLink) {
+      await openExternalUrl(context, url);
+      return;
+    }
+
+    if (_downloading) return;
+    setState(() => _downloading = true);
+    
+    SkifluxToast.info(context, 'Downloading resource...');
+
+    try {
+      final dio = Dio();
+      final tempDir = await getTemporaryDirectory();
+      
+      var filename = url.pathSegments.isNotEmpty ? url.pathSegments.last : 'download';
+      if (!filename.contains('.')) {
+        filename = '$filename.pdf'; // simple fallback
+      }
+      
+      final savePath = '${tempDir.path}/$filename';
+
+      await dio.download(urlString, savePath);
+
+      if (!mounted) return;
+      await Share.shareXFiles([XFile(savePath)], text: widget.resource.displayName);
+    } catch (e) {
+      if (!mounted) return;
+      SkifluxToast.error(context, "We couldn't download that file.");
+    } finally {
+      if (mounted) setState(() => _downloading = false);
+    }
   }
 
   @override
@@ -92,7 +135,7 @@ class _ResourceRow extends StatelessWidget {
       borderRadius: SkifluxRadii.borderX,
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => _open(context),
+        onTap: _open,
         child: Padding(
           padding: const EdgeInsets.all(SkifluxSpacing.spaceM),
           child: Row(
@@ -105,11 +148,20 @@ class _ResourceRow extends StatelessWidget {
                   color: SkifluxColors.backgroundPrimaryBrand,
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
-                  resource.icon,
-                  size: SkifluxUnit.u20,
-                  color: SkifluxColors.contentBrand,
-                ),
+                child: _downloading
+                    ? const SizedBox(
+                        width: SkifluxUnit.u20,
+                        height: SkifluxUnit.u20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: SkifluxColors.contentBrand,
+                        ),
+                      )
+                    : Icon(
+                        widget.resource.icon,
+                        size: SkifluxUnit.u20,
+                        color: SkifluxColors.contentBrand,
+                      ),
               ),
               const SizedBox(width: SkifluxSpacing.spaceM),
               Expanded(
@@ -117,7 +169,7 @@ class _ResourceRow extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      resource.displayName,
+                      widget.resource.displayName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: SkifluxTypography.headingH10Bold.copyWith(
@@ -125,7 +177,7 @@ class _ResourceRow extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      resource.metaLabel,
+                      widget.resource.metaLabel,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: SkifluxTypography.bodyP11Regular.copyWith(
@@ -137,7 +189,7 @@ class _ResourceRow extends StatelessWidget {
               ),
               // The glyph says which of the two things the tap will do.
               Icon(
-                resource.isLink
+                widget.resource.isLink
                     ? RemixIcons.external_link_line
                     : RemixIcons.download_2_line,
                 color: SkifluxColors.contentBrand,

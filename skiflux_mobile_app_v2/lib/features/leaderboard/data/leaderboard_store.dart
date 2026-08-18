@@ -203,15 +203,16 @@ class LeaderboardNotifier extends AsyncNotifier<LeaderboardData> {
 
   /// Assembles the screen's model from a page and the signed-in learner.
   ///
-  /// Which row is "you" is decided on the best evidence available, in order:
+  /// Which row is "you" is decided only on identity evidence:
   ///
   /// 1. the row's own `is_me`, which the entry schema now carries;
   /// 2. a username match against `my_position` or `GET /me/profile`;
-  /// 3. `my_position`'s rank, matched against the row ranks.
+  /// 3. if still unmatched, **append** `my_position` so the learner always
+  ///    appears — never paint another row as "you" just because ranks match.
   ///
-  /// Rank 3 is last because it is the weakest: a rank only identifies a row if
-  /// the standing and the rows were computed over the same filter, which is
-  /// not guaranteed for a league-filtered page.
+  /// Rank-only matching used to hijack the real #N when a stale
+  /// `GET /me/profile`.rank disagreed with the board (e.g. standing showed
+  /// "#3" on a 1k+ XP learner while the signed-in user sat at ~700 XP).
   ///
   /// Static so provider tests can exercise the matching without a container.
   static LeaderboardData resolve(LeaderboardPage page, UserProfile? me) {
@@ -230,32 +231,28 @@ class LeaderboardNotifier extends AsyncNotifier<LeaderboardData> {
       entries.add(_toEntry(row, isCurrentUser: isMe));
     }
 
-    // `my_position` first: the spec sends it beside `results` precisely so the
-    // standing survives the learner ranking below the page.
-    final currentRank =
-        position?.rank ??
-        (matched
-            ? entries.firstWhere((entry) => entry.isCurrentUser).rank
-            : me?.rank);
-
-    // Nothing matched by flag or username, but we know the rank — fall back to
-    // marking the row that holds it.
-    if (!matched && currentRank != null) {
-      for (var i = 0; i < entries.length; i++) {
-        if (entries[i].rank != currentRank) continue;
-        entries[i] = _toEntry(page.rows[i], isCurrentUser: true);
-        break;
-      }
+    // `my_position` beside `results` exists precisely so standing survives
+    // ranking below the page — and so we never confuse another learner for
+    // you when only the rank numbers line up.
+    if (!matched && position != null) {
+      entries.add(_toEntry(position, isCurrentUser: true));
+      matched = true;
     }
 
-    // Sort last: the `page.rows[i]` fallback above depends on `entries` still
-    // being index-aligned with the payload. Unknown ranks (0) sort to the end
-    // rather than ahead of first place.
+    // Unknown ranks (0) sort to the end rather than ahead of first place.
     entries.sort((a, b) {
       final ra = a.rank >= 1 ? a.rank : 1 << 30;
       final rb = b.rank >= 1 ? b.rank : 1 << 30;
       return ra.compareTo(rb);
     });
+
+    // Standing: `my_position` wins; else the matched row; else a profile
+    // cache for the pill only (never used to reassign someone else's row).
+    final currentRank =
+        position?.rank ??
+        (matched
+            ? entries.firstWhere((entry) => entry.isCurrentUser).rank
+            : me?.rank);
 
     final level = position?.currentLevel;
 

@@ -15,18 +15,25 @@ import '../data/home_feed_store.dart';
 import '../../tasks/data/tasks_store.dart';
 import '../../tasks/quiz_intro_screen.dart';
 import '../../tasks/submission_task_screen.dart';
-import '../full_screen_player_screen.dart';
 import 'episode_resources_sheet.dart';
 import 'playback_speed_sheet.dart';
 
 // Figma: **Other Video Player Flow 08** (`1256:27071`) — More Menu.
 
-Future<void> showMoreMenuSheet(
+/// Result the sheet can hand back to the feed card.
+///
+/// Full Screen is opened by the **caller** so it can reuse the live
+/// [VideoPlayerController] — pushing from inside the sheet after `pop`
+/// completed the sheet future too early and forced a brand-new player
+/// that always started at 0:00.
+enum MoreMenuResult { fullScreen }
+
+Future<MoreMenuResult?> showMoreMenuSheet(
   BuildContext context, {
   String? episodeId,
   HomeFeedItem? item,
 }) {
-  return showSkifluxSheet(
+  return showSkifluxSheet<MoreMenuResult>(
     context: context,
     builder: (_) => _MoreMenuSheet(episodeId: episodeId, item: item),
   );
@@ -120,17 +127,9 @@ class _MoreMenuSheet extends ConsumerWidget {
           _MenuRow(
             icon: RemixIcons.fullscreen_fill,
             label: 'Full Screen',
-            onTap: () {
-              final navigator = Navigator.of(context);
-              navigator.pop();
-              navigator.push(
-                MaterialPageRoute<void>(
-                  // The episode travels with the route: the screen used to
-                  // render a bundled placeholder image whatever was playing.
-                  builder: (_) => FullScreenPlayerScreen(item: item),
-                ),
-              );
-            },
+            // Pop a result — the feed card pushes [FullScreenPlayerScreen]
+            // with its live controller so playback continues (TikTok-style).
+            onTap: () => Navigator.of(context).pop(MoreMenuResult.fullScreen),
           ),
           // TODO(backend, minor): this toggle stores `captionsOn` and nothing
           // reads it — no player renders captions and `Episode` carries no

@@ -72,13 +72,18 @@ class NotificationBellButton extends ConsumerWidget {
         shape: const CircleBorder(),
         child: InkWell(
           customBorder: const CircleBorder(),
-          onTap:
-              onTap ??
-              () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const NotificationsScreen(),
-                ),
-              ),
+          onTap: onTap ??
+              () {
+                if (NotificationsScreen.isOpen) return;
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    settings: const RouteSettings(
+                      name: NotificationsScreen.routeName,
+                    ),
+                    builder: (_) => const NotificationsScreen(),
+                  ),
+                );
+              },
           child: SizedBox(
             width: SkifluxUnit.u48,
             height: SkifluxUnit.u48,
