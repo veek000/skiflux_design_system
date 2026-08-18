@@ -85,8 +85,8 @@ void main() {
       final task = container.read(tasksProvider).byId('learn-3');
       expect(task?.quizAnswers, [0, 1, 2]);
       expect(task?.quizCorrect, 2);
-      // Should NOT mark completed since passed=false.
-      expect(task?.status, LearningTaskStatus.pending);
+      // Failed attempt → actionNeeded (Fix & Resubmit), not pending.
+      expect(task?.status, LearningTaskStatus.actionNeeded);
     });
 
     test('recordQuizResult marks completed when passed', () {
