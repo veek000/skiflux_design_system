@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace "com.skiflux.skiflux_mobile_app_v2"
+    namespace "com.skiflux.app"
     compileSdk flutter.compileSdkVersion
     ndkVersion flutter.ndkVersion
 
@@ -21,7 +21,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.skiflux.skiflux_mobile_app_v2"
+        applicationId "com.skiflux.app"
         minSdk flutter.minSdkVersion
         targetSdk flutter.targetSdkVersion
         versionCode flutter.versionCode
@@ -42,5 +42,6 @@ dependencies {
 flutter {
     source "../.."
 }
+
 
 
