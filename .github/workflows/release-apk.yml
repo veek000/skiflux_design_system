@@ -38,10 +38,10 @@ jobs:
           # so the build doesn't fail, but it won't have real FCM.
           if [ -z "$FIREBASE_OPTIONS" ]; then
             echo "Warning: FIREBASE_OPTIONS_DART secret is not set. Using CI stub."
-            cp skiflux_mobile_app_v2/lib/firebase_options_ci_stub.dart skiflux_mobile_app_v2/lib/firebase_options.dart
+            cp skiflux/lib/firebase_options_ci_stub.dart skiflux/lib/firebase_options.dart
           else
             echo "Injecting real Firebase options from secret..."
-            echo "$FIREBASE_OPTIONS" > skiflux_mobile_app_v2/lib/firebase_options.dart
+            echo "$FIREBASE_OPTIONS" > skiflux/lib/firebase_options.dart
           fi
 
       - name: Inject Dart environment variables
@@ -52,24 +52,24 @@ jobs:
             echo "Error: PROD_ENV_JSON secret is missing! The app requires an API_BASE_URL to function."
             exit 1
           fi
-          mkdir -p skiflux_mobile_app_v2/config/env
-          echo "$PROD_ENV_JSON" > skiflux_mobile_app_v2/config/env/prod.json
+          mkdir -p skiflux/config/env
+          echo "$PROD_ENV_JSON" > skiflux/config/env/prod.json
 
       - name: pub get (design system)
         working-directory: skiflux_design_system
         run: flutter pub get
 
       - name: pub get (mobile app)
-        working-directory: skiflux_mobile_app_v2
+        working-directory: skiflux
         run: flutter pub get
 
       - name: Build Release APK
-        working-directory: skiflux_mobile_app_v2
+        working-directory: skiflux
         run: flutter build apk --release --dart-define-from-file=config/env/prod.json
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: skiflux-release-apk
-          path: skiflux_mobile_app_v2/build/app/outputs/flutter-apk/app-release.apk
+          path: skiflux/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 7

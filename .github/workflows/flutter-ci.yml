@@ -43,8 +43,8 @@ jobs:
       # via the try/catch in main.dart — FCM is simply unavailable on CI.
       - name: Provide Firebase options stub for CI
         run: |
-          cp skiflux_mobile_app_v2/lib/firebase_options_ci_stub.dart \
-             skiflux_mobile_app_v2/lib/firebase_options.dart
+          cp skiflux/lib/firebase_options_ci_stub.dart \
+             skiflux/lib/firebase_options.dart
 
       # Path dependency: app → ../skiflux_design_system — resolve design system first.
       - name: pub get (design system)
@@ -52,7 +52,7 @@ jobs:
         run: flutter pub get
 
       - name: pub get (mobile app)
-        working-directory: skiflux_mobile_app_v2
+        working-directory: skiflux
         run: flutter pub get
 
       - name: Analyze design system
@@ -60,10 +60,10 @@ jobs:
         run: flutter analyze
 
       - name: Analyze mobile app
-        working-directory: skiflux_mobile_app_v2
+        working-directory: skiflux
         run: flutter analyze
 
       # Design system has no test/ directory yet — only the app is tested.
       - name: Test mobile app
-        working-directory: skiflux_mobile_app_v2
+        working-directory: skiflux
         run: flutter test --dart-define-from-file=config/env/ci.json
