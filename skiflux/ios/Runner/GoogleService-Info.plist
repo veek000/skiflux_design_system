@@ -9,7 +9,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.skiflux.skifluxMobileAppV2</string>
+	<string>com.skiflux.app</string>
 	<key>PROJECT_ID</key>
 	<string>skiflux-fcm-test</string>
 	<key>STORAGE_BUCKET</key>
@@ -25,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:829997105528:ios:97688cca289b33f6e7088d</string>
+	<string>1:829997105528:ios:0073a768f1514f33e7088d</string>
 </dict>
 </plist>

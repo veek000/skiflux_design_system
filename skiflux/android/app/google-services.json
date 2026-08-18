@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:829997105528:android:de1834a1995601e4e7088d",
+        "mobilesdk_app_id": "1:829997105528:android:a7def19180e024ffe7088d",
         "android_client_info": {
-          "package_name": "com.skiflux.skiflux_mobile_app_v2"
+          "package_name": "com.skiflux.app"
         }
       },
       "oauth_client": [],
