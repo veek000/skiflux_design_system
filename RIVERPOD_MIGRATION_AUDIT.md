@@ -1,7 +1,7 @@
 # Riverpod migration audit (verification only — no fixes)
 
 **Date:** 2026-07-19  
-**Scope:** `c:\Users\timmy\skiflux\skiflux_mobile_app_v2`  
+**Scope:** `c:\Users\timmy\skiflux\skiflux`  
 **Method:** Verified against actual code, not Session Log claims.  
 **Mode:** Report findings only — no fixes applied.
 
@@ -396,3 +396,4 @@ No fixes applied (verification-only). Follow-up fix prompt can target gap #1 (an
 | `recentSearchesProvider` | `AsyncNotifierProvider` | `search/data/recent_searches_store.dart` |
 | `subscriptionsProvider` | `NotifierProvider` | `subscriptions/data/subscriptions_store.dart` |
 | `tasksProvider` | `NotifierProvider` | `tasks/data/tasks_store.dart` |
+

@@ -3,7 +3,7 @@
 **Audience:** AI coding assistant working on the SkiFlux **backend** (Django/DRF).  
 **Not** for human product prose. Do not invent fields. Prefer OpenAPI updates that match this contract.
 
-**Client:** Flutter app `skiflux_mobile_app_v2`, base path prefix **`/api/v1`**, auth scheme **`Authorization: Bearer <JWT>`** (`bearerAuth`).  
+**Client:** Flutter app `skiflux`, base path prefix **`/api/v1`**, auth scheme **`Authorization: Bearer <JWT>`** (`bearerAuth`).  
 **Out of scope for mobile forever:** all `/api/v1/admin/*` and `/api/v1/creator/*` (and studio-only resource write endpoints). Do not build mobile against them.
 
 **Money rule (global):**
@@ -694,9 +694,9 @@ When changing existing fields:
 
 **Mobile contact points (read-only for backend AI):**
 
-- Freezed: `skiflux_mobile_app_v2/lib/features/wallet/data/models/*`  
-- Freezed: `skiflux_mobile_app_v2/lib/features/tasks/data/models/platform_task.dart`  
-- Auth: `skiflux_mobile_app_v2/lib/features/auth/data/auth_endpoints.dart`, `auth_repository.dart`, `auth_tokens.dart`  
+- Freezed: `skiflux/lib/features/wallet/data/models/*`  
+- Freezed: `skiflux/lib/features/tasks/data/models/platform_task.dart`  
+- Auth: `skiflux/lib/features/auth/data/auth_endpoints.dart`, `auth_repository.dart`, `auth_tokens.dart`  
 - Status narrative: `BACKEND_INTEGRATION_STATUS.md`  
 - Tags: `BACKEND_INTEGRATION.md`  
 
@@ -707,3 +707,4 @@ When changing existing fields:
 - Do not implement mobile against admin finance processing, admin gamification CRUD, creator studio episode CRUD, or admin moderation.  
 - Do not add a server biometric login that accepts device biometrics proof instead of JWT — mobile verifies biometrics locally and reuses stored refresh/access tokens.  
 - Do not change money to JSON numbers “for convenience”.  
+

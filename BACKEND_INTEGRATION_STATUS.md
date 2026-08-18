@@ -1,6 +1,6 @@
 # Backend Integration Status
 
-> Fresh cross-reference of `skiflux_mobile_app_v2` against **SkiFlux API.yaml**
+> Fresh cross-reference of `skiflux` against **SkiFlux API.yaml**
 > (OpenAPI 3.0.3, title SkiFlux API v1.0.0) plus platform-tasks.md,
 > payment-flows.md, withdrawal-flows.md.
 >
@@ -245,8 +245,9 @@ Freezed models exist and are **OpenAPI-aligned** (2026-07-27 chip):
 |------|------|
 | [BACKEND_INTEGRATION.md](BACKEND_INTEGRATION.md) | Per-tag inventory from grep |
 | [BACKEND_AI_BUILD_SPEC.md](BACKEND_AI_BUILD_SPEC.md) | Machine-oriented backend build contract for **D** items + undocumented schemas |
-| `skiflux_mobile_app_v2/lib/features/auth/data/*` | Live auth integration |
-| `skiflux_mobile_app_v2/lib/features/wallet/data/models/*` | Ready wallet models |
-| `skiflux_mobile_app_v2/lib/features/tasks/data/models/*` | Ready platform-task model |
-| `skiflux_mobile_app_v2/lib/shared/data/decimal_converter.dart` | Money parsing |
-| `skiflux_mobile_app_v2/lib/shared/network/*` | Dio + ApiRepository |
+| `skiflux/lib/features/auth/data/*` | Live auth integration |
+| `skiflux/lib/features/wallet/data/models/*` | Ready wallet models |
+| `skiflux/lib/features/tasks/data/models/*` | Ready platform-task model |
+| `skiflux/lib/shared/data/decimal_converter.dart` | Money parsing |
+| `skiflux/lib/shared/network/*` | Dio + ApiRepository |
+

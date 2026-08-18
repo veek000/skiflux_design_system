@@ -21,7 +21,7 @@ across the entire app (Passes 1–4 + full-app cross-check on 2026-07-20).
 No legacy setState/singleton pattern remaining for feature/business
 state.**
 
-App root is wrapped in `ProviderScope` (`skiflux_mobile_app_v2/lib/main.dart`).
+App root is wrapped in `ProviderScope` (`skiflux/lib/main.dart`).
 Dependency: `flutter_riverpod` ^3.3.2. Full audit:
 [RIVERPOD_MIGRATION_AUDIT.md](RIVERPOD_MIGRATION_AUDIT.md). Pass 4
 closed the last known exceptions (comments + home feed review).
@@ -108,7 +108,7 @@ Pure local UI (tabs, form drafts, animation toggles) may still use
 ### Error Handling
 
 Centralized layer lives under
-`skiflux_mobile_app_v2/lib/shared/error_handling/`:
+`skiflux/lib/shared/error_handling/`:
 
 | File | Role |
 |------|------|
@@ -181,7 +181,7 @@ Secrets and environment configurations (e.g. Sentry DSN, API base URLs, telemetr
 ### Configuration File Structure
 
 ```
-skiflux_mobile_app_v2/
+skiflux/
   config/
     env/
       dev.json.example   (committed template with placeholder keys)
@@ -194,7 +194,7 @@ skiflux_mobile_app_v2/
 ### Local Development Setup
 
 To configure your local development environment:
-1. Copy `skiflux_mobile_app_v2/config/env/dev.json.example` to `skiflux_mobile_app_v2/config/env/dev.json`.
+1. Copy `skiflux/config/env/dev.json.example` to `skiflux/config/env/dev.json`.
 2. Populate `SENTRY_DSN`, `API_BASE_URL`, etc. with real credentials.
 3. Launch the app using:
    ```bash
@@ -211,7 +211,7 @@ GitHub Actions CI (`.github/workflows/flutter-ci.yml`) runs `flutter test --dart
 
 ### Code Access via `EnvConfig`
 
-All environment properties are accessed statically through `EnvConfig` (`skiflux_mobile_app_v2/lib/config/env_config.dart`):
+All environment properties are accessed statically through `EnvConfig` (`skiflux/lib/config/env_config.dart`):
 - `EnvConfig.environment` (`'dev'`, `'staging'`, `'prod'`, `'ci'`)
 - `EnvConfig.sentryDsn` (Sentry crash reporting DSN URL)
 - `EnvConfig.apiBaseUrl` (REST/GraphQL backend endpoint)
@@ -251,7 +251,7 @@ unchanged. Marked `TODO(Phase 1 item 4)`.
 
 ### Toast Notifications
 
-Generalized helper: `skiflux_mobile_app_v2/lib/shared/toast/skiflux_toast.dart`
+Generalized helper: `skiflux/lib/shared/toast/skiflux_toast.dart`
 (`SkifluxToast` / `SkifluxToastType`). Lives in the **app** (not the
 design system) because Figma’s Task Toaster is not implemented as a DS
 component and presentation depends on `ScaffoldMessenger`.
@@ -316,8 +316,8 @@ skiflux/                              ← MONOREPO ROOT
         theme/app_theme.dart          SkifluxAppTheme.light (ThemeData)
         components/                   19 Figma-mapped widgets (see §3)
 
-  skiflux_mobile_app_v2/              ← Flutter APP (sibling, path: ../skiflux_design_system)
-    pubspec.yaml                      name: skiflux_mobile_app_v2
+  skiflux/              ← Flutter APP (sibling, path: ../skiflux_design_system)
+    pubspec.yaml                      name: skiflux
     README.md                         app overview + layout conventions
     EMULATOR_GUIDE.md                 Windows / Android-emulator run guide
     assets/                           feed placeholder images, badges, streaks
@@ -397,10 +397,10 @@ generic Card, Modal/Dialog, List item, Bottom sheet (the app has its own shell,
 
 ---
 
-## 4. Mobile app (`skiflux_mobile_app_v2/`)
+## 4. Mobile app (`skiflux/`)
 
-App identity: **"skiflux mobile app v2"** — package `skiflux_mobile_app_v2`,
-Android `com.skiflux.skiflux_mobile_app_v2`, iOS bundle
+App identity: **"skiflux mobile app v2"** — package `skiflux`,
+Android `com.skiflux.skiflux`, iOS bundle
 `com.skiflux.skifluxMobileAppV2`, root widget `SkifluxMobileAppV2`.
 
 | Screen / sheet | File | Figma frame |
@@ -432,8 +432,8 @@ Screen notes:
 
 Assets: `home_video_cover.png`, `home_video_raw1.png` (feed placeholders).
 
-Run: `cd skiflux_mobile_app_v2 && flutter pub get && flutter run`
-(details in [EMULATOR_GUIDE.md](skiflux_mobile_app_v2/EMULATOR_GUIDE.md)).
+Run: `cd skiflux && flutter pub get && flutter run`
+(details in [EMULATOR_GUIDE.md](skiflux/EMULATOR_GUIDE.md)).
 
 > **Note:** The design system is a sibling folder, not a parent. The app's
 > `pubspec.yaml` references it via `path: ../skiflux_design_system`.
@@ -475,13 +475,13 @@ Run: `cd skiflux_mobile_app_v2 && flutter pub get && flutter run`
 The app folder was originally the package's `example/`. It was renamed to
 **skiflux mobile app v2** across:
 
-- folder `example/` → `skiflux_mobile_app_v2/`
-- `pubspec.yaml` name → `skiflux_mobile_app_v2`
+- folder `example/` → `skiflux/`
+- `pubspec.yaml` name → `skiflux`
 - root widget `SkifluxExampleApp` → `SkifluxMobileAppV2`; MaterialApp title
 - Android: `android:label="skiflux mobile app v2"`, namespace/applicationId
-  `com.skiflux.skiflux_mobile_app_v2`, Kotlin package folder moved to match
+  `com.skiflux.skiflux`, Kotlin package folder moved to match
 - iOS: `CFBundleDisplayName` "skiflux mobile app v2", `CFBundleName`
-  `skiflux_mobile_app_v2`, pbxproj bundle ids `com.skiflux.skifluxMobileAppV2`
+  `skiflux`, pbxproj bundle ids `com.skiflux.skifluxMobileAppV2`
 - Web: `manifest.json` name/short_name, `index.html` title + apple title
 - IDE: `.iml` files + `.idea/modules.xml` renamed/updated
 
@@ -939,7 +939,7 @@ as a new app — uninstall the old "skiflux_example" install manually.
       chips, minimize; View Playlist still navigates to playlist page.
     - Notify sheet title "Notify me of" + toast copy for activated/off.
 
-20. **Monorepo Restructure**: Moved the previously nested `skiflux_mobile_app_v2`
+20. **Monorepo Restructure**: Moved the previously nested `skiflux`
     to be a sibling of `skiflux_design_system` under a shared `skiflux/` root.
     Added a proper root `.gitignore` to block disposable build artifacts and 
     cleanly pushed this restructured state to the GitHub repository.
@@ -1063,7 +1063,7 @@ GitHub Actions workflow at
 | **Steps** | Checkout → set up Flutter → `pub get` design system → `pub get` app → `flutter analyze` both packages → `flutter test` app |
 | **Monorepo** | App depends on `../skiflux_design_system` via path; CI resolves the design system first, then the app (same layout as local). |
 | **Design system tests** | None yet (`test/` missing) — only analyze runs for that package. |
-| **App tests** | `skiflux_mobile_app_v2/test/widget_test.dart` (home smoke). |
+| **App tests** | `skiflux/test/widget_test.dart` (home smoke). |
 | **analysis_options** | App has `analysis_options.yaml` (includes `flutter_lints`). Design system has none (defaults). CI runs plain `flutter analyze` in each package so each uses its own config. |
 
 **Intentionally not included (follow-ups):**
@@ -1076,7 +1076,7 @@ GitHub Actions workflow at
 ### 2026-07-25 — Claude — Lottie splash screen + dependency-bump audit
 - Status: Complete
 - What was done:
-  - **Splash migrated from hand-built Flutter to the design Lottie export.** `Logo Splash.json` (from the user's asset folder) copied to `skiflux_mobile_app_v2/assets/animations/logo_splash.json` and rendered by `lottie: ^3.5.1` — added with explicit user confirmation per the package policy, after presenting the three options (Lottie package / hand-roll with `AnimationController`+`CustomPainter` / the MP4 via `video_player`). Asset facts: Bodymovin v5.6.8, 1080×1920, `fr:30`, `ip:0`, `op:150` → **5.0s**, 10 layers, `assets: []` (self-contained, no external images).
+  - **Splash migrated from hand-built Flutter to the design Lottie export.** `Logo Splash.json` (from the user's asset folder) copied to `skiflux/assets/animations/logo_splash.json` and rendered by `lottie: ^3.5.1` — added with explicit user confirmation per the package policy, after presenting the three options (Lottie package / hand-roll with `AnimationController`+`CustomPainter` / the MP4 via `video_player`). Asset facts: Bodymovin v5.6.8, 1080×1920, `fr:30`, `ip:0`, `op:150` → **5.0s**, 10 layers, `assets: []` (self-contained, no external images).
   - **Timing is driven by the composition, not a constant.** `_SplashScreen` sets `_controller.duration = composition.duration` in `Lottie.onLoaded` and advances on `AnimationStatus.completed`, so a re-export at a different length needs no code change. The old hardcoded 900ms `_splashTimer` is gone.
   - **Two independent escape hatches** so the app can never strand on the splash: an 8s watchdog `Timer` and `Lottie.errorBuilder`. `_finish()` is idempotent (`_finished` flag + `mounted` check), so whichever fires first wins and the rest are no-ops.
   - **Full-bleed by design.** Layer 10 ("White Solid 1") carries an `ADBE Fill` effect animating white → `[0.337, 0.063, 0.671, 1]` between frames 57–59 — that is `#5610AB` = `SkifluxColors.brand500` — so the comp *ends* on a full-screen brand wash. The splash therefore deliberately bypasses `_AuthScaffold` (which applies `SafeArea`) and uses `Scaffold` + `SizedBox.expand` + `BoxFit.cover`, with `backgroundColor: backgroundPrimary` to match the comp's opening white frame and avoid a first-frame flash.
@@ -1103,7 +1103,7 @@ GitHub Actions workflow at
 - Backend tags: two new tags (`skill_world_store.dart` blocking, `my_profile_screen.dart:407` minor). While regenerating `BACKEND_INTEGRATION.md` the doc turned out to be **stale from earlier sessions** — it claimed 29 tags while `grep` found 34 (the three Settings-flow tags and one Wallet/Notifications/My Profile line-number drift had never been picked up), so the whole file was rebuilt from a fresh grep: now 34 rows (31 blocking, 3 minor), row count verified equal to tag count. Two of my own tags were also fixed to conform to the documented format: `TODO(backend, effort)` → `minor` (only `blocking`/`minor` are valid categories) and the wrapped two-line tag collapsed to one line so `grep` captures its `— expects:` clause.
 - Verification run: `flutter analyze` (design system) → No issues found (24.6s); `flutter analyze` (app) → No issues found; `flutter test` (design system) → 28/28 passed (22 prior + 6 new `password_strength_test.dart`, 0 regressions); `flutter test` (app) → 93/93 passed (0 regressions). User verifies UI on emulator (no build run per standing preference).
 - Figma slips deliberately not propagated: the per-card `border-b` on the SkillWorld cards (coincident with the card's own border), and the 1.5px radio stroke (shared `SkifluxRadio` uses `SkifluxBorderWidth.xs`; the colour matches, and changing the width belongs to that component's own audit since it would touch every screen).
-- Notes for next session: the untokenised **30px icon badge** now recurs in `change_skill_world_sheet.dart` as well as `settings/widgets/settings_tile.dart` — second occurrence, so it has earned promotion to `SkifluxUnit`. Also flagged for the user: `skiflux_mobile_app_v2/pubspec.yaml` carries uncommitted major bumps (`file_picker` 10.1.9 → `^12.0.0-beta.7` — a beta; `share_plus` 10.1.4 → `^13.3.0`; `flutter_lints` `^4.0.0` → `^6.0.0`) which removed pins commented "Pinned with share_plus 10.x for win32 compatibility" — looks like an unintended `flutter pub upgrade --major-versions`.
+- Notes for next session: the untokenised **30px icon badge** now recurs in `change_skill_world_sheet.dart` as well as `settings/widgets/settings_tile.dart` — second occurrence, so it has earned promotion to `SkifluxUnit`. Also flagged for the user: `skiflux/pubspec.yaml` carries uncommitted major bumps (`file_picker` 10.1.9 → `^12.0.0-beta.7` — a beta; `share_plus` 10.1.4 → `^13.3.0`; `flutter_lints` `^4.0.0` → `^6.0.0`) which removed pins commented "Pinned with share_plus 10.x for win32 compatibility" — looks like an unintended `flutter pub upgrade --major-versions`.
 
 ### 2026-07-25 — Claude — Settings Flow Figma-fidelity audit (all 25 frames re-checked)
 - Status: Complete
@@ -1139,7 +1139,7 @@ GitHub Actions workflow at
 
 ### 2026-07-22 — DeepSeek — Test Coverage Build
 - Status: Partial (task submission flow integration tests escalated — see notes)
-- What was done: Built comprehensive test suite from scratch across 3 categories. **(A) Design system widget tests** (22 tests, skiflux_design_system): `button_test.dart` (4 tests — label rendering, enabled/disabled onPressed, leading icon), `comment_test.dart` (8 tests — message/voicenote rendering, own/other action rows, callback firing), `compose_bar_test.dart` (7 tests — idle hint/mic/send, recording state transitions, external controller). **(B) Riverpod provider unit tests** (34 tests, skiflux_mobile_app_v2): `notifications_test.dart` (6 tests — build, markRead, markAllRead, unread getter), `leaderboard_test.dart` (5 tests — shape, podium/ranked splits, xpLabel), `streaks_test.dart` (7 tests — seed data, consumeCelebration one-shot, low-streak edge case), `tasks_test.dart` (13 tests — markInReview, markCompleted, recordQuizResult, completeMission, filters), `subscriptions_test.dart` (10 tests — feed filters, creator sort, unsubscribe, notification mode). **(C) Integration/flow tests** (4 tests): `comments_test.dart` (2 tests — send text, empty message guarded), `task_submission_test.dart` (3 tests — title rendeirng, disabled submit, task-not-found fallback).
+- What was done: Built comprehensive test suite from scratch across 3 categories. **(A) Design system widget tests** (22 tests, skiflux_design_system): `button_test.dart` (4 tests — label rendering, enabled/disabled onPressed, leading icon), `comment_test.dart` (8 tests — message/voicenote rendering, own/other action rows, callback firing), `compose_bar_test.dart` (7 tests — idle hint/mic/send, recording state transitions, external controller). **(B) Riverpod provider unit tests** (34 tests, skiflux): `notifications_test.dart` (6 tests — build, markRead, markAllRead, unread getter), `leaderboard_test.dart` (5 tests — shape, podium/ranked splits, xpLabel), `streaks_test.dart` (7 tests — seed data, consumeCelebration one-shot, low-streak edge case), `tasks_test.dart` (13 tests — markInReview, markCompleted, recordQuizResult, completeMission, filters), `subscriptions_test.dart` (10 tests — feed filters, creator sort, unsubscribe, notification mode). **(C) Integration/flow tests** (4 tests): `comments_test.dart` (2 tests — send text, empty message guarded), `task_submission_test.dart` (3 tests — title rendeirng, disabled submit, task-not-found fallback).
 - Verification run: `flutter test` (design system) → 22/22 passed; `flutter test` (app) → 52/52 passed; `flutter analyze` (design system) → No issues found; `flutter analyze` (app) → 0 errors, 0 warnings (12 info-level `prefer_const_constructors` in test files only)
 - Notes for next session: The full task submission flow (entering text into the SkifluxInputField and verifying In-Review status change) could not be tested via widget test because `SkifluxInputField` (a design-system pill input) and its internal `TextField` were not findable by `find.byType` in the test environment, likely due to font-resolution issues in the test runner. The submit-button label was found to be `'Submit Task & Earn ${coins} coins'` (not plain `'Submit'`), which was already reflected in the rendering tests. This escalated item should be revisited when a real API/mocked backend exists — the provider-level unit tests in `tasks_test.dart` already cover the `markInReview`/`markCompleted` logic. The SkifluxToast auto-dismiss test was also escalated (SnackBar animation timing in test environment doesn't reliably match wall-clock duration).
 
@@ -1267,19 +1267,19 @@ GitHub Actions workflow at
 
 ### 2026-07-23 — Gemini — Lint Rigor Upgrade
 - Status: Complete
-- What was done: Added strict, production-grade `analysis_options.yaml` with analyzer language options (`strict-casts: true`, `strict-raw-types: true`) and strict production lints (`prefer_const_*`, `prefer_final_*`, `avoid_print`, `always_declare_return_types`, `avoid_returning_null_for_void`, `unnecessary_this`, `avoid_relative_lib_imports`, `unawaited_futures`, `cancel_subscriptions`, `close_sinks`, `use_build_context_synchronously`) to BOTH `skiflux_design_system` and `skiflux_mobile_app_v2`. Fixed 35 trivial lint violations in `skiflux_design_system` (const constructors, final locals, unnecessary const) and 1 trivial `unawaited_futures` violation in `skiflux_mobile_app_v2` (`search_screen.dart:85:27`). 0 non-trivial violations deferred.
+- What was done: Added strict, production-grade `analysis_options.yaml` with analyzer language options (`strict-casts: true`, `strict-raw-types: true`) and strict production lints (`prefer_const_*`, `prefer_final_*`, `avoid_print`, `always_declare_return_types`, `avoid_returning_null_for_void`, `unnecessary_this`, `avoid_relative_lib_imports`, `unawaited_futures`, `cancel_subscriptions`, `close_sinks`, `use_build_context_synchronously`) to BOTH `skiflux_design_system` and `skiflux`. Fixed 35 trivial lint violations in `skiflux_design_system` (const constructors, final locals, unnecessary const) and 1 trivial `unawaited_futures` violation in `skiflux` (`search_screen.dart:85:27`). 0 non-trivial violations deferred.
 - Verification run: `flutter test` → 75 tests passed (22 in design system, 53 in mobile app; 0 regressions), `flutter analyze` → 0 issues found on both packages.
 - Notes for next session: Both monorepo packages are clean under the upgraded strict production lint ruleset.
 
 ### 2026-07-23 — Grok — Secrets/Env Strategy Implementation
 - Status: Complete
-- What was done: Selected compile-time `--dart-define-from-file` configuration strategy. Created `skiflux_mobile_app_v2/lib/config/env_config.dart` typed environment config reader (`ENVIRONMENT`, `SENTRY_DSN`, `API_BASE_URL`, `ENABLE_ANALYTICS`), committed environment templates (`config/env/dev.json.example`, `config/env/prod.json.example`), and `config/env/ci.json` for CI pipeline execution. Added `.gitignore` rules for `config/env/*.json` (excluding `.example` and `ci.json`). Updated `main.dart` and `error_handler.dart` to consume `EnvConfig.sentryDsn`. Updated `.github/workflows/flutter-ci.yml` to test with `ci.json`.
+- What was done: Selected compile-time `--dart-define-from-file` configuration strategy. Created `skiflux/lib/config/env_config.dart` typed environment config reader (`ENVIRONMENT`, `SENTRY_DSN`, `API_BASE_URL`, `ENABLE_ANALYTICS`), committed environment templates (`config/env/dev.json.example`, `config/env/prod.json.example`), and `config/env/ci.json` for CI pipeline execution. Added `.gitignore` rules for `config/env/*.json` (excluding `.example` and `ci.json`). Updated `main.dart` and `error_handler.dart` to consume `EnvConfig.sentryDsn`. Updated `.github/workflows/flutter-ci.yml` to test with `ci.json`.
 - Verification run: `flutter test` → 75 tests passed (22 in design system, 53 in mobile app; 0 regressions), `flutter analyze` → 0 issues found, `flutter build apk` → √ Built `build\app\outputs\flutter-apk\app-debug.apk` (171.4s with `--dart-define-from-file=config/env/dev.json.example`).
-- Notes for next session: Veek needs to create `skiflux_mobile_app_v2/config/env/dev.json` locally from `dev.json.example` before running the app with real Sentry reporting or backend endpoints.
+- Notes for next session: Veek needs to create `skiflux/config/env/dev.json` locally from `dev.json.example` before running the app with real Sentry reporting or backend endpoints.
 
 ### 2026-07-24 — Gemini — Documentation Reconciliation & README Restructure
 - Status: Complete
-- What was done: Performed Step 0 ground-truth audit of `skiflux_mobile_app_v2`. Verified all 12 feature folders (`auth`, `home`, `leaderboard`, `notifications`, `playlists`, `profile`, `search`, `settings`, `streaks`, `subscriptions`, `tasks`, `wallet`), profile screens (`badges`, `downloads`, `liked_videos`, `saved_videos`, `watch_history`, `library_episode_row`), and shared sheets (`confirm_sheet.dart`, `success_sheet.dart`). Restructured `README.md` to eliminate architecture duplication with `PROJECT.md`, resolved duplicate `home/sheets/` entries, expanded collapsed `search/` and `subscriptions/` listings into accurate file trees, updated `main.dart` entry point description to include `EnvConfig`/Sentry initialization, added syntax highlighting, and established explicit link pointers to `PROJECT.md`.
+- What was done: Performed Step 0 ground-truth audit of `skiflux`. Verified all 12 feature folders (`auth`, `home`, `leaderboard`, `notifications`, `playlists`, `profile`, `search`, `settings`, `streaks`, `subscriptions`, `tasks`, `wallet`), profile screens (`badges`, `downloads`, `liked_videos`, `saved_videos`, `watch_history`, `library_episode_row`), and shared sheets (`confirm_sheet.dart`, `success_sheet.dart`). Restructured `README.md` to eliminate architecture duplication with `PROJECT.md`, resolved duplicate `home/sheets/` entries, expanded collapsed `search/` and `subscriptions/` listings into accurate file trees, updated `main.dart` entry point description to include `EnvConfig`/Sentry initialization, added syntax highlighting, and established explicit link pointers to `PROJECT.md`.
 - Verification run: `flutter analyze` → No issues found! (ran in 18.8s), `flutter test` → 53 / 53 mobile app tests passed (0 regressions). All internal section links cross-checked.
 - Notes for next session: `README.md` is now a developer-onboarding guide pointing to `PROJECT.md` for architecture details.
 
@@ -1629,3 +1629,4 @@ GitHub Actions workflow at
 - **Tags**: inventory regenerated via the documented grep — **23 (13 blocking, 10 minor)**, down from 32. New blocking tag: no episode-report endpoint (`more_menu_sheet.dart`). `BACKEND_INTEGRATION.md` revised: spec-location note in the header, wired annotations across Tier 1, and Tier 4 §1 (creator profile) + §7 (public user profile) moved to a "Resolved" section — both shipped in the spec and are wired, with residual gaps (viewer-facing creator catalogue; public-profile stat shapes/completed-task list/contact gating) kept as tracked asks.
 - **Still open** (tracked, not regressions): downloads pipeline (no implementation — the storage figure is fake), playlists/seasons catalogue still demo-seeded (episode purchase 404s on demo ids until it's backend-driven), full-screen player still a static image, FCM permission-request moment + notification tap routing (product decisions; tap routing also blocked on the untyped `NotificationItem.data`), per-creator notification mode / episode report / coin-pack pricing / transaction dispute endpoints absent from the spec, social sign-in OAuth credentials (manual), captions (no schema), download quality tiers (single rendition), `url_launcher` approval pending, app language not wired to `MaterialApp` locale, auto-play/wifi-only prefs persisted but not consulted, iOS Firebase/APNs blocked on Apple Developer membership.
 - Verification: `flutter analyze` — **No issues found**; full test suite — **537/537 passed**. Post-doc integration fixes on the way there: two test expectations updated to the new `settingsSaveFailed` kind; `SubscriptionEpisode.fromJson` was dropping `thumbnail_url`/`video_url` (fixed, was a real parser bug); the unsubscribe test's fake now confirms the unfollow so the store's reconcile step doesn't re-add the row; the splash-watchdog test fakes the keychain/biometrics plugins (it tests the timer, not the probes); two money-flow tests stopped using `pumpAndSettle` against indefinite loading spinners.
+

@@ -31,8 +31,8 @@ subprojects {
 | Field | Value |
 |--------|--------|
 | Plugins | `com.android.application`, `kotlin-android`, `dev.flutter.flutter-gradle-plugin` |
-| `namespace` | `com.skiflux.skiflux_mobile_app_v2` |
-| `applicationId` | `com.skiflux.skiflux_mobile_app_v2` |
+| `namespace` | `com.skiflux.skiflux` |
+| `applicationId` | `com.skiflux.skiflux` |
 | SDK versions | Flutter defaults (`compileSdk` / `minSdk` / `targetSdk`) |
 | Java / Kotlin target | 17 |
 
@@ -88,7 +88,7 @@ Firebase project (throwaway): **`skiflux-fcm-test`**, project number `8299971055
 
 | Source | Literal value |
 |--------|----------------|
-| `applicationId` (`android/app/build.gradle.kts`) | `com.skiflux.skiflux_mobile_app_v2` |
+| `applicationId` (`android/app/build.gradle.kts`) | `com.skiflux.skiflux` |
 | `package_name` (`google-services.json`) | `com.skiflux.skifluxMobileAppV2` |
 
 Underscores vs camelCase. Mismatch fails **silently** at FCM registration — no error, no notification, everything else green.
@@ -159,7 +159,7 @@ Per freezed exact-pin precedent and FlutterFire **BoM 4.17.1** (2026-07-14):
 
 | Option | Action | Notes |
 |--------|--------|-------|
-| **A (recommended for throwaway)** | Re-register Android app in Firebase Console as `com.skiflux.skiflux_mobile_app_v2`, re-download `google-services.json` | Keeps app `applicationId` correct; only config file changes |
+| **A (recommended for throwaway)** | Re-register Android app in Firebase Console as `com.skiflux.skiflux`, re-download `google-services.json` | Keeps app `applicationId` correct; only config file changes |
 | **B** | Change app `applicationId` (and optionally `namespace`) to `com.skiflux.skifluxMobileAppV2` to match the JSON you already have | Changes Android app identity |
 | **C** | Proceed with mismatch for now | Builds/tests can go green; **Android FCM registration silently fails** until fixed |
 
@@ -200,3 +200,4 @@ Do not fake or stub these — track only:
 - `flutter_local_notifications` (tracker #34)
 
 **Throwaway Firebase project:** swapping later means replace `google-services.json`, `GoogleService-Info.plist`, and regenerate `firebase_options.dart` — nothing else.
+
