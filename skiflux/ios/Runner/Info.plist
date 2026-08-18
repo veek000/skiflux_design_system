@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>skiflux mobile app v2</string>
+	<string>Skiflux</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -34,7 +34,7 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLSchemes</key>
-			<array/>
+			<array><string>com.googleusercontent.apps.829997105528-3s91lcdiqj0659eaf8u3adam4a9tc942</string></array>
 		</dict>
 	</array>
 	<key>CFBundleSignature</key>
@@ -99,4 +99,5 @@
 	</array>
 </dict>
 </plist>
+
 

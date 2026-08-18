@@ -1,4 +1,4 @@
-# Skiflux Mobile App V2
+# Skiflux Mobile App
 
 Flutter mobile app for **Skiflux**, built entirely on the [`skiflux_design_system`](../skiflux_design_system/README.md) package (sibling path dependency). Screens mirror the Figma file [Skiflux](https://www.figma.com/design/863bu2TwQqgzIRgPD8bXkG/Skiflux) "Home & In-app Flow" frames.
 

@@ -12,7 +12,20 @@
           "package_name": "com.skiflux.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "829997105528-a7bhtl3594kp25btmvlo7r29abnfi63d.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.skiflux.app",
+            "certificate_hash": "79f5046a24796387f8f7f95fe0214a86dd7ff4d6"
+          }
+        },
+        {
+          "client_id": "829997105528-m4f92jj25u73pnuiic2fpeoga7olgki2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyA3PdV7Pfd5cO_y7sr6sBLklwLvnqXAuNw"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "829997105528-m4f92jj25u73pnuiic2fpeoga7olgki2.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "829997105528-3s91lcdiqj0659eaf8u3adam4a9tc942.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.skiflux.app"
+              }
+            }
+          ]
         }
       }
     }
