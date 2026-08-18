@@ -5,7 +5,7 @@ Flutter mobile app for **Skiflux**, built entirely on the [`skiflux_design_syste
 ## Quick Start
 
 ```bash
-cd skiflux_mobile_app_v2
+cd skiflux
 flutter pub get
 flutter run --dart-define-from-file=config/env/dev.json
 ```
@@ -149,3 +149,4 @@ For detailed internal documentation, consult [PROJECT.md](../PROJECT.md):
 - **[Error Handling & Crash Reporting](../PROJECT.md#error-handling--crash-reporting)**: `ErrorDisplay` classifier, toast vs modal decision matrix, and Sentry crash reporting integration.
 - **[Secrets & Environment Configuration](../PROJECT.md#secrets--environment-configuration)**: Compile-time `--dart-define-from-file` strategy, file structure, and `EnvConfig` usage.
 - **[Session Log](../PROJECT.md#session-log)**: Chronological history of implementation phases, refactoring passes, and verification logs.
+

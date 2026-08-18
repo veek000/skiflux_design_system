@@ -9,7 +9,7 @@ C:\Users\timmy\Dev\flutter\bin\flutter.bat
 The runnable app is:
 
 ```
-C:\Users\timmy\skiflux\skiflux_mobile_app_v2
+C:\Users\timmy\skiflux\skiflux
 ```
 
 ---
@@ -79,7 +79,7 @@ flutter emulators --launch Pixel_7_API_34
 ## 3. Run the Home screen
 
 ```powershell
-cd C:\Users\timmy\skiflux\skiflux_mobile_app_v2
+cd C:\Users\timmy\skiflux\skiflux
 flutter pub get
 flutter run
 ```
@@ -106,7 +106,7 @@ Quit: **`q`**.
 
 ## 4. VS Code / Cursor (GUI)
 
-1. Open folder: `C:\Users\timmy\skiflux\skiflux_mobile_app_v2`
+1. Open folder: `C:\Users\timmy\skiflux\skiflux`
 2. Install extension: **Flutter** (and **Dart**)
 3. Bottom-right status bar → select your **emulator**
 4. Open `lib/main.dart` → press **F5** or **Run → Start Debugging**
@@ -130,7 +130,7 @@ Figma frame: **Home & In-app Flow 11** (`198:13684`)
 | `flutter` not recognized  | Use full path or add `C:\Users\timmy\Dev\flutter\bin` to System PATH                             |
 | No devices                | Start emulator first, then `flutter devices`                                                     |
 | Gradle / Android licenses | `flutter doctor --android-licenses` → accept all                                                 |
-| Fonts look wrong          | Fonts are in the design_system package; run from `skiflux_mobile_app_v2` after `flutter pub get` |
+| Fonts look wrong          | Fonts are in the design_system package; run from `skiflux` after `flutter pub get` |
 | Build slow first time     | Normal — Android downloads dependencies once                                                     |
 
 ---
@@ -140,7 +140,7 @@ Figma frame: **Home & In-app Flow 11** (`198:13684`)
 ```powershell
 $env:Path = "C:\Users\timmy\Dev\flutter\bin;" + $env:Path
 # Start emulator from Android Studio first, then:
-cd C:\Users\timmy\skiflux\skiflux_mobile_app_v2
+cd C:\Users\timmy\skiflux\skiflux
 flutter pub get
 flutter run
 ```
@@ -148,6 +148,7 @@ flutter run
 If you only want a fast check without the emulator:
 
 ```powershell
-cd C:\Users\timmy\skiflux\skiflux_mobile_app_v2
+cd C:\Users\timmy\skiflux\skiflux
 flutter run -d chrome
 ```
+
