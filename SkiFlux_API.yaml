@@ -9959,7 +9959,7 @@ components:
           readOnly: true
         user_avatar:
           type: string
-          format: uri
+          nullable: true
           readOnly: true
         text:
           type: string
