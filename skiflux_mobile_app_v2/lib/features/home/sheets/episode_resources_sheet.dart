@@ -119,7 +119,12 @@ class _ResourceRowState extends State<_ResourceRow> {
       await dio.download(urlString, savePath);
 
       if (!mounted) return;
-      await Share.shareXFiles([XFile(savePath)], text: widget.resource.displayName);
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(savePath)],
+          text: widget.resource.displayName,
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       SkifluxToast.error(context, "We couldn't download that file.");
