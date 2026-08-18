@@ -10,8 +10,8 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skiflux_mobile_app_v2/features/auth/auth_flow.dart';
-import 'package:skiflux_mobile_app_v2/features/auth/data/auth_store.dart';
+import 'package:skiflux/features/auth/auth_flow.dart';
+import 'package:skiflux/features/auth/data/auth_store.dart';
 
 /// Mounts the flow on a form that carries the social row.
 ///
@@ -72,3 +72,4 @@ void main() {
     });
   }
 }
+

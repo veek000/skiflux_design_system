@@ -1,11 +1,11 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skiflux_mobile_app_v2/features/playlists/data/playlists_store.dart';
-import 'package:skiflux_mobile_app_v2/features/playlists/data/season_providers.dart';
-import 'package:skiflux_mobile_app_v2/features/playlists/data/seasons_repository.dart';
-import 'package:skiflux_mobile_app_v2/shared/error_handling/error_handler.dart';
-import 'package:skiflux_mobile_app_v2/shared/network/api_repository.dart';
+import 'package:skiflux/features/playlists/data/playlists_store.dart';
+import 'package:skiflux/features/playlists/data/season_providers.dart';
+import 'package:skiflux/features/playlists/data/seasons_repository.dart';
+import 'package:skiflux/shared/error_handling/error_handler.dart';
+import 'package:skiflux/shared/network/api_repository.dart';
 
 void main() {
   // The creator profile's Recent and Playlists tabs came back empty for
@@ -199,3 +199,4 @@ class _PagingSeasonsRepository extends SeasonsRepository {
     );
   }
 }
+

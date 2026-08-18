@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skiflux_mobile_app_v2/features/profile/badges_screen.dart';
-import 'package:skiflux_mobile_app_v2/features/profile/data/badge_catalogue.dart';
-import 'package:skiflux_mobile_app_v2/features/profile/data/badges_repository.dart';
+import 'package:skiflux/features/profile/badges_screen.dart';
+import 'package:skiflux/features/profile/data/badge_catalogue.dart';
+import 'package:skiflux/features/profile/data/badges_repository.dart';
 
 /// The badge rule: every badge in the app ships locally and starts locked;
 /// the backend only says which ones this learner has earned.
@@ -83,3 +83,4 @@ void main() {
     });
   });
 }
+

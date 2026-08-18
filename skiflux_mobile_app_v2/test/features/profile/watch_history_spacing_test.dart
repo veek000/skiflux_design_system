@@ -13,11 +13,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
-import 'package:skiflux_mobile_app_v2/features/profile/data/library_episode.dart';
-import 'package:skiflux_mobile_app_v2/features/profile/data/library_repository.dart';
-import 'package:skiflux_mobile_app_v2/features/profile/library_episode_row.dart';
-import 'package:skiflux_mobile_app_v2/features/profile/watch_history_screen.dart';
-import 'package:skiflux_mobile_app_v2/shared/network/token_store.dart';
+import 'package:skiflux/features/profile/data/library_episode.dart';
+import 'package:skiflux/features/profile/data/library_repository.dart';
+import 'package:skiflux/features/profile/library_episode_row.dart';
+import 'package:skiflux/features/profile/watch_history_screen.dart';
+import 'package:skiflux/shared/network/token_store.dart';
 
 LibraryEpisode _episode(int i) => LibraryEpisode(
   id: 'ep-$i',
@@ -135,3 +135,4 @@ class _FakeTokenStore extends TokenStore {
   @override
   Future<bool> hasSession() async => true;
 }
+

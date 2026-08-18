@@ -10,9 +10,9 @@ library;
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skiflux_mobile_app_v2/shared/error_handling/error_handler.dart';
-import 'package:skiflux_mobile_app_v2/shared/network/api_exception.dart';
-import 'package:skiflux_mobile_app_v2/shared/network/provider_retry.dart';
+import 'package:skiflux/shared/error_handling/error_handler.dart';
+import 'package:skiflux/shared/network/api_exception.dart';
+import 'package:skiflux/shared/network/provider_retry.dart';
 
 ApiException _api(int? status) => ApiException(
   kind: SkifluxErrorKind.unknown,
@@ -120,3 +120,4 @@ void main() {
     });
   });
 }
+

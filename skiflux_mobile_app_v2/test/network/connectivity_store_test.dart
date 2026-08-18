@@ -8,8 +8,8 @@ library;
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skiflux_mobile_app_v2/shared/error_handling/error_handler.dart';
-import 'package:skiflux_mobile_app_v2/shared/network/connectivity_store.dart';
+import 'package:skiflux/shared/error_handling/error_handler.dart';
+import 'package:skiflux/shared/network/connectivity_store.dart';
 
 /// A notifier whose probe is scripted and whose delays are compressed —
 /// `flutter test` has no server, and the real schedule runs to 15s a step.
@@ -296,3 +296,4 @@ void main() {
     });
   });
 }
+

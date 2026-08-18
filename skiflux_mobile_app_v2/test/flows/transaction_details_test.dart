@@ -3,8 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
-import 'package:skiflux_mobile_app_v2/features/wallet/data/wallet_store.dart';
-import 'package:skiflux_mobile_app_v2/features/wallet/transaction_details_screen.dart';
+import 'package:skiflux/features/wallet/data/wallet_store.dart';
+import 'package:skiflux/features/wallet/transaction_details_screen.dart';
 
 /// The entry Figma details on `3664:13258`: a 1,240-coin purchase.
 final _purchase = CoinTxn(
@@ -143,3 +143,4 @@ void main() {
     });
   });
 }
+

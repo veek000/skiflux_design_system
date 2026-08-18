@@ -9,7 +9,7 @@ library;
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:skiflux_mobile_app_v2/features/profile/data/badges_repository.dart';
+import 'package:skiflux/features/profile/data/badges_repository.dart';
 
 class _StubAdapter implements HttpClientAdapter {
   _StubAdapter(this.handler);
@@ -128,3 +128,4 @@ void main() {
     });
   });
 }
+

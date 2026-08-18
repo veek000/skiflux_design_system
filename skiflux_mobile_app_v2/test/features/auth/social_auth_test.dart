@@ -10,8 +10,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
-import 'package:skiflux_mobile_app_v2/features/auth/data/social_auth.dart';
-import 'package:skiflux_mobile_app_v2/shared/error_handling/error_handler.dart';
+import 'package:skiflux/features/auth/data/social_auth.dart';
+import 'package:skiflux/shared/error_handling/error_handler.dart';
 
 /// A service whose four platform calls are scripted.
 class _FakeSocialAuth extends SocialAuthService {
@@ -257,3 +257,4 @@ void main() {
     });
   });
 }
+

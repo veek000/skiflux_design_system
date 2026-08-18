@@ -2,10 +2,10 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skiflux_mobile_app_v2/features/notifications/data/models/notification_item.dart';
-import 'package:skiflux_mobile_app_v2/features/notifications/data/notifications_repository.dart';
-import 'package:skiflux_mobile_app_v2/features/notifications/data/notifications_store.dart';
-import 'package:skiflux_mobile_app_v2/shared/network/token_store.dart';
+import 'package:skiflux/features/notifications/data/models/notification_item.dart';
+import 'package:skiflux/features/notifications/data/notifications_repository.dart';
+import 'package:skiflux/features/notifications/data/notifications_store.dart';
+import 'package:skiflux/shared/network/token_store.dart';
 
 void main() {
   late ProviderContainer container;
@@ -409,3 +409,4 @@ class _FakeTokenStore extends TokenStore {
   @override
   Future<bool> hasSession() async => signedIn;
 }
+

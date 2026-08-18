@@ -12,12 +12,12 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skiflux_mobile_app_v2/features/auth/data/auth_endpoints.dart';
-import 'package:skiflux_mobile_app_v2/features/auth/data/auth_repository.dart';
-import 'package:skiflux_mobile_app_v2/features/auth/data/auth_store.dart';
-import 'package:skiflux_mobile_app_v2/features/auth/data/social_auth.dart';
-import 'package:skiflux_mobile_app_v2/shared/error_handling/error_handler.dart';
-import 'package:skiflux_mobile_app_v2/shared/network/token_store.dart';
+import 'package:skiflux/features/auth/data/auth_endpoints.dart';
+import 'package:skiflux/features/auth/data/auth_repository.dart';
+import 'package:skiflux/features/auth/data/auth_store.dart';
+import 'package:skiflux/features/auth/data/social_auth.dart';
+import 'package:skiflux/shared/error_handling/error_handler.dart';
+import 'package:skiflux/shared/network/token_store.dart';
 
 /// In-memory keychain — flutter_secure_storage has no `flutter test` backend.
 class _FakeSecureStorage extends FlutterSecureStorage {
@@ -236,3 +236,4 @@ void main() {
     expect(await notifier.hasSession(), isFalse);
   });
 }
+

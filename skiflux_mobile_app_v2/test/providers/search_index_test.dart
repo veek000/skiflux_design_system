@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skiflux_mobile_app_v2/features/search/data/search_index.dart';
+import 'package:skiflux/features/search/data/search_index.dart';
 
 /// The spec's `GlobalSearchResponse`: four DRF pages keyed `episodes`,
 /// `seasons`, `creators`, `users`.
@@ -147,3 +147,4 @@ void main() {
     });
   });
 }
+

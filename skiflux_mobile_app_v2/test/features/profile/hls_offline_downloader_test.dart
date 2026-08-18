@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skiflux_mobile_app_v2/features/profile/data/hls_offline_downloader.dart';
+import 'package:skiflux/features/profile/data/hls_offline_downloader.dart';
 
 void main() {
   group('isHlsUrl', () {
@@ -11,3 +11,4 @@ void main() {
     });
   });
 }
+

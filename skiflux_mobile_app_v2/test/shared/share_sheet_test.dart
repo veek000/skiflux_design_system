@@ -7,7 +7,7 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skiflux_mobile_app_v2/shared/sheets/share_sheet.dart';
+import 'package:skiflux/shared/sheets/share_sheet.dart';
 
 void main() {
   group('shareableMediaUrl', () {
@@ -54,3 +54,4 @@ void main() {
     });
   });
 }
+

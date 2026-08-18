@@ -5,12 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
-import 'package:skiflux_mobile_app_v2/features/home/data/comments_repository.dart';
-import 'package:skiflux_mobile_app_v2/features/home/data/comments_store.dart';
-import 'package:skiflux_mobile_app_v2/features/profile/data/models/user_profile.dart';
-import 'package:skiflux_mobile_app_v2/features/profile/data/profile_repository.dart';
-import 'package:skiflux_mobile_app_v2/shared/network/api_repository.dart';
-import 'package:skiflux_mobile_app_v2/shared/network/token_store.dart';
+import 'package:skiflux/features/home/data/comments_repository.dart';
+import 'package:skiflux/features/home/data/comments_store.dart';
+import 'package:skiflux/features/profile/data/models/user_profile.dart';
+import 'package:skiflux/features/profile/data/profile_repository.dart';
+import 'package:skiflux/shared/network/api_repository.dart';
+import 'package:skiflux/shared/network/token_store.dart';
 
 void main() {
   group('comment ownership', () {
@@ -332,3 +332,4 @@ class _FakeProfileRepository extends ProfileRepository {
     return value;
   }
 }
+

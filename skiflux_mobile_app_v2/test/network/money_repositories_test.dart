@@ -9,11 +9,11 @@ import 'dart:convert';
 import 'package:decimal/decimal.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skiflux_mobile_app_v2/features/wallet/data/cards_repository.dart';
-import 'package:skiflux_mobile_app_v2/features/wallet/data/episode_purchase_repository.dart';
-import 'package:skiflux_mobile_app_v2/features/wallet/data/topup_repository.dart';
-import 'package:skiflux_mobile_app_v2/features/wallet/data/wallet_repository.dart';
-import 'package:skiflux_mobile_app_v2/shared/error_handling/error_handler.dart';
+import 'package:skiflux/features/wallet/data/cards_repository.dart';
+import 'package:skiflux/features/wallet/data/episode_purchase_repository.dart';
+import 'package:skiflux/features/wallet/data/topup_repository.dart';
+import 'package:skiflux/features/wallet/data/wallet_repository.dart';
+import 'package:skiflux/shared/error_handling/error_handler.dart';
 
 class _StubAdapter implements HttpClientAdapter {
   _StubAdapter(this.handler);
@@ -436,4 +436,5 @@ void main() {
     });
   });
 }
+
 

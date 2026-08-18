@@ -19,7 +19,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <application
-        android:label="skiflux mobile app v2"
+        android:label="Skiflux"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <!-- Default small icon for FCM notification trays. Without this,
@@ -77,3 +77,4 @@
         </intent>
     </queries>
 </manifest>
+

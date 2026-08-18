@@ -21,12 +21,12 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
-import 'package:skiflux_mobile_app_v2/features/leaderboard/data/leaderboard_repository.dart';
-import 'package:skiflux_mobile_app_v2/features/leaderboard/data/models/leaderboard_row.dart';
-import 'package:skiflux_mobile_app_v2/features/leaderboard/leaderboard_screen.dart';
-import 'package:skiflux_mobile_app_v2/features/profile/data/models/user_profile.dart';
-import 'package:skiflux_mobile_app_v2/features/profile/data/profile_repository.dart';
-import 'package:skiflux_mobile_app_v2/shared/network/token_store.dart';
+import 'package:skiflux/features/leaderboard/data/leaderboard_repository.dart';
+import 'package:skiflux/features/leaderboard/data/models/leaderboard_row.dart';
+import 'package:skiflux/features/leaderboard/leaderboard_screen.dart';
+import 'package:skiflux/features/profile/data/models/user_profile.dart';
+import 'package:skiflux/features/profile/data/profile_repository.dart';
+import 'package:skiflux/shared/network/token_store.dart';
 
 /// The cast the screen is laid out against. Nothing is seeded in the app any
 /// more, so the layout's fixtures live here — with the longest name the design
@@ -362,3 +362,4 @@ class _FakeProfileRepository extends ProfileRepository {
   Future<UserProfile> getProfile() async =>
       const UserProfile(id: 'me', username: 'learner12', rank: 12);
 }
+

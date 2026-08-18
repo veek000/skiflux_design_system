@@ -1,9 +1,9 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skiflux_mobile_app_v2/app/app.dart';
-import 'package:skiflux_mobile_app_v2/features/home/home_screen.dart';
-import 'package:skiflux_mobile_app_v2/shared/notifications/fcm_service.dart';
+import 'package:skiflux/app/app.dart';
+import 'package:skiflux/features/home/home_screen.dart';
+import 'package:skiflux/shared/notifications/fcm_service.dart';
 
 import 'providers/fcm_service_test.dart' show FakeFcmService;
 
@@ -32,8 +32,9 @@ void main() {
 
     // Chrome is up regardless of whether recommendations arrived.
     expect(find.text('Home'), findsOneWidget);
-    // With no backend the feed has nothing in it, and it must stay that way —
+    // With no backend the feed has nothing in it, and it must stay that way �
     // "Amara Design" was one of the seeded creators that used to appear here.
     expect(find.text('Amara Design'), findsNothing);
   });
 }
+

@@ -3,15 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:skiflux_mobile_app_v2/features/auth/data/auth_repository.dart';
-import 'package:skiflux_mobile_app_v2/features/auth/data/auth_store.dart';
-import 'package:skiflux_mobile_app_v2/features/auth/data/biometric_store.dart';
-import 'package:skiflux_mobile_app_v2/features/profile/data/profile_repository.dart';
-import 'package:skiflux_mobile_app_v2/features/settings/data/settings_store.dart';
-import 'package:skiflux_mobile_app_v2/shared/data/session_email_store.dart';
-import 'package:skiflux_mobile_app_v2/shared/error_handling/error_handler.dart';
-import 'package:skiflux_mobile_app_v2/shared/network/api_exception.dart';
-import 'package:skiflux_mobile_app_v2/shared/network/token_store.dart';
+import 'package:skiflux/features/auth/data/auth_repository.dart';
+import 'package:skiflux/features/auth/data/auth_store.dart';
+import 'package:skiflux/features/auth/data/biometric_store.dart';
+import 'package:skiflux/features/profile/data/profile_repository.dart';
+import 'package:skiflux/features/settings/data/settings_store.dart';
+import 'package:skiflux/shared/data/session_email_store.dart';
+import 'package:skiflux/shared/error_handling/error_handler.dart';
+import 'package:skiflux/shared/network/api_exception.dart';
+import 'package:skiflux/shared/network/token_store.dart';
 
 void main() {
   late ProviderContainer container;
@@ -792,3 +792,4 @@ SkifluxFailure _fieldError(Map<String, List<String>> fields) => SkifluxFailure(
     fieldErrors: fields,
   ),
 );
+

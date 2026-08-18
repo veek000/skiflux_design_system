@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skiflux_mobile_app_v2/shared/network/auth_tokens.dart';
+import 'package:skiflux/shared/network/auth_tokens.dart';
 
 void main() {
   group('AuthTokens.fromJson', () {
@@ -183,3 +183,4 @@ void main() {
     );
   });
 }
+

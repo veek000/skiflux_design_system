@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:skiflux_mobile_app_v2/features/tasks/submission_task_screen.dart';
-import 'package:skiflux_mobile_app_v2/shared/sheets/skiflux_sheet.dart';
+import 'package:skiflux/features/tasks/submission_task_screen.dart';
+import 'package:skiflux/shared/sheets/skiflux_sheet.dart';
 
 void main() {
   group('Task submission flow', () {
@@ -104,3 +104,4 @@ void main() {
     });
   });
 }
+

@@ -10,9 +10,9 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skiflux_mobile_app_v2/features/auth/screens/auth_chrome.dart';
-import 'package:skiflux_mobile_app_v2/shared/error_handling/error_handler.dart';
-import 'package:skiflux_mobile_app_v2/shared/network/connectivity_store.dart';
+import 'package:skiflux/features/auth/screens/auth_chrome.dart';
+import 'package:skiflux/shared/error_handling/error_handler.dart';
+import 'package:skiflux/shared/network/connectivity_store.dart';
 
 /// Pins the status without the probe machinery. The banner's whole contract is
 /// "what does the bar currently say" — driving it through `reportFailure` would
@@ -75,3 +75,4 @@ void main() {
     expect(find.text('Incorrect password'), findsOneWidget);
   });
 }
+

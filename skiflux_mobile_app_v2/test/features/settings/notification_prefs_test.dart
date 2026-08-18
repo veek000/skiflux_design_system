@@ -10,11 +10,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:skiflux_mobile_app_v2/features/settings/data/notification_prefs_repository.dart';
-import 'package:skiflux_mobile_app_v2/features/settings/data/settings_store.dart';
-import 'package:skiflux_mobile_app_v2/shared/error_handling/error_handler.dart';
-import 'package:skiflux_mobile_app_v2/shared/network/auth_tokens.dart';
-import 'package:skiflux_mobile_app_v2/shared/network/token_store.dart';
+import 'package:skiflux/features/settings/data/notification_prefs_repository.dart';
+import 'package:skiflux/features/settings/data/settings_store.dart';
+import 'package:skiflux/shared/error_handling/error_handler.dart';
+import 'package:skiflux/shared/network/auth_tokens.dart';
+import 'package:skiflux/shared/network/token_store.dart';
 
 /// In-memory keychain — flutter_secure_storage has no implementation under
 /// `flutter test`.
@@ -359,3 +359,4 @@ void main() {
     });
   });
 }
+

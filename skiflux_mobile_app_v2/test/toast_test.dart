@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
-import 'package:skiflux_mobile_app_v2/shared/toast/skiflux_toast.dart';
+import 'package:skiflux/shared/toast/skiflux_toast.dart';
 
 void main() {
   group('SkifluxToast', () {
@@ -65,3 +65,4 @@ void main() {
     });
   });
 }
+

@@ -1,13 +1,13 @@
 import 'package:decimal/decimal.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skiflux_mobile_app_v2/features/home/data/episodes_repository.dart';
-import 'package:skiflux_mobile_app_v2/features/tasks/data/models/platform_task.dart';
-import 'package:skiflux_mobile_app_v2/features/tasks/data/tasks_store.dart';
-import 'package:skiflux_mobile_app_v2/features/wallet/data/models/skillcoin_transaction.dart';
-import 'package:skiflux_mobile_app_v2/features/wallet/data/models/wallet_financial_summary.dart';
-import 'package:skiflux_mobile_app_v2/features/wallet/data/wallet_store.dart';
-import 'package:skiflux_mobile_app_v2/features/profile/data/models/user_profile.dart';
-import 'package:skiflux_mobile_app_v2/shared/network/json_envelope.dart';
+import 'package:skiflux/features/home/data/episodes_repository.dart';
+import 'package:skiflux/features/tasks/data/models/platform_task.dart';
+import 'package:skiflux/features/tasks/data/tasks_store.dart';
+import 'package:skiflux/features/wallet/data/models/skillcoin_transaction.dart';
+import 'package:skiflux/features/wallet/data/models/wallet_financial_summary.dart';
+import 'package:skiflux/features/wallet/data/wallet_store.dart';
+import 'package:skiflux/features/profile/data/models/user_profile.dart';
+import 'package:skiflux/shared/network/json_envelope.dart';
 
 void main() {
   group('unwrapObject', () {
@@ -195,3 +195,4 @@ void main() {
     });
   });
 }
+

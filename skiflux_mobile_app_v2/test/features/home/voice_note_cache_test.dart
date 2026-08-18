@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skiflux_mobile_app_v2/features/home/data/voice_note_cache.dart';
+import 'package:skiflux/features/home/data/voice_note_cache.dart';
 
 void main() {
   group('resolveVoiceNoteUrl', () {
@@ -25,3 +25,4 @@ void main() {
     });
   });
 }
+

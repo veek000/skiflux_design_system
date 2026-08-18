@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
-import 'package:skiflux_mobile_app_v2/features/home/full_screen_player_screen.dart';
-import 'package:skiflux_mobile_app_v2/features/playlists/data/playlists_store.dart';
+import 'package:skiflux/features/home/full_screen_player_screen.dart';
+import 'package:skiflux/features/playlists/data/playlists_store.dart';
 
 Future<ProviderContainer> _pump(WidgetTester tester) async {
   tester.view.physicalSize = const Size(1080, 2400);
@@ -79,3 +79,4 @@ void main() {
     });
   });
 }
+

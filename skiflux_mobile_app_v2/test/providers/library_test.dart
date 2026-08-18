@@ -2,11 +2,11 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skiflux_mobile_app_v2/features/home/data/home_feed_store.dart';
-import 'package:skiflux_mobile_app_v2/features/profile/data/library_episode.dart';
-import 'package:skiflux_mobile_app_v2/features/profile/data/library_repository.dart';
-import 'package:skiflux_mobile_app_v2/features/profile/data/library_store.dart';
-import 'package:skiflux_mobile_app_v2/shared/network/token_store.dart';
+import 'package:skiflux/features/home/data/home_feed_store.dart';
+import 'package:skiflux/features/profile/data/library_episode.dart';
+import 'package:skiflux/features/profile/data/library_repository.dart';
+import 'package:skiflux/features/profile/data/library_store.dart';
+import 'package:skiflux/shared/network/token_store.dart';
 
 /// One `Episode` as `/me/liked` returns it.
 Map<String, dynamic> episodeJson({
@@ -449,3 +449,4 @@ class _FakeTokenStore extends TokenStore {
   @override
   Future<bool> hasSession() async => signedIn;
 }
+

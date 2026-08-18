@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skiflux_mobile_app_v2/features/home/data/episode_resource.dart';
+import 'package:skiflux/features/home/data/episode_resource.dart';
 
 void main() {
   // `Episode.resources` is inline on the viewer payload and was never parsed,
@@ -111,3 +111,4 @@ void main() {
     });
   });
 }
+

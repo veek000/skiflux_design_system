@@ -12,11 +12,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
-import 'package:skiflux_mobile_app_v2/features/playlists/data/playlists_store.dart';
-import 'package:skiflux_mobile_app_v2/features/playlists/data/season_providers.dart';
-import 'package:skiflux_mobile_app_v2/features/playlists/data/seasons_repository.dart';
-import 'package:skiflux_mobile_app_v2/features/playlists/playlist_episode_row.dart';
-import 'package:skiflux_mobile_app_v2/features/playlists/playlist_screen.dart';
+import 'package:skiflux/features/playlists/data/playlists_store.dart';
+import 'package:skiflux/features/playlists/data/season_providers.dart';
+import 'package:skiflux/features/playlists/data/seasons_repository.dart';
+import 'package:skiflux/features/playlists/playlist_episode_row.dart';
+import 'package:skiflux/features/playlists/playlist_screen.dart';
 
 /// Three rows, so both gaps between them are measurable.
 List<PlaylistEpisode> _episodes() => [
@@ -116,3 +116,4 @@ class _FakeSeasonsRepository extends SeasonsRepository {
   Future<List<PlaylistEpisode>> getSeasonEpisodes(String seasonId) async =>
       _episodes();
 }
+

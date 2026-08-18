@@ -5,14 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
-import 'package:skiflux_mobile_app_v2/features/settings/data/payment_store.dart';
-import 'package:skiflux_mobile_app_v2/features/settings/payment_methods_screen.dart';
-import 'package:skiflux_mobile_app_v2/features/wallet/add_bank_sheet.dart';
-import 'package:skiflux_mobile_app_v2/features/wallet/buy_coins_screen.dart';
-import 'package:skiflux_mobile_app_v2/features/wallet/data/models/supported_bank.dart';
-import 'package:skiflux_mobile_app_v2/features/wallet/data/wallet_repository.dart';
-import 'package:skiflux_mobile_app_v2/features/wallet/withdraw_screen.dart';
-import 'package:skiflux_mobile_app_v2/shared/error_handling/error_handler.dart';
+import 'package:skiflux/features/settings/data/payment_store.dart';
+import 'package:skiflux/features/settings/payment_methods_screen.dart';
+import 'package:skiflux/features/wallet/add_bank_sheet.dart';
+import 'package:skiflux/features/wallet/buy_coins_screen.dart';
+import 'package:skiflux/features/wallet/data/models/supported_bank.dart';
+import 'package:skiflux/features/wallet/data/wallet_repository.dart';
+import 'package:skiflux/features/wallet/withdraw_screen.dart';
+import 'package:skiflux/shared/error_handling/error_handler.dart';
 
 /// One saved card, so removal flows have something to remove. The vault's
 /// delete always fails here — the screen must roll back and show the
@@ -218,3 +218,4 @@ void main() {
     );
   });
 }
+

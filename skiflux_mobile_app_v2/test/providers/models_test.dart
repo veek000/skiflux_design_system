@@ -2,14 +2,14 @@ import 'dart:convert';
 
 import 'package:decimal/decimal.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skiflux_mobile_app_v2/features/tasks/data/models/platform_task.dart';
-import 'package:skiflux_mobile_app_v2/features/wallet/data/models/saved_card.dart';
-import 'package:skiflux_mobile_app_v2/features/wallet/data/models/skillcoin_transaction.dart';
-import 'package:skiflux_mobile_app_v2/features/wallet/data/models/user_wallet.dart';
-import 'package:skiflux_mobile_app_v2/features/wallet/data/models/withdrawal_account.dart';
-import 'package:skiflux_mobile_app_v2/features/wallet/data/models/withdrawal_method.dart';
-import 'package:skiflux_mobile_app_v2/features/wallet/data/models/withdrawal_request.dart';
-import 'package:skiflux_mobile_app_v2/shared/data/decimal_converter.dart';
+import 'package:skiflux/features/tasks/data/models/platform_task.dart';
+import 'package:skiflux/features/wallet/data/models/saved_card.dart';
+import 'package:skiflux/features/wallet/data/models/skillcoin_transaction.dart';
+import 'package:skiflux/features/wallet/data/models/user_wallet.dart';
+import 'package:skiflux/features/wallet/data/models/withdrawal_account.dart';
+import 'package:skiflux/features/wallet/data/models/withdrawal_method.dart';
+import 'package:skiflux/features/wallet/data/models/withdrawal_request.dart';
+import 'package:skiflux/shared/data/decimal_converter.dart';
 
 void main() {
   group('DecimalConverter', () {
@@ -388,3 +388,4 @@ void main() {
     });
   });
 }
+

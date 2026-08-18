@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
-import 'package:skiflux_mobile_app_v2/shared/notifications/fcm_service.dart';
-import 'package:skiflux_mobile_app_v2/shared/toast/skiflux_toast.dart';
+import 'package:skiflux/shared/notifications/fcm_service.dart';
+import 'package:skiflux/shared/toast/skiflux_toast.dart';
 
 /// Stands in for the Firebase Messaging plugin, which has no implementation
 /// under the test binding. Mirrors `_FakeBiometrics` in auth_flow_test.
@@ -164,3 +164,4 @@ void main() {
     );
   });
 }
+

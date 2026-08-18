@@ -14,8 +14,8 @@ library;
 
 import 'package:decimal/decimal.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skiflux_mobile_app_v2/features/tasks/data/models/episode_task_models.dart';
-import 'package:skiflux_mobile_app_v2/features/tasks/data/tasks_store.dart';
+import 'package:skiflux/features/tasks/data/models/episode_task_models.dart';
+import 'package:skiflux/features/tasks/data/tasks_store.dart';
 
 Map<String, dynamic> _row({
   Object? completionCriteria,
@@ -145,3 +145,4 @@ void main() {
     });
   });
 }
+

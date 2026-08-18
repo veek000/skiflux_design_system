@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
-import 'package:skiflux_mobile_app_v2/features/home/data/comments_repository.dart';
-import 'package:skiflux_mobile_app_v2/features/home/data/comments_store.dart';
-import 'package:skiflux_mobile_app_v2/shared/network/api_repository.dart';
+import 'package:skiflux/features/home/data/comments_repository.dart';
+import 'package:skiflux/features/home/data/comments_store.dart';
+import 'package:skiflux/shared/network/api_repository.dart';
 
 /// One `EpisodeComment` as `GET /episodes/{id}/comments` returns it — the
 /// flat spec shape (`user_first_name`, `text`, `is_liked`…), not the invented
@@ -459,3 +459,4 @@ class _FakeCommentsRepository extends CommentsRepository {
     replies.add((commentId, text));
   }
 }
+

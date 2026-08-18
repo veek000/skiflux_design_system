@@ -2,12 +2,12 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skiflux_mobile_app_v2/features/profile/data/models/user_profile.dart';
-import 'package:skiflux_mobile_app_v2/features/profile/data/profile_repository.dart';
-import 'package:skiflux_mobile_app_v2/features/profile/data/profile_store.dart';
-import 'package:skiflux_mobile_app_v2/features/profile/data/skill_world_store.dart';
-import 'package:skiflux_mobile_app_v2/shared/error_handling/error_handler.dart';
-import 'package:skiflux_mobile_app_v2/shared/network/token_store.dart';
+import 'package:skiflux/features/profile/data/models/user_profile.dart';
+import 'package:skiflux/features/profile/data/profile_repository.dart';
+import 'package:skiflux/features/profile/data/profile_store.dart';
+import 'package:skiflux/features/profile/data/skill_world_store.dart';
+import 'package:skiflux/shared/error_handling/error_handler.dart';
+import 'package:skiflux/shared/network/token_store.dart';
 
 void main() {
   group('SkillWorldsRepository.parseSkillWorlds', () {
@@ -271,3 +271,4 @@ class _FakeTokenStore extends TokenStore {
   @override
   Future<bool> hasSession() async => signedIn;
 }
+

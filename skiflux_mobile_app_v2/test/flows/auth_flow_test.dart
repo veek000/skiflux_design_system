@@ -7,15 +7,15 @@ import 'package:local_auth/local_auth.dart';
 import 'package:lottie/lottie.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
-import 'package:skiflux_mobile_app_v2/features/auth/auth_flow.dart';
-import 'package:skiflux_mobile_app_v2/features/auth/data/auth_store.dart';
-import 'package:skiflux_mobile_app_v2/features/auth/data/biometric_store.dart';
-import 'package:skiflux_mobile_app_v2/features/auth/data/legal_documents.dart';
-import 'package:skiflux_mobile_app_v2/features/profile/data/models/user_profile.dart';
-import 'package:skiflux_mobile_app_v2/features/profile/data/profile_repository.dart';
-import 'package:skiflux_mobile_app_v2/features/settings/data/settings_store.dart';
-import 'package:skiflux_mobile_app_v2/shared/network/auth_tokens.dart';
-import 'package:skiflux_mobile_app_v2/shared/network/token_store.dart';
+import 'package:skiflux/features/auth/auth_flow.dart';
+import 'package:skiflux/features/auth/data/auth_store.dart';
+import 'package:skiflux/features/auth/data/biometric_store.dart';
+import 'package:skiflux/features/auth/data/legal_documents.dart';
+import 'package:skiflux/features/profile/data/models/user_profile.dart';
+import 'package:skiflux/features/profile/data/profile_repository.dart';
+import 'package:skiflux/features/settings/data/settings_store.dart';
+import 'package:skiflux/shared/network/auth_tokens.dart';
+import 'package:skiflux/shared/network/token_store.dart';
 
 /// Stands in for the platform plugin, which has no implementation under the
 /// test binding. [mode] null means "this device cannot offer biometrics" —
@@ -552,3 +552,4 @@ void main() {
     });
   });
 }
+

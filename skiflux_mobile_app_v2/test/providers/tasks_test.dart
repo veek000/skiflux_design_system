@@ -3,15 +3,15 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skiflux_mobile_app_v2/features/tasks/data/episode_tasks_repository.dart';
-import 'package:skiflux_mobile_app_v2/features/tasks/data/models/episode_task_models.dart';
-import 'package:skiflux_mobile_app_v2/features/tasks/data/models/platform_task.dart';
-import 'package:skiflux_mobile_app_v2/features/tasks/data/platform_tasks_repository.dart';
-import 'package:skiflux_mobile_app_v2/features/tasks/data/skillcoin_display.dart';
-import 'package:skiflux_mobile_app_v2/features/tasks/data/tasks_store.dart';
-import 'package:skiflux_mobile_app_v2/features/wallet/data/wallet_store.dart';
-import 'package:skiflux_mobile_app_v2/shared/error_handling/error_handler.dart';
-import 'package:skiflux_mobile_app_v2/shared/network/token_store.dart';
+import 'package:skiflux/features/tasks/data/episode_tasks_repository.dart';
+import 'package:skiflux/features/tasks/data/models/episode_task_models.dart';
+import 'package:skiflux/features/tasks/data/models/platform_task.dart';
+import 'package:skiflux/features/tasks/data/platform_tasks_repository.dart';
+import 'package:skiflux/features/tasks/data/skillcoin_display.dart';
+import 'package:skiflux/features/tasks/data/tasks_store.dart';
+import 'package:skiflux/features/wallet/data/wallet_store.dart';
+import 'package:skiflux/shared/error_handling/error_handler.dart';
+import 'package:skiflux/shared/network/token_store.dart';
 
 void main() {
   late ProviderContainer container;
@@ -807,3 +807,4 @@ class _FakeTokenStore extends TokenStore {
   @override
   Future<bool> hasSession() async => signedIn;
 }
+

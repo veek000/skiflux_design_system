@@ -1,4 +1,4 @@
-name: skiflux_mobile_app_v2
+name: skiflux
 description: Skiflux mobile app v2 — companion app for the Skiflux design system; run on emulator to preview screens.
 publish_to: none
 version: 1.0.0+1
@@ -169,3 +169,4 @@ flutter:
     - assets/brand/
     # SkillCoin mark on the transaction details summary (Figma 3664:13267).
     - assets/wallet/
+

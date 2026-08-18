@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:skiflux_mobile_app_v2/features/profile/data/public_user_profile_provider.dart';
+import 'package:skiflux/features/profile/data/public_user_profile_provider.dart';
 
 /// The spec's `PublicUserProfile`, field for field. The mapping used to guess
 /// `display_name`, `league`, `tasks_done` and `skills` — none of which exist —
@@ -123,3 +123,4 @@ void main() {
     });
   });
 }
+
