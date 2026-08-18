@@ -16,9 +16,11 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../config/env_config.dart';
 import '../../../shared/error_handling/error_handler.dart';
 import '../../../shared/network/token_store.dart';
 import '../../../shared/utils/formatting.dart';
+import '../../home/data/home_feed_store.dart';
 import '../../playlists/data/season_providers.dart';
 import 'subscriptions_repository.dart';
 
@@ -138,6 +140,10 @@ class SubscriptionEpisode {
     this.thumbnailUrl,
     this.videoUrl,
     this.season,
+    this.likeCount,
+    this.commentCount,
+    this.saveCount,
+    this.durationSeconds = 0,
   });
 
   /// Spec `Episode` — the same schema the home feed parses.
@@ -149,17 +155,17 @@ class SubscriptionEpisode {
     if (creator is Map) {
       creatorUsername = _string(creator['username']) ?? '';
       creatorId = creator['id']?.toString() ?? '';
-      creatorName = _string(creator['name']) ?? creatorUsername;
+      creatorName = _string(creator['name']) ??
+          _string(creator['display_name']) ??
+          creatorUsername;
     }
     final createdAt = DateTime.tryParse(
       _string(json['created_at']) ?? '',
     )?.toLocal();
     final age = createdAt == null ? null : DateTime.now().difference(createdAt);
     final order = json['order'];
-    final durationSeconds = json['video_duration'] is int
-        ? json['video_duration'] as int
-        : 0;
-    final viewCount = json['view_count'] is int ? json['view_count'] as int : 0;
+    final durationSeconds = _int(json['video_duration']) ?? 0;
+    final viewCount = _int(json['view_count']) ?? 0;
     final seasonId = _string(json['season_id']);
 
     return SubscriptionEpisode(
@@ -177,8 +183,15 @@ class SubscriptionEpisode {
       // are presentation heuristics over `created_at`, not backend flags.
       isNew: age != null && age.inHours < 72,
       postedToday: age != null && age.inHours < 24,
-      thumbnailUrl: _string(json['thumbnail_url']),
-      videoUrl: _string(json['video_url']),
+      thumbnailUrl:
+          _string(json['thumbnail_url']) ?? _string(json['preview_url']),
+      videoUrl: _string(json['video_url']) ??
+          _string(json['stream_url']) ??
+          _string(json['playback_url']),
+      likeCount: _int(json['like_count']),
+      commentCount: _int(json['comment_count']),
+      saveCount: _int(json['save_count']),
+      durationSeconds: durationSeconds,
       season: seasonId == null
           ? null
           : SeasonArg(
@@ -212,6 +225,14 @@ class SubscriptionEpisode {
   final String? thumbnailUrl;
   final String? videoUrl;
 
+  /// Engagement counts for the player rail (same fields as home feed).
+  final int? likeCount;
+  final int? commentCount;
+  final int? saveCount;
+
+  /// Raw duration in seconds — for view tracking / progress.
+  final int durationSeconds;
+
   /// The season this episode belongs to, when the caller knew it.
   ///
   /// Null on a row parsed from a payload that carried no `season_id`, and on
@@ -224,7 +245,44 @@ class SubscriptionEpisode {
   bool get isContinueWatching => watchProgress > 0 && watchProgress < 1;
   bool get hasThumbnail => thumbnailUrl != null && thumbnailUrl!.isNotEmpty;
 
-  String get epTag => 'EP ${epNumber.toString().padLeft(2, '0')}';
+  String get epTag => epNumber > 0
+      ? 'EP ${epNumber.toString().padLeft(2, '0')}'
+      : 'EP';
+
+  /// Shape the subscription player modal hands to [VideoFeedCard].
+  HomeFeedItem toFeedItem({String? creatorNameOverride, String? creatorInitials}) {
+    final stream = _absoluteMediaUrl(videoUrl);
+    final cover = _absoluteMediaUrl(thumbnailUrl);
+    final hasVideo = stream != null && stream.isNotEmpty;
+    return HomeFeedItem(
+      type: hasVideo ? FeedContentType.video : FeedContentType.image,
+      epTag: epTag,
+      title: title,
+      description: description.isNotEmpty
+          ? description
+          : (creatorNameOverride ?? creatorName),
+      coverAsset: 'assets/home_video_cover.png',
+      coverUrl: cover,
+      videoUrl: stream,
+      creatorName: creatorNameOverride ?? creatorName,
+      creatorUsername: creatorUsername,
+      creatorInitials: creatorInitials ??
+          (creatorName.isNotEmpty
+              ? creatorName[0].toUpperCase()
+              : (creatorUsername.isNotEmpty
+                    ? creatorUsername[0].toUpperCase()
+                    : 'C')),
+      episodeId: id.isEmpty ? null : id,
+      creatorId: creatorId.isEmpty ? null : creatorId,
+      likeCount: likeCount,
+      commentCount: commentCount,
+      saveCount: saveCount,
+      durationSeconds: durationSeconds > 0 ? durationSeconds : null,
+      seasonId: season?.id,
+      seasonTitle: season?.title,
+      skillworld: season?.skillworld,
+    );
+  }
 
   /// "22k views · 5 hrs ago", dropping either half the payload didn't carry
   /// rather than printing a dangling separator around a blank.
@@ -537,4 +595,27 @@ String? _string(Object? value) {
   if (value == null) return null;
   final s = value.toString().trim();
   return s.isEmpty ? null : s;
+}
+
+int? _int(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value.trim());
+  return null;
+}
+
+/// Absolute HTTPS URL for CDN / API media. Relative paths are joined to
+/// [EnvConfig.apiBaseUrl] — a bare `/media/…` string made [VideoPlayer] fail
+/// silently in the subscription modal.
+String? _absoluteMediaUrl(String? url) {
+  if (url == null) return null;
+  final trimmed = url.trim();
+  if (trimmed.isEmpty) return null;
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed;
+  }
+  if (!EnvConfig.isApiBaseUrlConfigured) return trimmed;
+  final base = EnvConfig.apiBaseUrl.replaceAll(RegExp(r'/$'), '');
+  if (trimmed.startsWith('/')) return '$base$trimmed';
+  return '$base/$trimmed';
 }

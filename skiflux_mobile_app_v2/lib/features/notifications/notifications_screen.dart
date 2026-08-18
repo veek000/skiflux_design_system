@@ -9,6 +9,7 @@ import '../../shared/error_handling/error_handler.dart';
 import '../../shared/widgets/load_failure.dart';
 import '../../shared/widgets/loading_skeletons.dart';
 import 'data/notifications_store.dart';
+import 'notification_router.dart';
 
 // Figma: **Notification Flow** (`1256:28688`) — Notifications screen
 // (`1256:30744`) + empty state (`1256:30972`). All/Unread text tabs with
@@ -271,8 +272,7 @@ class _NotificationCard extends ConsumerWidget {
           ? SkifluxColors.backgroundBrandOpacity50
           : SkifluxColors.backgroundPrimary,
       child: InkWell(
-        onTap: () =>
-            ref.read(notificationsProvider.notifier).markRead(notification),
+        onTap: () => unawaited(openAppNotification(context, ref, notification)),
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
@@ -326,7 +326,9 @@ class _NotificationCard extends ConsumerWidget {
                       SkifluxButton(
                         label: notification.action!,
                         size: SkifluxButtonSize.s,
-                        onPressed: () {},
+                        onPressed: () => unawaited(
+                          openAppNotification(context, ref, notification),
+                        ),
                       ),
                     ],
                     const SizedBox(height: SkifluxSpacing.spaceXs),

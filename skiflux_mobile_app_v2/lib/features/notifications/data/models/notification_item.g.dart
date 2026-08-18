@@ -17,6 +17,7 @@ _NotificationItem _$NotificationItemFromJson(Map<String, dynamic> json) =>
           : DateTime.parse(json['created_at'] as String),
       isRead: json['is_read'] as bool? ?? false,
       actionLabel: json['action_label'] as String?,
+      data: json['data'] as Map<String, dynamic>? ?? const <String, dynamic>{},
     );
 
 Map<String, dynamic> _$NotificationItemToJson(_NotificationItem instance) =>
@@ -28,4 +29,5 @@ Map<String, dynamic> _$NotificationItemToJson(_NotificationItem instance) =>
       'created_at': instance.createdAt?.toIso8601String(),
       'is_read': instance.isRead,
       'action_label': instance.actionLabel,
+      'data': instance.data,
     };

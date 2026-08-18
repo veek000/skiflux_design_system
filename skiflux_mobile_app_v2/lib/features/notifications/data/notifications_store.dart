@@ -28,6 +28,8 @@ class AppNotification {
     this.action,
     this.unread = false,
     this.id,
+    this.type = '',
+    this.data = const {},
   });
 
   /// Server id, needed to sync a read back to `POST /me/{id}/read`. Null on
@@ -47,6 +49,12 @@ class AppNotification {
 
   final String? action;
   bool unread;
+
+  /// Server `type` string (`assessment_perfect_score`, `task_approved_with_coins`, …).
+  final String type;
+
+  /// Deep-link payload from `NotificationItem.data` (episode_id, task_id, …).
+  final Map<String, dynamic> data;
 }
 
 /// Store: the live feed (or the demo seed until it answers) + unread
@@ -161,6 +169,8 @@ class NotificationsNotifier extends Notifier<List<AppNotification>> {
       time: item.createdAt ?? DateTime.now(),
       action: item.actionLabel,
       unread: !item.isRead,
+      type: item.type,
+      data: item.data,
     );
   }
 
@@ -199,6 +209,8 @@ class NotificationsNotifier extends Notifier<List<AppNotification>> {
     'streak': 'flash',
     'task': 'task',
     'submission': 'task',
+    'assessment': 'task',
+    'perfect_score': 'award',
     'episode': 'play',
     'video': 'play',
     'coin': 'coins',

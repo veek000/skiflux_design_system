@@ -354,6 +354,24 @@ void main() {
       expect(row.audioPath, '/tmp/keep.m4a');
       expect(row.audioUrl, isNotNull);
     });
+
+    test('reload without audio_url keeps a playable voicenote, not a blank',
+        () async {
+      // Regression: server echoed the comment as empty text (no audio_url) →
+      // UI showed "0:10" then a blank bubble.
+      final repo = _FakeCommentsRepository(voiceOmitsAudioUrl: true);
+      final c = withRepo(repo);
+      c.read(commentsProvider.notifier).init('ep-1');
+      await pumpEventQueue();
+
+      await c.read(commentsProvider.notifier).addVoiceNote('/tmp/blank-bug.m4a');
+      await pumpEventQueue();
+
+      final row = c.read(commentsProvider).comments.single;
+      expect(row.body, SkifluxCommentBody.voicenote);
+      expect(row.audioPath, '/tmp/blank-bug.m4a');
+      expect(row.message, anyOf(isNull, isEmpty));
+    });
   });
 }
 
@@ -364,12 +382,17 @@ class _FakeCommentsRepository extends CommentsRepository {
     this.failPost = false,
     this.failLike = false,
     this.failVoice = false,
+    this.voiceOmitsAudioUrl = false,
   }) : super(Dio());
 
   List<CommentItem> comments;
   bool failPost;
   bool failLike;
   bool failVoice;
+
+  /// When true, the echoed voice comment has no `audio_url` — the blank-bubble
+  /// regression the store must still keep playable via the local path.
+  bool voiceOmitsAudioUrl;
 
   final List<String> loads = [];
   final List<(String, String)> posted = [];
@@ -414,7 +437,10 @@ class _FakeCommentsRepository extends CommentsRepository {
         id: 2000 + voicePosts.length,
         first: 'You',
         last: '',
-        audioUrl: 'https://cdn.skiflux.test/note.m4a',
+        text: voiceOmitsAudioUrl ? null : null,
+        audioUrl: voiceOmitsAudioUrl
+            ? null
+            : 'https://cdn.skiflux.test/note.m4a',
       ),
     );
     comments = [...comments, created];

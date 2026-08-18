@@ -37,6 +37,9 @@ abstract class NotificationItem with _$NotificationItem {
     /// Label for the optional action pill ("Watch EP. 04"). Absent for
     /// informational cards.
     String? actionLabel,
+
+    /// Deep-link map from `NotificationItem.data` (episode_id, season_id, …).
+    @Default(<String, dynamic>{}) Map<String, dynamic> data,
   }) = _NotificationItem;
 
   factory NotificationItem.fromJson(Map<String, dynamic> json) =>

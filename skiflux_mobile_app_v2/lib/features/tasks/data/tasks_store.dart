@@ -91,6 +91,8 @@ class LearningTask {
     var status = statusFrom(task.status, submitted: task.submittedAt != null);
     String? feedback;
     int? quizCorrect;
+    List<int?>? quizAnswers;
+    final revealed = <String, int>{};
     if (latestSubmission != null) {
       status = statusFrom(latestSubmission.status, submitted: true);
       if (status == LearningTaskStatus.actionNeeded) {
@@ -99,6 +101,20 @@ class LearningTask {
       final score = latestSubmission.scorePercent;
       if (isQuiz && score != null && task.questions.isNotEmpty) {
         quizCorrect = ((score * task.questions.length) / 100).round();
+      }
+      // Reveal answer keys + restore picks from the graded submission blob
+      // so Review Answers works after a cold start.
+      if (isQuiz && latestSubmission.gradedAnswers.isNotEmpty) {
+        quizAnswers = [
+          for (final q in task.questions)
+            q.id == null
+                ? null
+                : latestSubmission.gradedAnswers[q.id!]?.selectedIndex,
+        ];
+        for (final entry in latestSubmission.gradedAnswers.entries) {
+          final correct = entry.value.correctIndex;
+          if (correct != null) revealed[entry.key] = correct;
+        }
       }
     }
 
@@ -129,7 +145,8 @@ class LearningTask {
                   id: q.id,
                   prompt: q.questionText,
                   options: q.options,
-                  correctIndex: q.correctIndex,
+                  correctIndex: (q.id != null ? revealed[q.id!] : null) ??
+                      q.correctIndex,
                 ),
             ],
           )
@@ -157,7 +174,9 @@ class LearningTask {
         slaHours: task.slaTimeLimitHours,
         fromBackend: true,
       )
-      ..quizCorrect = quizCorrect;
+      ..quizCorrect = quizCorrect
+      ..quizAnswers = quizAnswers
+      ..revealedCorrectByQuestionId = revealed;
   }
 
   final String id;
@@ -209,6 +228,62 @@ class LearningTask {
   /// Correct count from the last quiz attempt (or derived from the backend's
   /// `score_percent` when hydrating).
   int? quizCorrect;
+
+  /// Question UUID → correct option index, revealed from a graded submission.
+  /// Applied when opening Review so green/red highlights work even though
+  /// `AssessmentQuestionResponse` omits `correct_answer` during the test.
+  Map<String, int> revealedCorrectByQuestionId = {};
+
+  /// Quiz payload with revealed answer keys merged in for Review Answers.
+  QuizData? get quizForReview {
+    final base = quiz;
+    if (base == null) return null;
+    if (revealedCorrectByQuestionId.isEmpty &&
+        base.questions.every((q) => q.correctIndex >= 0)) {
+      return base;
+    }
+    return QuizData(
+      introBody: base.introBody,
+      questionCount: base.questionCount,
+      minutes: base.minutes,
+      passPercent: base.passPercent,
+      rewardCoins: base.rewardCoins,
+      rewardXp: base.rewardXp,
+      timerSeconds: base.timerSeconds,
+      questions: [
+        for (final q in base.questions)
+          QuizQuestion(
+            id: q.id,
+            prompt: q.prompt,
+            options: q.options,
+            correctIndex: (q.id != null
+                    ? revealedCorrectByQuestionId[q.id!]
+                    : null) ??
+                q.correctIndex,
+          ),
+      ],
+    );
+  }
+
+  /// Merge graded submission answers into this task for scoring + review.
+  void applyGradedSubmission(UserSubmission submission) {
+    if (submission.gradedAnswers.isEmpty) return;
+    for (final entry in submission.gradedAnswers.entries) {
+      final correct = entry.value.correctIndex;
+      if (correct != null) {
+        revealedCorrectByQuestionId[entry.key] = correct;
+      }
+    }
+    final base = quiz;
+    if (base != null && quizAnswers == null) {
+      quizAnswers = [
+        for (final q in base.questions)
+          q.id == null
+              ? null
+              : submission.gradedAnswers[q.id!]?.selectedIndex,
+      ];
+    }
+  }
 
   String get coinsLabel => formatSkillcoin(coins);
   bool get hasCoinReward => coins > Decimal.zero;
@@ -650,18 +725,29 @@ class TasksNotifier extends Notifier<TasksState> {
     state = state.copyWith(learning: List<LearningTask>.of(state.learning));
   }
 
-  /// Persist quiz answers + score and mark the task completed when passed.
+  /// Persist quiz answers + score and mark the task completed when passed,
+  /// or action-needed when failed (so a failed attempt is not left looking
+  /// "pending" until the next cold start flips it from the server).
   void recordQuizResult({
     required String id,
     required List<int?> answers,
     required int correct,
     required bool passed,
+    UserSubmission? submission,
   }) {
     final t = state.byId(id);
     if (t == null) return;
     t.quizAnswers = List<int?>.from(answers);
     t.quizCorrect = correct;
-    if (passed) t.status = LearningTaskStatus.completed;
+    if (submission != null) t.applyGradedSubmission(submission);
+    t.status = passed
+        ? LearningTaskStatus.completed
+        : LearningTaskStatus.actionNeeded;
+    if (!passed) {
+      t.feedback = 'Score below the pass mark — review and try again.';
+    } else {
+      t.feedback = null;
+    }
     state = state.copyWith(learning: List<LearningTask>.of(state.learning));
   }
 

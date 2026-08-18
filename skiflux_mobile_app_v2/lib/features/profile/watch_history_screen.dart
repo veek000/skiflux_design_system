@@ -10,6 +10,7 @@ import '../../shared/toast/skiflux_toast.dart';
 import '../../shared/widgets/clear_all_action.dart';
 import '../../shared/widgets/load_failure.dart';
 import 'data/download_action.dart';
+import 'data/downloads_store.dart';
 import 'data/library_episode.dart';
 import 'data/library_repository.dart';
 import 'data/library_store.dart';
@@ -175,13 +176,19 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
   }
 
   Future<void> _openRowMenu(WatchHistoryEntry entry) async {
-    final action = await showWatchHistoryMenuSheet(context);
+    final action = await showWatchHistoryMenuSheet(
+      context,
+      episodeId: entry.episode.id,
+    );
     if (!mounted || action == null) return;
     switch (action) {
       case WatchHistoryMenuAction.remove:
         await _remove(entry);
       case WatchHistoryMenuAction.download:
         await downloadEpisode(context, ref, entry.episode);
+      case WatchHistoryMenuAction.deleteDownload:
+        await ref.read(downloadsProvider.notifier).remove(entry.episode.id);
+        if (mounted) SkifluxToast.success(context, 'Download deleted');
       case WatchHistoryMenuAction.save:
         await _save(entry.episode);
       case WatchHistoryMenuAction.share:
@@ -263,22 +270,29 @@ String _clock(DateTime at) {
 }
 
 /// Row actions from the Watch History More Menu (`1256:24327`).
-enum WatchHistoryMenuAction { remove, download, save, share }
+enum WatchHistoryMenuAction { remove, download, deleteDownload, save, share }
 
 Future<WatchHistoryMenuAction?> showWatchHistoryMenuSheet(
-  BuildContext context,
-) {
+  BuildContext context, {
+  String? episodeId,
+}) {
   return showSkifluxSheet<WatchHistoryMenuAction>(
     context: context,
-    builder: (_) => const _WatchHistoryMenuSheet(),
+    builder: (_) => _WatchHistoryMenuSheet(episodeId: episodeId),
   );
 }
 
-class _WatchHistoryMenuSheet extends StatelessWidget {
-  const _WatchHistoryMenuSheet();
+class _WatchHistoryMenuSheet extends ConsumerWidget {
+  const _WatchHistoryMenuSheet({this.episodeId});
+
+  final String? episodeId;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final downloaded = episodeId != null &&
+        ref.watch(downloadsProvider).any(
+              (d) => d.episode.id == episodeId && d.isComplete,
+            );
     return SkifluxSheetShell(
       title: 'More Menu',
       child: ListView(
@@ -295,9 +309,14 @@ class _WatchHistoryMenuSheet extends StatelessWidget {
           ),
           _row(
             context,
-            icon: RemixIcons.download_fill,
-            label: 'Downloads',
-            action: WatchHistoryMenuAction.download,
+            icon: downloaded
+                ? RemixIcons.delete_bin_fill
+                : RemixIcons.download_fill,
+            label: downloaded ? 'Delete Download' : 'Downloads',
+            action: downloaded
+                ? WatchHistoryMenuAction.deleteDownload
+                : WatchHistoryMenuAction.download,
+            color: downloaded ? SkifluxColors.contentNegative : null,
           ),
           _row(
             context,
@@ -321,7 +340,9 @@ class _WatchHistoryMenuSheet extends StatelessWidget {
     required IconData icon,
     required String label,
     required WatchHistoryMenuAction action,
+    Color? color,
   }) {
+    final tint = color ?? SkifluxColors.contentPrimary;
     return InkWell(
       onTap: () => Navigator.of(context).pop(action),
       child: SizedBox(
@@ -331,14 +352,14 @@ class _WatchHistoryMenuSheet extends StatelessWidget {
             Icon(
               icon,
               size: SkifluxIcons.sizeM,
-              color: SkifluxColors.contentPrimary,
+              color: tint,
             ),
             const SizedBox(width: SkifluxSpacing.spaceL),
             Expanded(
               child: Text(
                 label,
                 style: SkifluxTypography.uiButtonLarge.copyWith(
-                  color: SkifluxColors.contentPrimary,
+                  color: tint,
                 ),
               ),
             ),

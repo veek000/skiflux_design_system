@@ -41,9 +41,13 @@ class FakeFcmService extends FcmService {
   }
 
   @override
-  void deliverForegroundCopy({required String title, required String body}) {
+  void deliverForegroundCopy({
+    required String title,
+    required String body,
+    Map<String, dynamic> data = const {},
+  }) {
     displayed.add(body);
-    onForegroundDisplay?.call(title: title, body: body);
+    onForegroundDisplay?.call(title: title, body: body, data: data);
   }
 }
 
@@ -109,7 +113,7 @@ void main() {
     test('foreground message invokes onForegroundDisplay callback', () async {
       final fake = FakeFcmService();
       final seen = <String>[];
-      fake.onForegroundDisplay = ({required title, required body}) {
+      fake.onForegroundDisplay = ({required title, required body, data = const {}}) {
         seen.add('$title|$body');
       };
 
@@ -135,7 +139,8 @@ void main() {
                 body: Builder(
                   builder: (context) {
                     // Wire the same path the app shell uses.
-                    fake.onForegroundDisplay = ({required title, required body}) {
+                    fake.onForegroundDisplay =
+                        ({required title, required body, data = const {}}) {
                       SkifluxToast.info(context, body);
                     };
                     return const Text('host');

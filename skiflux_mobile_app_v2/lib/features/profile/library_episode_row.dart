@@ -181,14 +181,17 @@ class _Thumbnail extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             _cover(),
-            Positioned(
-              top: SkifluxSpacing.spaceS,
-              left: SkifluxSpacing.spaceS,
-              child: _pill(
-                episode.epTag,
-                background: SkifluxColors.contentBrand,
+            // Only draw the pill when we know the episode number — a bare
+            // "EP" (order missing from a feed→download handoff) looked broken.
+            if (episode.order != null)
+              Positioned(
+                top: SkifluxSpacing.spaceS,
+                left: SkifluxSpacing.spaceS,
+                child: _pill(
+                  episode.epTag,
+                  background: SkifluxColors.contentBrand,
+                ),
               ),
-            ),
             if (episode.durationLabel.isNotEmpty)
               Positioned(
                 bottom: SkifluxSpacing.spaceS,

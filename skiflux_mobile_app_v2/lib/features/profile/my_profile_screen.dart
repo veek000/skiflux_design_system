@@ -17,6 +17,7 @@ import '../wallet/wallet_screen.dart';
 import 'badges_screen.dart';
 import 'change_skill_world_sheet.dart';
 import 'data/download_action.dart';
+import 'data/downloads_store.dart';
 import 'data/library_episode.dart';
 import 'data/library_repository.dart';
 import 'data/library_store.dart';
@@ -684,7 +685,10 @@ class _WatchHistoryCard extends ConsumerWidget {
   /// Same handlers as the Watch History screen's rows, so the sheet behaves
   /// identically wherever it is opened from.
   Future<void> _openRowMenu(BuildContext context, WidgetRef ref) async {
-    final action = await showWatchHistoryMenuSheet(context);
+    final action = await showWatchHistoryMenuSheet(
+      context,
+      episodeId: entry.episode.id,
+    );
     if (!context.mounted || action == null) return;
     switch (action) {
       case WatchHistoryMenuAction.remove:
@@ -704,6 +708,11 @@ class _WatchHistoryCard extends ConsumerWidget {
         }
       case WatchHistoryMenuAction.download:
         await downloadEpisode(context, ref, entry.episode);
+      case WatchHistoryMenuAction.deleteDownload:
+        await ref.read(downloadsProvider.notifier).remove(entry.episode.id);
+        if (context.mounted) {
+          SkifluxToast.success(context, 'Download deleted');
+        }
       case WatchHistoryMenuAction.save:
         // Really saves, same as the Watch History screen's own row menu — the
         // episode shows up under Saved Videos afterwards.

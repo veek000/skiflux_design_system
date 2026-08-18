@@ -71,16 +71,15 @@ class NotificationsRepository extends ApiRepository {
   ///
   /// Public so provider tests can exercise the alias handling without a Dio
   /// round trip.
-  // TODO(backend, blocking): `NotificationItem.data` is typed `{}` — the app
-  // reads the action pill's label and deep-link target out of it and cannot
-  // know what it carries — expects: data: {action_label: String?, action_type:
-  // String?, episode_id: String?, comment_id: String?}, plus the enumerated
-  // `type` vocabulary so the icon table can stop matching on substrings
+  /// Spec now documents `data` deep-link keys by type (episode_id, season_id,
+  /// submission_id, …). Kept as a free map so unknown keys still round-trip.
   static NotificationItem parse(Map<String, dynamic> json) {
     // The documented `data` object is where anything beyond the six flat fields
     // has to live.
     final data = json['data'];
-    final nested = data is Map ? Map<String, dynamic>.from(data) : const {};
+    final nested = data is Map
+        ? Map<String, dynamic>.from(data)
+        : const <String, dynamic>{};
 
     return NotificationItem(
       id: _string(json, const ['id', 'notification_id', 'uuid']),
@@ -100,7 +99,6 @@ class NotificationsRepository extends ApiRepository {
         'time',
       ]),
       isRead: _isRead(json),
-      // Not a schema field at any level — `data` is the only candidate.
       actionLabel:
           _optionalString(nested, const [
             'action_label',
@@ -108,6 +106,7 @@ class NotificationsRepository extends ApiRepository {
             'cta_label',
           ]) ??
           _optionalString(json, const ['action_label', 'action', 'cta_label']),
+      data: nested,
     );
   }
 

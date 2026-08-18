@@ -53,6 +53,10 @@ class VideoFeedCard extends ConsumerStatefulWidget {
     this.borderRadius,
     /// When false (e.g. off-screen PageView page), playback is paused.
     this.isActive = true,
+    /// When false, ignore [ModalRoute.isCurrent] (subscription / library
+    /// player sheets). Those routes can report not-current while still
+    /// visible, which left the video paused on a frozen cover.
+    this.pauseWhenRouteCovered = true,
     this.onOpenEpisode,
   });
 
@@ -74,6 +78,9 @@ class VideoFeedCard extends ConsumerStatefulWidget {
   /// Parent sets this from the vertical PageView index so only the visible
   /// card plays audio-less video.
   final bool isActive;
+
+  /// See constructor — false inside modal player sheets.
+  final bool pauseWhenRouteCovered;
 
   /// Called when the user picks another episode of this season out of the EP
   /// chip's sheet, and the card is inside a scrollable feed that can show it.
@@ -234,8 +241,10 @@ class _VideoFeedCardState extends ConsumerState<VideoFeedCard> {
     if (c == null || !_ready) return;
     // Full screen owns the clock — pausing here would freeze FS mid-play.
     if (_playerHandedOff) return;
-    final isCurrentRoute = ModalRoute.of(context)?.isCurrent ?? true;
-    if (widget.isActive && isCurrentRoute) {
+    final route = ModalRoute.of(context);
+    final routeAllowsPlay = !widget.pauseWhenRouteCovered ||
+        (route?.isCurrent ?? true);
+    if (widget.isActive && routeAllowsPlay) {
       // A card the user paused by hand stays paused while it is on screen —
       // otherwise any rebuild (a tick, a like, a count change) would restart
       // playback under their finger.

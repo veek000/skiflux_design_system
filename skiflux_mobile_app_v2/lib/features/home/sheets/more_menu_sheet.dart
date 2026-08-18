@@ -115,14 +115,19 @@ class _MoreMenuSheet extends ConsumerWidget {
               await showPlaybackSpeedSheet(context);
             },
           ),
-          // Only offered when there is a file to fetch. An episode with no
-          // `video_url` (or no backend id to key a download on) has nothing
-          // to download, and the row used to invite one anyway.
-          if (canDownload)
+          // Download / delete offline copy. Hidden when there is nothing to
+          // fetch and nothing on disk. When already downloaded the row is
+          // "Delete Download" — keeping "Download" invited a no-op toast.
+          if (canDownload || _isDownloaded(ref))
             _MenuRow(
-              icon: RemixIcons.download_fill,
+              icon: _isDownloaded(ref)
+                  ? RemixIcons.delete_bin_fill
+                  : RemixIcons.download_fill,
               label: _downloadLabel(ref),
-              onTap: () => _download(context, ref),
+              color: _isDownloaded(ref)
+                  ? SkifluxColors.contentNegative
+                  : SkifluxColors.contentPrimary,
+              onTap: () => _downloadOrDelete(context, ref),
             ),
           _MenuRow(
             icon: RemixIcons.fullscreen_fill,
@@ -183,26 +188,44 @@ class _MoreMenuSheet extends ConsumerWidget {
     );
   }
 
-  /// "Download Episode" / "Downloaded" / "Downloading…", so the row reports
-  /// what is actually on the device rather than always inviting a download.
-  String _downloadLabel(WidgetRef ref) {
+  bool _isDownloaded(WidgetRef ref) {
     final id = episodeId;
-    if (id == null) return 'Download Episode';
+    if (id == null) return false;
     for (final d in ref.watch(downloadsProvider)) {
-      if (d.episode.id != id) continue;
-      if (d.isComplete) return 'Downloaded';
-      if (d.isDownloading) return 'Downloading…';
+      if (d.episode.id == id && d.isComplete) return true;
     }
+    return false;
+  }
+
+  bool _isDownloading(WidgetRef ref) {
+    final id = episodeId;
+    if (id == null) return false;
+    for (final d in ref.watch(downloadsProvider)) {
+      if (d.episode.id == id && d.isDownloading) return true;
+    }
+    return false;
+  }
+
+  /// "Download Episode" / "Delete Download" / "Downloading…".
+  String _downloadLabel(WidgetRef ref) {
+    if (_isDownloaded(ref)) return 'Delete Download';
+    if (_isDownloading(ref)) return 'Downloading…';
     return 'Download Episode';
   }
 
-  /// Real download: streams `video_url` to the device and registers it, so the
-  /// episode plays offline. This used to be a toast and nothing else — the
-  /// "queued for download" message described a queue that did not exist.
-  Future<void> _download(BuildContext context, WidgetRef ref) async {
+  /// Download when missing; remove the offline pack when already complete.
+  Future<void> _downloadOrDelete(BuildContext context, WidgetRef ref) async {
+    final id = episodeId;
     final feedItem = item;
     Navigator.of(context).pop();
-    // Shared with the two watch-history row menus, which used to only toast.
+    if (id != null &&
+        ref.read(downloadsProvider.notifier).isDownloaded(id)) {
+      await ref.read(downloadsProvider.notifier).remove(id);
+      if (context.mounted) {
+        SkifluxToast.success(context, 'Download deleted');
+      }
+      return;
+    }
     await downloadEpisode(
       context,
       ref,

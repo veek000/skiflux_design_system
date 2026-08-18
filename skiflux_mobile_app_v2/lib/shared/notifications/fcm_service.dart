@@ -87,9 +87,13 @@ class FcmService {
   /// collector. Null = drop the message (still debug-logged).
   ///
   /// [title] / [body] are both filled so the tray can show a proper heading
-  /// instead of a generic "Skiflux" over the body alone.
-  void Function({required String title, required String body})?
-      onForegroundDisplay;
+  /// instead of a generic "Skiflux" over the body alone. [data] is the FCM
+  /// data map used to deep-link when the tray line is tapped.
+  void Function({
+    required String title,
+    required String body,
+    Map<String, dynamic> data,
+  })? onForegroundDisplay;
 
   /// Called when the user taps a notification, from background or a cold
   /// launch. The app shell sets this to open the Notifications screen.
@@ -247,13 +251,18 @@ class FcmService {
     deliverForegroundCopy(
       title: _titleFor(message),
       body: _bodyFor(message),
+      data: Map<String, dynamic>.from(message.data),
     );
   }
 
   /// Display path when the toast/tray copy is already known (tests / fakes).
-  void deliverForegroundCopy({required String title, required String body}) {
+  void deliverForegroundCopy({
+    required String title,
+    required String body,
+    Map<String, dynamic> data = const {},
+  }) {
     debugPrint('FCM foreground display: "$title" / "$body"');
-    onForegroundDisplay?.call(title: title, body: body);
+    onForegroundDisplay?.call(title: title, body: body, data: data);
   }
 
   static String _titleFor(RemoteMessage message) {

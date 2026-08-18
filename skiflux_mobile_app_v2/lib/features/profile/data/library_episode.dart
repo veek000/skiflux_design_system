@@ -192,6 +192,10 @@ class LibraryEpisode {
       creatorName: item.creatorName,
       creatorUsername: item.creatorUsername,
       creatorInitials: item.creatorInitials,
+      // Feed only carries the formatted `epTag` ("EP 04"); Downloads rows
+      // render [epTag] from [order]. Without this parse every download showed
+      // a bare "EP" pill.
+      order: orderFromEpTag(item.epTag),
       thumbnailUrl: item.coverUrl,
       videoUrl: item.videoUrl,
       durationSeconds: item.durationSeconds ?? 0,
@@ -200,6 +204,13 @@ class LibraryEpisode {
       saveCount: item.saveCount,
       skillworld: item.skillworld,
     );
+  }
+
+  /// `"EP 04"` / `"EP04"` → `4`. Null when the tag has no number.
+  static int? orderFromEpTag(String epTag) {
+    final match = RegExp(r'EP\s*(\d+)', caseSensitive: false).firstMatch(epTag);
+    if (match == null) return null;
+    return int.tryParse(match.group(1)!);
   }
 
   /// Wire-shaped, so it round-trips through [LibraryEpisode.fromJson].

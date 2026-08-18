@@ -4,9 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
 
+import '../../features/notifications/data/notifications_store.dart';
 import '../../shared/error_handling/error_display.dart';
 import '../../shared/error_handling/error_handler.dart';
+import '../../shared/notifications/local_notifications.dart';
+import '../../shared/toast/skiflux_toast.dart';
+import '../wallet/data/wallet_store.dart';
 import 'data/episode_tasks_repository.dart';
+import 'data/models/episode_task_models.dart';
 import 'data/tasks_store.dart';
 import 'quiz_result_screen.dart';
 
@@ -47,7 +52,8 @@ class _QuizAssessmentScreenState extends ConsumerState<QuizAssessmentScreen> {
     super.initState();
     // ConsumerState allows [ref] in initState (Riverpod 2+).
     _task = ref.read(tasksProvider).byId(widget.taskId);
-    _quiz = _task?.quiz;
+    // Review uses revealed answer keys from the graded submission.
+    _quiz = widget.reviewMode ? _task?.quizForReview : _task?.quiz;
     final q = _quiz;
     _answers = widget.priorAnswers != null
         ? List<int?>.from(widget.priorAnswers!)
@@ -118,15 +124,22 @@ class _QuizAssessmentScreenState extends ConsumerState<QuizAssessmentScreen> {
     if (quiz == null || !mounted) return;
 
     try {
-      var correct = 0;
-      for (var i = 0; i < quiz.questions.length; i++) {
-        if (_answers[i] == quiz.questions[i].correctIndex) correct++;
-      }
-      // Grade against the creator's threshold (integer math — no float
-      // rounding): the spec exposes `correct_answer` per question, which is
-      // what sanctions client-side grading for the instant result.
       final total = quiz.questions.length;
-      final passed = correct * 100 >= quiz.passPercent * total;
+      // Learner payloads use AssessmentQuestionResponse — no correct_answer.
+      // Local grading only works when every question still carries a key
+      // (legacy / demo). Otherwise we must trust the server submission.
+      final canGradeLocally =
+          total > 0 && quiz.questions.every((q) => q.correctIndex >= 0);
+
+      var correct = 0;
+      if (canGradeLocally) {
+        for (var i = 0; i < total; i++) {
+          if (_answers[i] == quiz.questions[i].correctIndex) correct++;
+        }
+      }
+      var passed = canGradeLocally
+          ? correct * 100 >= quiz.passPercent * total
+          : false;
 
       final task = ref.read(tasksProvider).byId(widget.taskId);
       // Store returns silently if the task vanished — treat that as a
@@ -135,12 +148,12 @@ class _QuizAssessmentScreenState extends ConsumerState<QuizAssessmentScreen> {
         throw const SkifluxFailure(SkifluxErrorKind.quizSubmission);
       }
 
-      // Live quizzes record the attempt on the backend BEFORE any result UI:
-      // `POST /episodes/task/submit` with answers keyed by question UUID.
-      // A failed write shows the quiz-submission modal and stays here — the
-      // picked answers survive for a retry. (When the payload carried no
-      // question ids — a spec gap — the result stays client-graded.)
+      // Live quizzes POST answers, then read score_percent / passed from the
+      // submission. Grading as 0 locally (missing answer keys) is what made
+      // every attempt show "Failed / 0" while the other APK correctly notified
+      // a pass from the server.
       final episodeId = task.episodeId;
+      UserSubmission? submission;
       if (task.fromBackend && episodeId != null) {
         final ids = [for (final q in quiz.questions) q.id];
         final canSubmit = ids.isNotEmpty &&
@@ -150,20 +163,46 @@ class _QuizAssessmentScreenState extends ConsumerState<QuizAssessmentScreen> {
           try {
             final answers = <String, String>{
               for (var i = 0; i < quiz.questions.length; i++)
-                if (_answers[i] != null && _answers[i]! >= 0 && _answers[i]! < 4)
+                if (_answers[i] != null &&
+                    _answers[i]! >= 0 &&
+                    _answers[i]! < 4)
                   ids[i]!: String.fromCharCode(65 + _answers[i]!),
             };
-            await ref.read(episodeTasksRepositoryProvider).submitAssessment(
-              episodeId: episodeId,
-              answers: answers,
-              timeTakenSeconds: DateTime.now()
-                  .difference(_openedAt)
-                  .inSeconds,
-            );
+            submission = await ref
+                .read(episodeTasksRepositoryProvider)
+                .submitAssessment(
+                  episodeId: episodeId,
+                  taskId: task.id,
+                  answers: answers,
+                  timeTakenSeconds: DateTime.now()
+                      .difference(_openedAt)
+                      .inSeconds,
+                );
           } finally {
             if (mounted) setState(() => _submitting = false);
           }
+        } else if (!canGradeLocally) {
+          throw const SkifluxFailure(SkifluxErrorKind.quizSubmission);
         }
+      }
+
+      if (submission != null) {
+        final score = submission.scorePercent;
+        if (score != null && total > 0) {
+          correct = ((score * total) / 100).round().clamp(0, total);
+        }
+        passed = submission.passed ??
+            (score != null && score >= quiz.passPercent);
+      } else if (!canGradeLocally && task.fromBackend) {
+        // Submitted but no score yet — don't claim 0%. Treat as in-review.
+        ref.read(tasksProvider.notifier).markInReview(widget.taskId);
+        if (!mounted) return;
+        SkifluxToast.info(
+          context,
+          'Answers submitted — results will appear when grading finishes.',
+        );
+        Navigator.of(context).pop();
+        return;
       }
 
       ref
@@ -173,7 +212,24 @@ class _QuizAssessmentScreenState extends ConsumerState<QuizAssessmentScreen> {
             answers: _answers,
             correct: correct,
             passed: passed,
+            submission: submission,
           );
+
+      // Pull notifications, wallet, and learning tasks so Review Answers can
+      // pick up graded `answers` (selected + correct) from /me/submissions.
+      unawaited(ref.read(notificationsProvider.notifier).refreshFromBackend());
+      unawaited(ref.read(tasksProvider.notifier).refreshLearningFromBackend());
+      if (passed) {
+        unawaited(ref.read(walletProvider.notifier).refreshFromBackend());
+        unawaited(
+          ref.read(localNotificationsProvider).showPush(
+            title: 'Assessment passed',
+            body: total > 0
+                ? 'You scored $correct/$total. Rewards are on the way.'
+                : 'You passed the assessment. Rewards are on the way.',
+          ),
+        );
+      }
 
       if (!mounted) return;
       await Navigator.of(context).pushReplacement(
@@ -307,10 +363,17 @@ class _QuizAssessmentScreenState extends ConsumerState<QuizAssessmentScreen> {
                     label: q.options[i],
                     selected: selected == i,
                     reviewMode: widget.reviewMode,
-                    isCorrect: i == q.correctIndex,
+                    // Only mark correct/wrong when a real answer key exists
+                    // (revealed after submit). correctIndex == -1 used to paint
+                    // every pick red and never show green.
+                    isCorrect:
+                        widget.reviewMode &&
+                        q.correctIndex >= 0 &&
+                        i == q.correctIndex,
                     isWrongPick:
                         widget.reviewMode &&
                         selected == i &&
+                        q.correctIndex >= 0 &&
                         i != q.correctIndex,
                     onTap: () => _select(i),
                   ),
@@ -385,12 +448,21 @@ class _OptionCard extends StatelessWidget {
         border = SkifluxColors.contentPositiveBold;
         circleBg = SkifluxColors.contentPositive;
         circleFg = SkifluxColors.contentPrimaryInverse;
+        textColor = SkifluxColors.contentPrimary;
       } else if (isWrongPick) {
         // User's wrong pick — red.
         bg = SkifluxColors.backgroundNegativeSubtle;
         border = SkifluxColors.contentNegativeBold;
         circleBg = SkifluxColors.backgroundNegative;
         circleFg = SkifluxColors.contentPrimaryInverse;
+        textColor = SkifluxColors.contentPrimary;
+      } else if (selected) {
+        // Key not revealed yet — still show what the learner picked.
+        bg = SkifluxColors.backgroundSelected;
+        border = SkifluxColors.contentBrand;
+        circleBg = SkifluxColors.backgroundBrand;
+        circleFg = SkifluxColors.contentPrimaryInverse;
+        textColor = SkifluxColors.contentPrimary;
       }
     } else if (selected) {
       bg = SkifluxColors.backgroundSelected;

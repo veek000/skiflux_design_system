@@ -95,22 +95,84 @@ class EpisodeTasksRepository extends ApiRepository {
 
   /// Assessment answers — `{question_uuid: "A".."D"}` per
   /// `AssessmentSubmissionInputRequest`.
-  Future<void> submitAssessment({
+  ///
+  /// Returns the graded [UserSubmission] when the API echoes one (or after a
+  /// follow-up `GET /me/submissions`). Learner-facing question payloads use
+  /// `AssessmentQuestionResponse`, which **omits** `correct_answer`, so the
+  /// client cannot grade locally and must use this result for the score UI.
+  Future<UserSubmission?> submitAssessment({
     required String episodeId,
     required Map<String, String> answers,
+    String? taskId,
     int? timeTakenSeconds,
-  }) => post<void>(
-    submitPath,
-    body: {
-      'episode_id': episodeId,
-      'assessment_submission': {
-        'answers': answers,
-        if (timeTakenSeconds != null && timeTakenSeconds >= 0)
-          'time_taken_seconds': timeTakenSeconds,
+  }) => guard(() async {
+    final response = await dio.post<dynamic>(
+      submitPath,
+      data: {
+        'episode_id': episodeId,
+        'assessment_submission': {
+          'answers': answers,
+          if (timeTakenSeconds != null && timeTakenSeconds >= 0)
+            'time_taken_seconds': timeTakenSeconds,
+        },
       },
-    },
-    kind: SkifluxErrorKind.quizSubmission,
-  );
+    );
+    final echoed = _tryParseSubmission(response.data);
+    if (echoed != null) return echoed;
+
+    // Spec documents 200 with no body — pull the latest assessment row.
+    return latestAssessmentSubmission(
+      episodeId: episodeId,
+      taskId: taskId,
+    );
+  }, kind: SkifluxErrorKind.quizSubmission);
+
+  /// Newest assessment submission for [episodeId] (optionally [taskId]).
+  Future<UserSubmission?> latestAssessmentSubmission({
+    required String episodeId,
+    String? taskId,
+  }) async {
+    final rows = await getMySubmissions(episodeId: episodeId, pageSize: 20);
+    final matches = [
+      for (final row in rows)
+        if (_isAssessment(row) &&
+            (taskId == null ||
+                taskId.isEmpty ||
+                row.taskId == taskId ||
+                row.taskId.isEmpty))
+          row,
+    ];
+    if (matches.isEmpty) return null;
+    matches.sort((a, b) {
+      final ad = a.sortDate ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bd = b.sortDate ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return bd.compareTo(ad);
+    });
+    return matches.first;
+  }
+
+  static bool _isAssessment(UserSubmission row) {
+    final t = row.type.toLowerCase();
+    return t.contains('assess') || t.contains('quiz') || t.contains('exam');
+  }
+
+  static UserSubmission? _tryParseSubmission(Object? data) {
+    Map<String, dynamic>? map;
+    if (data is Map) {
+      map = Map<String, dynamic>.from(data);
+      final inner = map['data'];
+      if (inner is Map) map = Map<String, dynamic>.from(inner);
+    }
+    if (map == null || map.isEmpty) return null;
+    if (map['id'] == null && map['status'] == null && map['score_percent'] == null) {
+      return null;
+    }
+    try {
+      return UserSubmission.fromJson(map);
+    } catch (_) {
+      return null;
+    }
+  }
 }
 
 final episodeTasksRepositoryProvider = Provider<EpisodeTasksRepository>(

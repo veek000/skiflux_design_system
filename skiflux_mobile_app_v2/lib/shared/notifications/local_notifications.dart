@@ -192,6 +192,7 @@ class LocalNotifications {
     required String title,
     required String body,
     int? id,
+    String? payload,
   }) async {
     if (!supported) return false;
     try {
@@ -206,7 +207,7 @@ class LocalNotifications {
         id: id ?? DateTime.now().millisecondsSinceEpoch & 0x3FFFFFFF,
         title: title,
         body: body,
-        payload: openNotificationsPayload,
+        payload: payload ?? openNotificationsPayload,
         notificationDetails: const NotificationDetails(
           android: AndroidNotificationDetails(
             _generalChannelId,

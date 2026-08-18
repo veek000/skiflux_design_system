@@ -6,7 +6,6 @@ import '../../shared/sheets/skiflux_sheet.dart';
 import '../../shared/widgets/load_failure.dart';
 import '../../shared/widgets/loading_skeletons.dart';
 import '../../shared/widgets/video_feed_card.dart';
-import '../home/data/home_feed_store.dart';
 import '../notifications/notification_bell_button.dart';
 import '../notifications/notifications_screen.dart';
 import '../playlists/playlist_screen.dart';
@@ -669,43 +668,17 @@ class EpisodePlayerSheet extends ConsumerWidget {
                   SkifluxSpacing.spaceL,
                   SkifluxSpacing.spaceL + media.padding.bottom,
                 ),
-                // A real feed item when the row came from the backend, so the
-                // player streams the episode and like/save/comments/track-view
-                // post against its real UUID. Legacy synthetic rows (no id)
-                // fall back to chrome-only rendering.
-                child: episode.id.isEmpty
-                    ? VideoFeedCard(
-                        epTag: episode.epTag,
-                        title: episode.title,
-                        description: creator.name,
-                      )
-                    : VideoFeedCard(
-                        item: HomeFeedItem(
-                          type:
-                              episode.videoUrl != null &&
-                                      episode.videoUrl!.isNotEmpty
-                                  ? FeedContentType.video
-                                  : FeedContentType.image,
-                          epTag: episode.epTag,
-                          title: episode.title,
-                          description: episode.description.isNotEmpty
-                              ? episode.description
-                              : creator.name,
-                          coverAsset: 'assets/home_video_cover.png',
-                          coverUrl: episode.thumbnailUrl,
-                          videoUrl: episode.videoUrl,
-                          creatorName: creator.name,
-                          creatorUsername: creator.username,
-                          creatorInitials: creator.initials,
-                          episodeId: episode.id,
-                          creatorId: episode.creatorId.isEmpty
-                              ? null
-                              : episode.creatorId,
-                          seasonId: episode.season?.id,
-                          seasonTitle: episode.season?.title,
-                          skillworld: episode.season?.skillworld,
-                        ),
-                      ),
+                // Full feed item (counts + absolute stream URL) so the rail
+                // and player match home. pauseWhenRouteCovered: false — the
+                // sheet route can report not-current while visible, which
+                // previously left every subscription video frozen on cover.
+                child: VideoFeedCard(
+                  pauseWhenRouteCovered: false,
+                  item: episode.toFeedItem(
+                    creatorNameOverride: creator.name,
+                    creatorInitials: creator.initials,
+                  ),
+                ),
               ),
             ),
           ],

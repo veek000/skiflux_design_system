@@ -25,7 +25,8 @@ mixin _$NotificationItem {
 /// stamps the row with "now" so it still sorts and groups.
  DateTime? get createdAt; bool get isRead;/// Label for the optional action pill ("Watch EP. 04"). Absent for
 /// informational cards.
- String? get actionLabel;
+ String? get actionLabel;/// Deep-link map from `NotificationItem.data` (episode_id, season_id, …).
+ Map<String, dynamic> get data;
 /// Create a copy of NotificationItem
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -38,16 +39,16 @@ $NotificationItemCopyWith<NotificationItem> get copyWith => _$NotificationItemCo
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is NotificationItem&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.message, message) || other.message == message)&&(identical(other.type, type) || other.type == type)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.isRead, isRead) || other.isRead == isRead)&&(identical(other.actionLabel, actionLabel) || other.actionLabel == actionLabel));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is NotificationItem&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.message, message) || other.message == message)&&(identical(other.type, type) || other.type == type)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.isRead, isRead) || other.isRead == isRead)&&(identical(other.actionLabel, actionLabel) || other.actionLabel == actionLabel)&&const DeepCollectionEquality().equals(other.data, data));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,title,message,type,createdAt,isRead,actionLabel);
+int get hashCode => Object.hash(runtimeType,id,title,message,type,createdAt,isRead,actionLabel,const DeepCollectionEquality().hash(data));
 
 @override
 String toString() {
-  return 'NotificationItem(id: $id, title: $title, message: $message, type: $type, createdAt: $createdAt, isRead: $isRead, actionLabel: $actionLabel)';
+  return 'NotificationItem(id: $id, title: $title, message: $message, type: $type, createdAt: $createdAt, isRead: $isRead, actionLabel: $actionLabel, data: $data)';
 }
 
 
@@ -58,7 +59,7 @@ abstract mixin class $NotificationItemCopyWith<$Res>  {
   factory $NotificationItemCopyWith(NotificationItem value, $Res Function(NotificationItem) _then) = _$NotificationItemCopyWithImpl;
 @useResult
 $Res call({
- String id, String title, String message, String type, DateTime? createdAt, bool isRead, String? actionLabel
+ String id, String title, String message, String type, DateTime? createdAt, bool isRead, String? actionLabel, Map<String, dynamic> data
 });
 
 
@@ -75,7 +76,7 @@ class _$NotificationItemCopyWithImpl<$Res>
 
 /// Create a copy of NotificationItem
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? title = null,Object? message = null,Object? type = null,Object? createdAt = freezed,Object? isRead = null,Object? actionLabel = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? title = null,Object? message = null,Object? type = null,Object? createdAt = freezed,Object? isRead = null,Object? actionLabel = freezed,Object? data = null,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,title: null == title ? _self.title : title // ignore: cast_nullable_to_non_nullable
@@ -84,7 +85,8 @@ as String,type: null == type ? _self.type : type // ignore: cast_nullable_to_non
 as String,createdAt: freezed == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,isRead: null == isRead ? _self.isRead : isRead // ignore: cast_nullable_to_non_nullable
 as bool,actionLabel: freezed == actionLabel ? _self.actionLabel : actionLabel // ignore: cast_nullable_to_non_nullable
-as String?,
+as String?,data: null == data ? _self.data : data // ignore: cast_nullable_to_non_nullable
+as Map<String, dynamic>,
   ));
 }
 
@@ -169,10 +171,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String title,  String message,  String type,  DateTime? createdAt,  bool isRead,  String? actionLabel)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String title,  String message,  String type,  DateTime? createdAt,  bool isRead,  String? actionLabel,  Map<String, dynamic> data)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _NotificationItem() when $default != null:
-return $default(_that.id,_that.title,_that.message,_that.type,_that.createdAt,_that.isRead,_that.actionLabel);case _:
+return $default(_that.id,_that.title,_that.message,_that.type,_that.createdAt,_that.isRead,_that.actionLabel,_that.data);case _:
   return orElse();
 
 }
@@ -190,10 +192,10 @@ return $default(_that.id,_that.title,_that.message,_that.type,_that.createdAt,_t
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String title,  String message,  String type,  DateTime? createdAt,  bool isRead,  String? actionLabel)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String title,  String message,  String type,  DateTime? createdAt,  bool isRead,  String? actionLabel,  Map<String, dynamic> data)  $default,) {final _that = this;
 switch (_that) {
 case _NotificationItem():
-return $default(_that.id,_that.title,_that.message,_that.type,_that.createdAt,_that.isRead,_that.actionLabel);case _:
+return $default(_that.id,_that.title,_that.message,_that.type,_that.createdAt,_that.isRead,_that.actionLabel,_that.data);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -210,10 +212,10 @@ return $default(_that.id,_that.title,_that.message,_that.type,_that.createdAt,_t
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String title,  String message,  String type,  DateTime? createdAt,  bool isRead,  String? actionLabel)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String title,  String message,  String type,  DateTime? createdAt,  bool isRead,  String? actionLabel,  Map<String, dynamic> data)?  $default,) {final _that = this;
 switch (_that) {
 case _NotificationItem() when $default != null:
-return $default(_that.id,_that.title,_that.message,_that.type,_that.createdAt,_that.isRead,_that.actionLabel);case _:
+return $default(_that.id,_that.title,_that.message,_that.type,_that.createdAt,_that.isRead,_that.actionLabel,_that.data);case _:
   return null;
 
 }
@@ -225,7 +227,7 @@ return $default(_that.id,_that.title,_that.message,_that.type,_that.createdAt,_t
 @JsonSerializable()
 
 class _NotificationItem implements NotificationItem {
-  const _NotificationItem({this.id = '', this.title = '', this.message = '', this.type = '', this.createdAt, this.isRead = false, this.actionLabel});
+  const _NotificationItem({this.id = '', this.title = '', this.message = '', this.type = '', this.createdAt, this.isRead = false, this.actionLabel, final  Map<String, dynamic> data = const <String, dynamic>{}}): _data = data;
   factory _NotificationItem.fromJson(Map<String, dynamic> json) => _$NotificationItemFromJson(json);
 
 /// Server id, used for `POST /me/{id}/read`. Empty when the payload
@@ -245,6 +247,15 @@ class _NotificationItem implements NotificationItem {
 /// Label for the optional action pill ("Watch EP. 04"). Absent for
 /// informational cards.
 @override final  String? actionLabel;
+/// Deep-link map from `NotificationItem.data` (episode_id, season_id, …).
+ final  Map<String, dynamic> _data;
+/// Deep-link map from `NotificationItem.data` (episode_id, season_id, …).
+@override@JsonKey() Map<String, dynamic> get data {
+  if (_data is EqualUnmodifiableMapView) return _data;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableMapView(_data);
+}
+
 
 /// Create a copy of NotificationItem
 /// with the given fields replaced by the non-null parameter values.
@@ -259,16 +270,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _NotificationItem&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.message, message) || other.message == message)&&(identical(other.type, type) || other.type == type)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.isRead, isRead) || other.isRead == isRead)&&(identical(other.actionLabel, actionLabel) || other.actionLabel == actionLabel));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _NotificationItem&&(identical(other.id, id) || other.id == id)&&(identical(other.title, title) || other.title == title)&&(identical(other.message, message) || other.message == message)&&(identical(other.type, type) || other.type == type)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.isRead, isRead) || other.isRead == isRead)&&(identical(other.actionLabel, actionLabel) || other.actionLabel == actionLabel)&&const DeepCollectionEquality().equals(other._data, _data));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,title,message,type,createdAt,isRead,actionLabel);
+int get hashCode => Object.hash(runtimeType,id,title,message,type,createdAt,isRead,actionLabel,const DeepCollectionEquality().hash(_data));
 
 @override
 String toString() {
-  return 'NotificationItem(id: $id, title: $title, message: $message, type: $type, createdAt: $createdAt, isRead: $isRead, actionLabel: $actionLabel)';
+  return 'NotificationItem(id: $id, title: $title, message: $message, type: $type, createdAt: $createdAt, isRead: $isRead, actionLabel: $actionLabel, data: $data)';
 }
 
 
@@ -279,7 +290,7 @@ abstract mixin class _$NotificationItemCopyWith<$Res> implements $NotificationIt
   factory _$NotificationItemCopyWith(_NotificationItem value, $Res Function(_NotificationItem) _then) = __$NotificationItemCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String title, String message, String type, DateTime? createdAt, bool isRead, String? actionLabel
+ String id, String title, String message, String type, DateTime? createdAt, bool isRead, String? actionLabel, Map<String, dynamic> data
 });
 
 
@@ -296,7 +307,7 @@ class __$NotificationItemCopyWithImpl<$Res>
 
 /// Create a copy of NotificationItem
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? title = null,Object? message = null,Object? type = null,Object? createdAt = freezed,Object? isRead = null,Object? actionLabel = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? title = null,Object? message = null,Object? type = null,Object? createdAt = freezed,Object? isRead = null,Object? actionLabel = freezed,Object? data = null,}) {
   return _then(_NotificationItem(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,title: null == title ? _self.title : title // ignore: cast_nullable_to_non_nullable
@@ -305,7 +316,8 @@ as String,type: null == type ? _self.type : type // ignore: cast_nullable_to_non
 as String,createdAt: freezed == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
 as DateTime?,isRead: null == isRead ? _self.isRead : isRead // ignore: cast_nullable_to_non_nullable
 as bool,actionLabel: freezed == actionLabel ? _self.actionLabel : actionLabel // ignore: cast_nullable_to_non_nullable
-as String?,
+as String?,data: null == data ? _self._data : data // ignore: cast_nullable_to_non_nullable
+as Map<String, dynamic>,
   ));
 }
 

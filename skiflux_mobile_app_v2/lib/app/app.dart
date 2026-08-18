@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:skiflux_design_system/skiflux_design_system.dart';
@@ -9,6 +11,7 @@ import '../l10n/app_localizations.dart';
 import '../features/auth/auth_flow.dart';
 import '../features/auth/data/auth_store.dart';
 import '../features/notifications/data/notifications_store.dart';
+import '../features/notifications/notification_router.dart';
 import '../features/notifications/notifications_screen.dart';
 import '../features/profile/data/devices_repository.dart';
 import '../features/profile/data/profile_store.dart';
@@ -116,17 +119,25 @@ class _SkifluxMobileAppV2State extends ConsumerState<SkifluxMobileAppV2> {
     final fcm = ref.read(fcmServiceProvider);
     final local = ref.read(localNotificationsProvider);
 
-    fcm.onForegroundDisplay = ({required title, required body}) {
+    fcm.onForegroundDisplay = ({required title, required body, data = const {}}) {
       final navContext = rootNavigatorKey.currentContext;
       if (navContext != null && navContext.mounted) {
         SkifluxToast.info(navContext, body);
       }
       // Android tray while foregrounded — FCM alone only surfaces a toast
-      // here, so the shade stayed empty for in-app arrivals.
-      unawaited(local.showPush(title: title, body: body));
+      // here, so the shade stayed empty for in-app arrivals. Payload carries
+      // deep-link data so a tray tap opens the matching screen.
+      final type = (data['type'] as String?)?.trim() ??
+          (data['notification_type'] as String?)?.trim() ??
+          '';
+      final payload = jsonEncode({
+        'type': type,
+        'data': data,
+      });
+      unawaited(local.showPush(title: title, body: body, payload: payload));
       unawaited(ref.read(notificationsProvider.notifier).refreshFromBackend());
     };
-    fcm.onNotificationTap = (_) => _openNotificationsScreen();
+    fcm.onNotificationTap = (message) => _handlePushTap(message);
     fcm.onTokenRefresh = (token) {
       unawaited(_registerDeviceToken(token));
     };
@@ -134,9 +145,26 @@ class _SkifluxMobileAppV2State extends ConsumerState<SkifluxMobileAppV2> {
     // Local tray taps for general/push lines only — download progress
     // notifications carry no payload and must not hijack this route.
     local.onNotificationTap = (payload) {
-      if (payload == LocalNotifications.openNotificationsPayload) {
+      if (payload == null ||
+          payload == LocalNotifications.openNotificationsPayload) {
         _openNotificationsScreen();
+        return;
       }
+      final decoded = _decodeDeepLinkPayload(payload);
+      if (decoded == null) {
+        _openNotificationsScreen();
+        return;
+      }
+      final navContext = rootNavigatorKey.currentContext;
+      if (navContext == null || !navContext.mounted) return;
+      unawaited(
+        openNotificationDeepLink(
+          navContext,
+          ref,
+          type: decoded.type,
+          data: decoded.data,
+        ),
+      );
     };
     // Ensure the plugin is initialised so cold-start tap details are read.
     unawaited(local.requestPermission());
@@ -159,6 +187,54 @@ class _SkifluxMobileAppV2State extends ConsumerState<SkifluxMobileAppV2> {
         builder: (_) => const NotificationsScreen(),
       ),
     );
+  }
+
+  void _handlePushTap(RemoteMessage message) {
+    final navContext = rootNavigatorKey.currentContext;
+    if (navContext == null || !navContext.mounted) {
+      _openNotificationsScreen();
+      return;
+    }
+    unawaited(ref.read(notificationsProvider.notifier).refreshFromBackend());
+    final data = Map<String, dynamic>.from(message.data);
+    final type = (data['type'] as String?)?.trim() ??
+        (data['notification_type'] as String?)?.trim() ??
+        '';
+    if (type.isEmpty && data.isEmpty) {
+      _openNotificationsScreen();
+      return;
+    }
+    unawaited(
+      openNotificationDeepLink(
+        navContext,
+        ref,
+        type: type,
+        data: data,
+        title: message.notification?.title,
+        body: message.notification?.body,
+      ),
+    );
+  }
+
+  static ({String type, Map<String, dynamic> data})? _decodeDeepLinkPayload(
+    String payload,
+  ) {
+    try {
+      final raw = jsonDecode(payload);
+      if (raw is! Map) return null;
+      final map = Map<String, dynamic>.from(raw);
+      final type = (map['type'] as String?)?.trim() ?? '';
+      final dataRaw = map['data'];
+      final data = dataRaw is Map
+          ? Map<String, dynamic>.from(dataRaw)
+          : <String, dynamic>{
+              for (final e in map.entries)
+                if (e.key != 'type') e.key: e.value,
+            };
+      return (type: type, data: data);
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> _maybeRegisterDevice(FcmService fcm) async {

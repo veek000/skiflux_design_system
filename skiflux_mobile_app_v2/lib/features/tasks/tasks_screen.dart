@@ -296,10 +296,14 @@ class _LearningList extends StatelessWidget {
     final quiz = task.quiz;
     if (task.kind == LearningTaskKind.quiz && quiz != null) {
       final total = quiz.questions.length;
-      final answers =
-          task.quizAnswers ??
-          List<int?>.generate(total, (i) => quiz.questions[i].correctIndex);
-      final correct = task.quizCorrect ?? total;
+      // Prefer stored answers/score. Do NOT invent "all correct" from
+      // correctIndex — learner payloads omit answer keys (all -1), which
+      // previously opened a fake perfect result.
+      final answers = task.quizAnswers ?? List<int?>.filled(total, null);
+      final correct = task.quizCorrect ?? 0;
+      final passed = total == 0
+          ? task.status == LearningTaskStatus.completed
+          : correct * 100 >= quiz.passPercent * total;
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => QuizResultScreen(
@@ -307,7 +311,7 @@ class _LearningList extends StatelessWidget {
             correct: correct,
             total: total,
             answers: answers,
-            passed: correct >= total,
+            passed: passed || task.status == LearningTaskStatus.completed,
           ),
         ),
       );

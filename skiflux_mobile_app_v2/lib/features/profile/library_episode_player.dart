@@ -87,7 +87,10 @@ class _LibraryEpisodePlayerSheet extends StatelessWidget {
                   SkifluxSpacing.spaceL,
                   SkifluxSpacing.spaceL + media.padding.bottom,
                 ),
-                child: VideoFeedCard(item: episode.toFeedItem()),
+                child: VideoFeedCard(
+                  pauseWhenRouteCovered: false,
+                  item: episode.toFeedItem(),
+                ),
               ),
             ),
           ],

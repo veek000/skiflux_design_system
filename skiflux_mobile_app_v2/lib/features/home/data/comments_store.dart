@@ -46,20 +46,33 @@ class CommentItem {
     final first = _string(json['user_first_name']) ?? '';
     final last = _string(json['user_last_name']) ?? '';
     final name = '$first $last'.trim();
-    final audioUrl = _string(json['audio_url']);
+    // Backends have shipped several spellings; any non-empty media URL means
+    // this row is a voice note — otherwise a just-sent note reloads as a blank
+    // text bubble (empty `text`, no `audio_url` key match).
+    final audioUrl = _string(json['audio_url']) ??
+        _string(json['audio']) ??
+        _string(json['voice_url']) ??
+        _string(json['voice_note_url']) ??
+        _string(json['audio_file']) ??
+        _string(json['file_url']);
     final text = _string(json['text']);
     final createdAt = DateTime.tryParse(
       _string(json['created_at']) ?? '',
     )?.toLocal();
+    // `audio_public_id` without a URL still marks a voice note (CDN URL may
+    // arrive later); empty text + that flag must not render as a blank message.
+    final hasAudioHint = audioUrl != null ||
+        _string(json['audio_public_id']) != null ||
+        json['has_audio'] == true;
 
     return CommentItem(
-      id: json['id'] is int ? json['id'] as int : null,
-      parentId: json['parent_id'] is int ? json['parent_id'] as int : null,
+      id: _intId(json['id']),
+      parentId: _intId(json['parent_id']),
       // Parsed rows start as "other"; [CommentsNotifier] re-marks the ones it
       // can attribute to the signed-in user. Ownership is not in the payload,
       // so it cannot be decided here — see `CommentsNotifier._resolveOwnership`.
       author: SkifluxCommentAuthor.other,
-      body: audioUrl != null
+      body: hasAudioHint
           ? SkifluxCommentBody.voicenote
           : SkifluxCommentBody.message,
       authorName: name.isNotEmpty ? name : 'Learner',
@@ -69,7 +82,9 @@ class CommentItem {
       message: text,
       audioUrl: audioUrl,
       timeLabel: shortAgeLabel(createdAt),
-      likeCount: json['like_count'] is int ? json['like_count'] as int : 0,
+      likeCount: json['like_count'] is int
+          ? json['like_count'] as int
+          : (json['like_count'] is num ? (json['like_count'] as num).toInt() : 0),
       isLiked: json['is_liked'] == true,
       replies: [
         for (final reply in (json['replies'] is List
@@ -117,6 +132,7 @@ class CommentItem {
     int? likeCount,
     bool? isLiked,
     SkifluxCommentAuthor? author,
+    SkifluxCommentBody? body,
     String? message,
     String? audioPath,
     String? audioUrl,
@@ -125,7 +141,7 @@ class CommentItem {
     id: id ?? this.id,
     parentId: parentId,
     author: author ?? this.author,
-    body: body,
+    body: body ?? this.body,
     authorName: authorName,
     handle: handle,
     avatarUrl: avatarUrl,
@@ -251,7 +267,7 @@ class CommentsNotifier extends Notifier<CommentsState> {
       if (!ref.mounted) return;
       final flat = _resolveOwnership(
         _withLocalAudio(_flatten(page.results)),
-      );
+      ); // session paths only — no pending attach on a plain refresh
       // Rows beyond this page still count toward the header total.
       final beyondPage = page.count - page.results.length;
       state = state.copyWith(
@@ -358,34 +374,81 @@ class CommentsNotifier extends Notifier<CommentsState> {
       for (final id in newIds) {
         _localAudioById.putIfAbsent(id, () => pendingPath);
       }
-      // If the reload did not surface a new id (backend lag), keep pending so
-      // a later refresh can still attach it; clear once at least one new id
-      // claimed it, or when no voice rows need it.
       if (newIds.isNotEmpty) _pendingLocalAudio = null;
     }
 
+    var merged = _withLocalAudio(state.comments, claimPendingFor: newIds);
+
+    // GET sometimes lags the POST — the optimistic voicenote would vanish and
+    // leave nothing (or a blank text row). Keep a local playable row until the
+    // server echoes it.
+    if (pendingPath != null &&
+        pendingPath.isNotEmpty &&
+        newIds.isEmpty &&
+        !merged.any((c) => c.audioPath == pendingPath)) {
+      merged = List.unmodifiable([
+        ...merged,
+        CommentItem(
+          author: SkifluxCommentAuthor.own,
+          body: SkifluxCommentBody.voicenote,
+          authorName: 'You',
+          audioPath: pendingPath,
+          timeLabel: 'now',
+        ),
+      ]);
+    }
+
     state = state.copyWith(
-      comments: _resolveOwnership(_withLocalAudio(state.comments)),
+      comments: _resolveOwnership(merged),
+      totalCount: merged.length > state.totalCount
+          ? merged.length
+          : state.totalCount,
     );
   }
 
-  /// Overlay session-local recorder paths onto voicenote rows that only have
-  /// a remote `audio_url` (or nothing yet).
-  List<CommentItem> _withLocalAudio(List<CommentItem> comments) {
-    if (_localAudioById.isEmpty && _pendingLocalAudio == null) {
+  /// Overlay session-local recorder paths onto rows that need them.
+  ///
+  /// Critical: the server often returns a just-uploaded voice note **without**
+  /// `audio_url` (processing lag / field rename). `fromJson` then classifies
+  /// it as an empty text message — which is the "blank comment" users saw
+  /// after the optimistic `0:10` voicenote disappeared. When we still hold the
+  /// recorder file for that id (or a pending path for newly claimed ids),
+  /// force [SkifluxCommentBody.voicenote] + [CommentItem.audioPath].
+  List<CommentItem> _withLocalAudio(
+    List<CommentItem> comments, {
+    Set<int> claimPendingFor = const {},
+  }) {
+    if (_localAudioById.isEmpty &&
+        (_pendingLocalAudio == null || claimPendingFor.isEmpty)) {
       return comments;
     }
-    return List.unmodifiable([
-      for (final c in comments)
-        if (c.body == SkifluxCommentBody.voicenote &&
-            (c.audioPath == null || c.audioPath!.isEmpty))
-          c.copyWith(
-            audioPath: (c.id != null ? _localAudioById[c.id!] : null) ??
-                _pendingLocalAudio,
-          )
-        else
-          c,
-    ]);
+    final pending = _pendingLocalAudio;
+    final out = <CommentItem>[];
+    for (final c in comments) {
+      var path = c.id != null ? _localAudioById[c.id!] : null;
+      if (path == null &&
+          pending != null &&
+          c.id != null &&
+          claimPendingFor.contains(c.id)) {
+        path = pending;
+        _localAudioById[c.id!] = pending;
+      }
+      if (path == null || path.isEmpty) {
+        out.add(c);
+        continue;
+      }
+      if (c.body == SkifluxCommentBody.voicenote && c.audioPath == path) {
+        out.add(c);
+        continue;
+      }
+      out.add(
+        c.copyWith(
+          body: SkifluxCommentBody.voicenote,
+          audioPath: path,
+        ),
+      );
+    }
+    return List.unmodifiable(out);
   }
 
   void setComposeState(SkifluxComposeState value) {
@@ -506,6 +569,9 @@ class CommentsNotifier extends Notifier<CommentsState> {
         }
         final playable = created.copyWith(
           author: SkifluxCommentAuthor.own,
+          // POST body often omits `audio_url` → fromJson would be a blank
+          // message; keep the row as a playable voicenote with the local file.
+          body: SkifluxCommentBody.voicenote,
           audioPath: path,
         );
         state = state.copyWith(
@@ -677,4 +743,12 @@ String? _string(Object? value) {
   if (value == null) return null;
   final s = value.toString().trim();
   return s.isEmpty ? null : s;
+}
+
+/// Comment ids arrive as int, num, or numeric string depending on the envelope.
+int? _intId(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value.trim());
+  return null;
 }

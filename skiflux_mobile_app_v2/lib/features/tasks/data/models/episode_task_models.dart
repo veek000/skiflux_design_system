@@ -193,8 +193,10 @@ class WireAssessmentQuestion {
   final String optionC;
   final String optionD;
 
-  /// `A` | `B` | `C` | `D` — the spec exposes the answer key to the client,
-  /// which is what sanctions local grading for instant results.
+  /// `A` | `B` | `C` | `D` when present. Learner-facing
+  /// `AssessmentQuestionResponse` **omits** this field (answer key stays on
+  /// the server); local grading then falls back to the submission's
+  /// `score_percent` / `passed`.
   final String correctAnswer;
   final int order;
 
@@ -246,6 +248,7 @@ class UserSubmission {
     this.attemptNumber,
     this.timeTakenSeconds,
     this.submittedAt,
+    this.gradedAnswers = const {},
   });
 
   final String id;
@@ -277,6 +280,11 @@ class UserSubmission {
   final int? timeTakenSeconds;
   final DateTime? submittedAt;
 
+  /// Per-question graded answers from `UserSubmission.answers` (schema is an
+  /// untyped blob). Powers Review Answers: selected letter + correct letter
+  /// when the backend includes them after submit.
+  final Map<String, GradedAnswer> gradedAnswers;
+
   /// Recency key for picking the latest submission per task.
   DateTime? get sortDate => submittedAt ?? createdAt;
 
@@ -304,7 +312,88 @@ class UserSubmission {
       attemptNumber: _int(json['attempt_number']),
       timeTakenSeconds: _int(json['time_taken_seconds']),
       submittedAt: _date(json['submitted_at']),
+      gradedAnswers: GradedAnswer.parseMap(json['answers']),
     );
+  }
+}
+
+/// One question's graded result from a submission `answers` blob.
+///
+/// The OpenAPI field is untyped (`nullable: true` only). Backends commonly
+/// send either `{questionId: "A"}` or
+/// `{questionId: {selected/answer: "A", correct_answer/correct: "B"}}`.
+class GradedAnswer {
+  const GradedAnswer({this.selectedLetter, this.correctLetter});
+
+  final String? selectedLetter;
+  final String? correctLetter;
+
+  int? get selectedIndex => letterToIndex(selectedLetter);
+  int? get correctIndex => letterToIndex(correctLetter);
+
+  static int? letterToIndex(String? letter) {
+    if (letter == null || letter.isEmpty) return null;
+    final trimmed = letter.trim().toUpperCase();
+    if (trimmed.isEmpty) return null;
+    final index = trimmed.codeUnitAt(0) - 'A'.codeUnitAt(0);
+    return index >= 0 && index <= 3 ? index : null;
+  }
+
+  static Map<String, GradedAnswer> parseMap(Object? raw) {
+    final out = <String, GradedAnswer>{};
+    if (raw is Map) {
+      for (final entry in raw.entries) {
+        final id = entry.key.toString();
+        final value = entry.value;
+        if (value is String) {
+          out[id] = GradedAnswer(selectedLetter: value);
+        } else if (value is Map) {
+          final m = Map<String, dynamic>.from(value);
+          out[id] = GradedAnswer(
+            selectedLetter: _string(
+              m['answer'] ??
+                  m['selected'] ??
+                  m['selected_answer'] ??
+                  m['choice'] ??
+                  m['user_answer'],
+            ),
+            correctLetter: _string(
+              m['correct_answer'] ??
+                  m['correct'] ??
+                  m['right_answer'] ??
+                  m['answer_key'] ??
+                  m['expected'],
+            ),
+          );
+        }
+      }
+    } else if (raw is List) {
+      for (final item in raw) {
+        if (item is! Map) continue;
+        final m = Map<String, dynamic>.from(item);
+        final id = _string(
+          m['question_id'] ?? m['id'] ?? m['question'] ?? m['uuid'],
+        );
+        if (id == null) continue;
+        out[id] = GradedAnswer(
+          selectedLetter: _string(
+            m['answer'] ??
+                m['selected'] ??
+                m['selected_answer'] ??
+                m['choice'] ??
+                m['user_answer'],
+          ),
+          correctLetter: _string(
+            m['correct_answer'] ??
+                m['correct'] ??
+                m['right_answer'] ??
+                m['answer_key'] ??
+                m['expected'],
+          ),
+        );
+      }
+    }
+    return Map.unmodifiable(out);
   }
 }
 
