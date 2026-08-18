@@ -88,19 +88,11 @@ class CoinPackCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(
-                    '${pack.coins}',
-                    style: SkifluxTypography.headingH10Bold.copyWith(
-                      color: SkifluxColors.contentSecondary,
-                    ),
-                  ),
-                ),
-                if (pack.badgeLabel != null) CoinPackBadgePill(pack: pack),
-              ],
+            Text(
+              '${pack.coins}',
+              style: SkifluxTypography.headingH10Bold.copyWith(
+                color: SkifluxColors.contentSecondary,
+              ),
             ),
             const SizedBox(height: SkifluxSpacing.spaceXs),
             Text(

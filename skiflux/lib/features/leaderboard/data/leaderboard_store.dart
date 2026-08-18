@@ -41,9 +41,13 @@ class LeaderboardEntry {
     required this.username,
     required this.initials,
     required this.xp,
+    this.id = '',
     this.avatarUrl,
     this.isCurrentUser = false,
   });
+
+  /// Learner UUID when the API sent one — used only for identity matching.
+  final String id;
 
   final int rank;
   final String name;
@@ -72,6 +76,26 @@ class LeaderboardEntry {
     }
     return '$buffer';
   }
+
+  LeaderboardEntry copyWith({
+    String? id,
+    int? rank,
+    String? name,
+    String? username,
+    String? initials,
+    int? xp,
+    String? avatarUrl,
+    bool? isCurrentUser,
+  }) => LeaderboardEntry(
+    id: id ?? this.id,
+    rank: rank ?? this.rank,
+    name: name ?? this.name,
+    username: username ?? this.username,
+    initials: initials ?? this.initials,
+    xp: xp ?? this.xp,
+    avatarUrl: avatarUrl ?? this.avatarUrl,
+    isCurrentUser: isCurrentUser ?? this.isCurrentUser,
+  );
 }
 
 /// One answer from `GET /me/leaderboard`, for one league filter.
@@ -85,7 +109,7 @@ class LeaderboardData {
 
   static const empty = LeaderboardData(entries: []);
 
-  /// Every entry on the page, sorted by [LeaderboardEntry.rank] ascending —
+  /// Every entry on the page, sorted by XP descending (then rank) —
   /// see `LeaderboardNotifier.resolve`.
   final List<LeaderboardEntry> entries;
 
@@ -105,26 +129,28 @@ class LeaderboardData {
 
   bool get isEmpty => entries.isEmpty;
 
-  /// The podium — ranks 1, 2 and 3, selected **by rank** rather than by
-  /// position.
+  /// The podium — the three highest-XP learners on the page.
   ///
-  /// `take(3)`/`skip(3)` only produced the right split while the payload
-  /// happened to arrive rank-ordered, and nothing guaranteed that: `resolve`
-  /// iterates the rows verbatim and the repository defaults a missing rank to
-  /// 0. When the order slipped, the table started at whoever was fourth in the
-  /// list rather than fourth on the board.
+  /// Places are XP-driven: a stale or shuffled `rank` field must not put a
+  /// lower-XP learner on 1st while someone with more XP sits in the table.
+  /// After [LeaderboardNotifier.resolve] renumbers when needed, this is the
+  /// same as ranks 1–3, but we still select by XP so a partial page with a
+  /// missing rank-1 still fills the steps correctly.
   ///
   /// A filtered league with fewer than three learners simply yields a shorter
   /// podium.
-  List<LeaderboardEntry> get podium => entries
-      .where((entry) => entry.rank >= 1 && entry.rank <= 3)
-      .toList(growable: false);
+  List<LeaderboardEntry> get podium =>
+      entries.take(3).toList(growable: false);
 
-  /// Everyone the podium doesn't hold: rank 4 and below, plus any row whose
-  /// rank is unknown (0) — those belong in the table, not on the podium.
-  List<LeaderboardEntry> get ranked => entries
-      .where((entry) => entry.rank > 3 || entry.rank < 1)
-      .toList(growable: false);
+  /// Everyone below the podium (4th and lower by XP).
+  List<LeaderboardEntry> get ranked =>
+      entries.skip(3).toList(growable: false);
+
+  /// The learner standing on [place] (1, 2 or 3), if the page has one.
+  LeaderboardEntry? atPodiumPlace(int place) {
+    if (place < 1 || place > podium.length) return null;
+    return podium[place - 1];
+  }
 
   /// Index of the signed-in learner's row within [ranked], or -1. Drives the
   /// rank card's opening scroll position.
@@ -205,28 +231,30 @@ class LeaderboardNotifier extends AsyncNotifier<LeaderboardData> {
   ///
   /// Which row is "you" is decided only on identity evidence:
   ///
-  /// 1. the row's own `is_me`, which the entry schema now carries;
-  /// 2. a username match against `my_position` or `GET /me/profile`;
-  /// 3. if still unmatched, **append** `my_position` so the learner always
-  ///    appears — never paint another row as "you" just because ranks match.
+  /// 1. the row's own `is_me`;
+  /// 2. a UUID match against `my_position.id` or `GET /me/profile`.id;
+  /// 3. a username match against `my_position` or the profile
+  ///    (`username` is nullable on the schema — id is the safer key);
+  /// 4. if still unmatched, **append** `my_position`, else a profile-built
+  ///    row, so the learner always appears — never paint another row as "you"
+  ///    just because ranks match.
   ///
-  /// Rank-only matching used to hijack the real #N when a stale
-  /// `GET /me/profile`.rank disagreed with the board (e.g. standing showed
-  /// "#3" on a 1k+ XP learner while the signed-in user sat at ~700 XP).
+  /// Display order is **XP descending**. When server ranks are missing or
+  /// disagree with XP order, ranks are renumbered 1…n so the podium, table,
+  /// standing pill, and "better than N%" line all agree.
   ///
   /// Static so provider tests can exercise the matching without a container.
   static LeaderboardData resolve(LeaderboardPage page, UserProfile? me) {
     final position = page.myPosition;
     // `my_position` is the better identity source than the cached profile: it
     // comes from the same query as the rows.
+    final myId = _id(position?.id) ?? _id(me?.id);
     final myUsername = _handle(position?.username) ?? _handle(me?.username);
 
     var matched = false;
     final entries = <LeaderboardEntry>[];
     for (final row in page.rows) {
-      final isMe =
-          row.isCurrentUser ||
-          (myUsername != null && _handle(row.username) == myUsername);
+      final isMe = _isMe(row, myId: myId, myUsername: myUsername);
       matched |= isMe;
       entries.add(_toEntry(row, isCurrentUser: isMe));
     }
@@ -237,41 +265,111 @@ class LeaderboardNotifier extends AsyncNotifier<LeaderboardData> {
     if (!matched && position != null) {
       entries.add(_toEntry(position, isCurrentUser: true));
       matched = true;
+    } else if (!matched && me != null) {
+      // Last resort: profile has XP/rank even when the board omitted standing.
+      entries.add(_entryFromProfile(me));
+      matched = true;
     }
 
-    // Unknown ranks (0) sort to the end rather than ahead of first place.
-    entries.sort((a, b) {
-      final ra = a.rank >= 1 ? a.rank : 1 << 30;
-      final rb = b.rank >= 1 ? b.rank : 1 << 30;
-      return ra.compareTo(rb);
-    });
+    // XP is the source of truth for who stands where. Rank is a display label
+    // that should follow XP when the payload is incomplete or inconsistent.
+    entries.sort(_byXpThenRank);
 
-    // Standing: `my_position` wins; else the matched row; else a profile
-    // cache for the pill only (never used to reassign someone else's row).
-    final currentRank =
-        position?.rank ??
-        (matched
-            ? entries.firstWhere((entry) => entry.isCurrentUser).rank
-            : me?.rank);
+    final tracksXp = _ranksTrackXp(entries);
+    final ordered = tracksXp
+        ? List<LeaderboardEntry>.of(entries)
+        : [
+            for (var i = 0; i < entries.length; i++)
+              entries[i].copyWith(rank: i + 1),
+          ];
+
+    // Standing pill + "better than N%" must match the rank number on the
+    // learner's own row in [ordered] — never a stale `my_position.rank` that
+    // disagrees with the XP-ordered table.
+    final matchedEntry = matched
+        ? ordered.firstWhere((entry) => entry.isCurrentUser)
+        : null;
+    final currentRank = _usableRank(matchedEntry?.rank) ??
+        _usableRank(position?.rank) ??
+        me?.rank;
 
     final level = position?.currentLevel;
 
+    // Population for the percentile: global `count` when ranks are trusted;
+    // when we renumbered locally, prefer `count` only if it still covers the
+    // display rank, otherwise the loaded page size.
+    final population = tracksXp
+        ? page.totalCount
+        : (page.totalCount != null &&
+                currentRank != null &&
+                page.totalCount! >= currentRank
+            ? page.totalCount
+            : ordered.length);
+
     return LeaderboardData(
-      entries: entries,
+      entries: ordered,
       currentRank: currentRank,
       currentLevel: (level != null && level.isNotEmpty)
           ? level
           : (me?.currentLevel.isNotEmpty ?? false)
           ? me!.currentLevel
           : null,
-      betterThanPercent: _percentileOf(currentRank, page.totalCount),
+      betterThanPercent: _percentileOf(currentRank, population),
     );
   }
+
+  /// True when this row is the signed-in learner by flag, id, or username.
+  static bool _isMe(
+    LeaderboardRow row, {
+    required String? myId,
+    required String? myUsername,
+  }) {
+    if (row.isCurrentUser) return true;
+    final rowId = _id(row.id);
+    if (myId != null && rowId != null && rowId == myId) return true;
+    if (myUsername != null && _handle(row.username) == myUsername) return true;
+    return false;
+  }
+
+  /// Highest XP first; ties break on better (lower) rank, then username.
+  static int _byXpThenRank(LeaderboardEntry a, LeaderboardEntry b) {
+    final byXp = b.xp.compareTo(a.xp);
+    if (byXp != 0) return byXp;
+    final ra = a.rank >= 1 ? a.rank : 1 << 30;
+    final rb = b.rank >= 1 ? b.rank : 1 << 30;
+    final byRank = ra.compareTo(rb);
+    if (byRank != 0) return byRank;
+    return a.username.toLowerCase().compareTo(b.username.toLowerCase());
+  }
+
+  /// Whether every known rank already agrees with XP order (higher XP ⇒
+  /// better/equal rank number). Missing ranks force a renumber.
+  static bool _ranksTrackXp(List<LeaderboardEntry> entries) {
+    if (entries.isEmpty) return true;
+    if (entries.any((e) => e.rank < 1)) return false;
+    for (var i = 0; i < entries.length; i++) {
+      for (var j = i + 1; j < entries.length; j++) {
+        final a = entries[i];
+        final b = entries[j];
+        // After XP sort, [i] has XP ≥ [j]. Their ranks must not invert that.
+        if (a.xp > b.xp && a.rank > b.rank) return false;
+      }
+    }
+    return true;
+  }
+
+  static int? _usableRank(int? rank) =>
+      (rank != null && rank >= 1) ? rank : null;
 
   /// Bare lowercase handle, or null when there is nothing to compare.
   static String? _handle(String? username) {
     final handle = username?.replaceFirst('@', '').trim().toLowerCase();
     return (handle == null || handle.isEmpty) ? null : handle;
+  }
+
+  static String? _id(String? id) {
+    final value = id?.trim();
+    return (value == null || value.isEmpty) ? null : value;
   }
 
   /// "Better than N%", derived — the response carries no such field.
@@ -290,6 +388,7 @@ class LeaderboardNotifier extends AsyncNotifier<LeaderboardData> {
     LeaderboardRow row, {
     required bool isCurrentUser,
   }) => LeaderboardEntry(
+    id: row.id,
     rank: row.rank,
     name: row.displayName,
     username: row.username,
@@ -299,4 +398,31 @@ class LeaderboardNotifier extends AsyncNotifier<LeaderboardData> {
     avatarUrl: row.avatarUrl,
     isCurrentUser: isCurrentUser,
   );
+
+  /// Build a self row from the profile when the board omitted `my_position`
+  /// and the learner is not in `results`.
+  static LeaderboardEntry _entryFromProfile(UserProfile me) {
+    final first = me.firstName.trim();
+    final last = me.lastName.trim();
+    final full = '$first $last'.trim();
+    final username = me.username.replaceFirst('@', '').trim();
+    final initials = () {
+      if (first.isNotEmpty && last.isNotEmpty) {
+        return '${first[0]}${last[0]}'.toUpperCase();
+      }
+      if (first.isNotEmpty) return first[0].toUpperCase();
+      if (username.isNotEmpty) return username[0].toUpperCase();
+      return '?';
+    }();
+    return LeaderboardEntry(
+      id: me.id,
+      rank: me.rank ?? 0,
+      name: full.isNotEmpty ? full : username,
+      username: username,
+      initials: initials,
+      xp: me.xp,
+      avatarUrl: me.avatarUrl,
+      isCurrentUser: true,
+    );
+  }
 }

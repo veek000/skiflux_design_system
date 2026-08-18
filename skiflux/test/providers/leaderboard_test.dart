@@ -156,21 +156,22 @@ void main() {
     );
 
     UserProfile profile({
+      String id = 'me',
       String username = 'me',
       int? rank,
+      int xp = 0,
       String currentLevel = '',
     }) => UserProfile(
-      id: 'me',
+      id: id,
       username: username,
       rank: rank,
+      xp: xp,
       currentLevel: currentLevel,
     );
 
-    test('podium and table split by rank, not by payload order', () {
-      // The board arrives shuffled — nothing in the spec promises otherwise,
-      // and `resolve` iterates the rows verbatim. Under the old positional
-      // `take(3)`/`skip(3)` this put rank 5 on the podium and started the
-      // table at rank 2.
+    test('podium and table split by XP order, not by payload order', () {
+      // The board arrives shuffled — nothing in the spec promises otherwise.
+      // XP (via the test helper: 1000 - rank) decides 1st/2nd/3rd.
       final data = LeaderboardNotifier.resolve(
         LeaderboardPage(rows: [row(5), row(2), row(4), row(1), row(3)]),
         null,
@@ -178,6 +179,7 @@ void main() {
 
       expect(data.entries.map((e) => e.rank), [1, 2, 3, 4, 5]);
       expect(data.podium.map((e) => e.rank), [1, 2, 3]);
+      expect(data.podium.map((e) => e.username), ['user1', 'user2', 'user3']);
       // The table starts at 4th, which is the whole point of the split.
       expect(data.ranked.map((e) => e.rank), [4, 5]);
     });
@@ -192,17 +194,42 @@ void main() {
       expect(data.ranked, isEmpty);
     });
 
-    test('rows with an unknown rank sort last and stay off the podium', () {
-      // `parseRow` defaults a missing rank to 0; that is "unknown", not
-      // "better than first".
+    test('missing ranks are renumbered by XP so the podium fills', () {
+      // `parseRow` defaults a missing rank to 0; that used to leave the podium
+      // empty. Highest XP must still take 1st.
       final data = LeaderboardNotifier.resolve(
-        LeaderboardPage(rows: [row(0, username: 'unranked'), row(1), row(2)]),
+        LeaderboardPage(
+          rows: [
+            const LeaderboardRow(username: 'low', xp: 100),
+            const LeaderboardRow(username: 'high', xp: 900),
+            const LeaderboardRow(username: 'mid', xp: 500),
+          ],
+        ),
         null,
       );
 
-      expect(data.entries.map((e) => e.rank), [1, 2, 0]);
-      expect(data.podium.map((e) => e.rank), [1, 2]);
-      expect(data.ranked.map((e) => e.username), ['unranked']);
+      expect(data.podium.map((e) => e.username), ['high', 'mid', 'low']);
+      expect(data.podium.map((e) => e.rank), [1, 2, 3]);
+      expect(data.ranked, isEmpty);
+    });
+
+    test('podium follows XP when server ranks disagree with scores', () {
+      final data = LeaderboardNotifier.resolve(
+        LeaderboardPage(
+          rows: [
+            const LeaderboardRow(rank: 1, username: 'low', xp: 100),
+            const LeaderboardRow(rank: 2, username: 'high', xp: 900),
+            const LeaderboardRow(rank: 3, username: 'mid', xp: 500),
+          ],
+        ),
+        null,
+      );
+
+      expect(data.podium.map((e) => e.username), ['high', 'mid', 'low']);
+      expect(data.podium.map((e) => e.rank), [1, 2, 3]);
+      expect(data.atPodiumPlace(1)?.username, 'high');
+      expect(data.atPodiumPlace(2)?.username, 'mid');
+      expect(data.atPodiumPlace(3)?.username, 'low');
     });
 
     test("marks the row the backend flagged as the user's", () {
@@ -225,6 +252,35 @@ void main() {
 
       // Case and a leading "@" are normalised off both sides.
       expect(data.entries[1].isCurrentUser, isTrue);
+      expect(data.currentRank, 2);
+    });
+
+    test('matches the signed-in learner by id when username is empty', () {
+      // Schema marks username nullable — id is the reliable key.
+      final data = LeaderboardNotifier.resolve(
+        LeaderboardPage(
+          rows: [
+            const LeaderboardRow(
+              id: 'u-1',
+              rank: 1,
+              username: '',
+              xp: 500,
+            ),
+            const LeaderboardRow(
+              id: 'u-me',
+              rank: 2,
+              username: '',
+              xp: 400,
+            ),
+          ],
+        ),
+        profile(id: 'u-me', username: ''),
+      );
+
+      expect(
+        data.entries.singleWhere((e) => e.isCurrentUser).id,
+        'u-me',
+      );
       expect(data.currentRank, 2);
     });
 
@@ -306,16 +362,85 @@ void main() {
       expect(data.currentRank, 4);
     });
 
-    test("uses the profile's cached rank when the payload omits one", () {
+    test('standing pill matches the table rank, not a stale my_position', () {
+      // Server standing said #12 while the XP-ordered board places the learner
+      // at #4 — the pill / "better than N%" must follow the table.
       final data = LeaderboardNotifier.resolve(
-        LeaderboardPage(rows: [row(1)]),
-        profile(username: 'nobody', rank: 31, currentLevel: 'Novice'),
+        LeaderboardPage(
+          rows: [
+            row(1, username: 'a'),
+            row(2, username: 'b'),
+            row(3, username: 'c'),
+            row(4, username: 'veek'),
+          ],
+          myPosition: row(12, username: 'veek', currentLevel: 'Master'),
+          totalCount: 100,
+        ),
+        profile(username: 'veek', rank: 12),
       );
 
-      // Pill number only — must not highlight the unrelated rank-1 row.
+      expect(
+        data.entries.singleWhere((e) => e.isCurrentUser).rank,
+        4,
+      );
+      expect(data.currentRank, 4);
+      // Rank 4 of 100 → (100-4)/(100-1) ≈ 97%.
+      expect(data.betterThanPercent, 97);
+      expect(data.currentLevel, 'Master');
+    });
+    test('when ranks are renumbered by XP, the pill uses the new place', () {
+      final data = LeaderboardNotifier.resolve(
+        LeaderboardPage(
+          rows: [
+            const LeaderboardRow(rank: 1, username: 'low', xp: 100),
+            const LeaderboardRow(rank: 2, username: 'high', xp: 900),
+            const LeaderboardRow(
+              rank: 3,
+              username: 'me',
+              xp: 500,
+              isCurrentUser: true,
+            ),
+          ],
+          myPosition: const LeaderboardRow(
+            rank: 3,
+            username: 'me',
+            xp: 500,
+            currentLevel: 'Novice',
+          ),
+          totalCount: 3,
+        ),
+        null,
+      );
+
+      // XP order: high, me, low → places 1, 2, 3 after renumber.
+      expect(data.currentRank, 2);
+      expect(data.betterThanPercent, 50);
+      expect(data.atPodiumPlace(2)?.isCurrentUser, isTrue);
+    });
+
+    test('synthesizes a self row from the profile when the board omits you', () {
+      final data = LeaderboardNotifier.resolve(
+        LeaderboardPage(rows: [row(1)]),
+        profile(
+          id: 'me-id',
+          username: 'nobody',
+          rank: 31,
+          xp: 220,
+          currentLevel: 'Novice',
+        ),
+      );
+
+      // Must appear as yourself — never leave the board without the learner.
+      expect(data.entries.where((e) => e.isCurrentUser), hasLength(1));
+      expect(
+        data.entries.singleWhere((e) => e.isCurrentUser).username,
+        'nobody',
+      );
+      // Pill keeps the profile's global standing.
       expect(data.currentRank, 31);
       expect(data.currentLevel, 'Novice');
-      expect(data.entries.any((e) => e.isCurrentUser), isFalse);
+      // And must not re-flag the unrelated #1 as you.
+      expect(data.entries.first.isCurrentUser, isFalse);
     });
 
     test('derives better-than-percent from the rank — no field carries it', () {
@@ -423,6 +548,7 @@ void main() {
         'next': null,
         'previous': null,
         'my_position': {
+          'id': 'user-veek',
           'rank': 12,
           'first_name': 'Veek',
           'last_name': 'O',
@@ -435,6 +561,7 @@ void main() {
         },
         'results': [
           {
+            'id': 'user-lola',
             'rank': 1,
             'first_name': 'Lola',
             'last_name': 'Motion',
@@ -448,14 +575,26 @@ void main() {
       });
 
       expect(page.totalCount, 128);
+      expect(page.myPosition?.id, 'user-veek');
       expect(page.myPosition?.rank, 12);
       expect(page.myPosition?.currentLevel, 'Master');
       expect(page.myPosition?.isCurrentUser, isTrue);
+      expect(page.rows.single.id, 'user-lola');
       expect(page.rows.single.displayName, 'Lola Motion');
       expect(page.rows.single.initials, 'LM');
       expect(page.rows.single.avatarUrl, 'https://cdn/lola.png');
       expect(page.rows.single.currentLevel, 'Professional');
       expect(page.rows.single.xp, 4820);
+    });
+
+    test('parses XP aliases and comma-formatted strings', () {
+      final page = LeaderboardRepository.parseBody([
+        {'rank': 1, 'username': 'a', 'total_xp': '4,820'},
+        {'rank': 2, 'username': 'b', 'score': 100},
+      ]);
+
+      expect(page.rows.first.xp, 4820);
+      expect(page.rows.last.xp, 100);
     });
 
     test('reads a bare array, with no standing and no total', () {

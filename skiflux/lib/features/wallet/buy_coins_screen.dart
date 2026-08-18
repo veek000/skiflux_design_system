@@ -257,6 +257,7 @@ class BuyCoinsScreenState extends ConsumerState<BuyCoinsScreen> {
       setState(() => _busy = true);
       final handOff = await ref.read(topupRepositoryProvider).initiateTopup(
             amountFiat: pack.amountFiatWire,
+            amountSkillcoins: pack.coins.toString(),
             currency: kTopupCurrency,
             gatewayName: kTopupGateway,
             paymentMethod: _method.wireValue,
@@ -311,6 +312,7 @@ class BuyCoinsScreenState extends ConsumerState<BuyCoinsScreen> {
     setState(() => _busy = true);
     final result = await ref.read(topupRepositoryProvider).chargeCard(
           amountFiat: pack.amountFiatWire,
+          amountSkillcoins: pack.coins.toString(),
           savedCardId: card.id,
           currency: kTopupCurrency,
         );

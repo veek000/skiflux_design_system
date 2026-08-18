@@ -8,6 +8,7 @@ part of 'leaderboard_row.dart';
 
 _LeaderboardRow _$LeaderboardRowFromJson(Map<String, dynamic> json) =>
     _LeaderboardRow(
+      id: json['id'] as String? ?? '',
       rank: (json['rank'] as num?)?.toInt() ?? 0,
       firstName: json['first_name'] as String? ?? '',
       lastName: json['last_name'] as String? ?? '',
@@ -20,6 +21,7 @@ _LeaderboardRow _$LeaderboardRowFromJson(Map<String, dynamic> json) =>
 
 Map<String, dynamic> _$LeaderboardRowToJson(_LeaderboardRow instance) =>
     <String, dynamic>{
+      'id': instance.id,
       'rank': instance.rank,
       'first_name': instance.firstName,
       'last_name': instance.lastName,

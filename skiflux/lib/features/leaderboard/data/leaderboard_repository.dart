@@ -113,7 +113,8 @@ class LeaderboardRepository extends ApiRepository {
     }
 
     return LeaderboardRow(
-      rank: _int(merged, const ['rank', 'position']) ?? 0,
+      id: _string(merged, const ['id', 'user_id', 'uuid']),
+      rank: _int(merged, const ['rank', 'position', 'place']) ?? 0,
       firstName: first,
       lastName: last,
       username: _string(
@@ -126,7 +127,18 @@ class LeaderboardRepository extends ApiRepository {
         'profile_image',
         'image_url',
       ]),
-      xp: _int(merged, const ['xp', 'total_xp', 'xp_total', 'points']) ?? 0,
+      // XP is what places people on the podium — accept the common aliases a
+      // hand-rolled body might use when `xp` is renamed.
+      xp: _int(merged, const [
+            'xp',
+            'total_xp',
+            'xp_total',
+            'xp_earned',
+            'points',
+            'score',
+            'experience',
+          ]) ??
+          0,
       currentLevel: _string(merged, const [
         'current_level',
         'level',
@@ -180,7 +192,9 @@ class LeaderboardRepository extends ApiRepository {
       // Percentages may arrive as a double or a numeric string.
       if (value is num) return value.round();
       if (value is String) {
-        final parsed = num.tryParse(value.trim());
+        // "4,820" / "4 820" show up in loosely typed payloads.
+        final cleaned = value.trim().replaceAll(RegExp(r'[\s,]'), '');
+        final parsed = num.tryParse(cleaned);
         if (parsed != null) return parsed.round();
       }
     }

@@ -41,6 +41,26 @@ void main() {
       expect(map['abc']!.selectedIndex, 2);
       expect(map['abc']!.correctIndex, 1);
     });
+
+    test('treats is_correct true as revealing the selected letter', () {
+      final map = GradedAnswer.parseMap({
+        'q1': {'answer': 'C', 'is_correct': true},
+        'q2': {'answer': 'A', 'correct': false, 'correct_answer': 'B'},
+      });
+      expect(map['q1']!.selectedIndex, 2);
+      expect(map['q1']!.correctIndex, 2);
+      expect(map['q2']!.selectedIndex, 0);
+      // Boolean `correct: false` must not become letter "false".
+      expect(map['q2']!.correctIndex, 1);
+    });
+
+    test('accepts numeric option indexes', () {
+      final map = GradedAnswer.parseMap({
+        'q1': {'selected': 0, 'correct_option': 3},
+      });
+      expect(map['q1']!.selectedIndex, 0);
+      expect(map['q1']!.correctIndex, 3);
+    });
   });
 }
 

@@ -371,7 +371,6 @@ class _Podium extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final scale = constraints.maxWidth / frameW;
-        final podium = board.podium;
         return SizedBox(
           height: heightAt(scale, rise),
           child: Stack(
@@ -387,17 +386,18 @@ class _Podium extends StatelessWidget {
                   fit: BoxFit.fill,
                 ),
               ),
-              // A league filter can come back with fewer than three learners,
-              // so each step is placed only if someone is standing on it.
+              // Place by XP order (1st = highest XP), not by raw list index of
+              // a rank-filtered subset — a missing rank-1 used to slide #2 onto
+              // the center step.
               _place(
-                podium.elementAtOrNull(0),
+                board.atPodiumPlace(1),
                 _firstX,
                 _firstStep,
                 scale,
                 crowned: true,
               ),
-              _place(podium.elementAtOrNull(1), _secondX, _secondStep, scale),
-              _place(podium.elementAtOrNull(2), _thirdX, _thirdStep, scale),
+              _place(board.atPodiumPlace(2), _secondX, _secondStep, scale),
+              _place(board.atPodiumPlace(3), _thirdX, _thirdStep, scale),
             ],
           ),
         );

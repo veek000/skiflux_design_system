@@ -275,14 +275,15 @@ class LearningTask {
       }
     }
     final base = quiz;
-    if (base != null && quizAnswers == null) {
-      quizAnswers = [
-        for (final q in base.questions)
-          q.id == null
-              ? null
-              : submission.gradedAnswers[q.id!]?.selectedIndex,
-      ];
-    }
+    if (base == null) return;
+    // Always restore the learner's picks from the graded blob so Review
+    // highlights stay correct after a cold start / refresh.
+    quizAnswers = [
+      for (final q in base.questions)
+        q.id == null
+            ? null
+            : submission.gradedAnswers[q.id!]?.selectedIndex,
+    ];
   }
 
   String get coinsLabel => formatSkillcoin(coins);

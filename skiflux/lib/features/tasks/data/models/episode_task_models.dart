@@ -312,7 +312,13 @@ class UserSubmission {
       attemptNumber: _int(json['attempt_number']),
       timeTakenSeconds: _int(json['time_taken_seconds']),
       submittedAt: _date(json['submitted_at']),
-      gradedAnswers: GradedAnswer.parseMap(json['answers']),
+      gradedAnswers: GradedAnswer.parseMap(
+        json['answers'] ??
+            json['graded_answers'] ??
+            json['question_results'] ??
+            json['assessment_answers'] ??
+            json['results'],
+      ),
     );
   }
 }
@@ -322,6 +328,8 @@ class UserSubmission {
 /// The OpenAPI field is untyped (`nullable: true` only). Backends commonly
 /// send either `{questionId: "A"}` or
 /// `{questionId: {selected/answer: "A", correct_answer/correct: "B"}}`.
+/// Review Answers needs [correctLetter] to paint green/red — without it the
+/// UI falls back to purple "selected" styling.
 class GradedAnswer {
   const GradedAnswer({this.selectedLetter, this.correctLetter});
 
@@ -339,58 +347,100 @@ class GradedAnswer {
     return index >= 0 && index <= 3 ? index : null;
   }
 
+  /// Coerce a wire value into an A–D letter. Accepts `"B"`, `1`, `"1"`,
+  /// `"option_b"`. Rejects booleans (so `correct: true` is not `"true"`).
+  static String? letterOf(Object? value) {
+    if (value == null || value is bool) return null;
+    if (value is num) {
+      final i = value.toInt();
+      if (i >= 0 && i <= 3) return String.fromCharCode(65 + i);
+      return null;
+    }
+    final raw = value.toString().trim();
+    if (raw.isEmpty) return null;
+    final upper = raw.toUpperCase();
+    if (upper.length == 1 && upper.codeUnitAt(0) >= 65 && upper.codeUnitAt(0) <= 68) {
+      return upper;
+    }
+    final asInt = int.tryParse(raw);
+    if (asInt != null && asInt >= 0 && asInt <= 3) {
+      return String.fromCharCode(65 + asInt);
+    }
+    final match = RegExp(r'\b([A-D])\b', caseSensitive: false).firstMatch(upper);
+    if (match != null) return match.group(1)!.toUpperCase();
+    // "option_a" / "OPTION_C"
+    final opt = RegExp(r'OPTION[_\s-]?([A-D])', caseSensitive: false)
+        .firstMatch(upper);
+    if (opt != null) return opt.group(1)!.toUpperCase();
+    return null;
+  }
+
+  static GradedAnswer fromValue(Object? value) {
+    if (value is String || value is num) {
+      return GradedAnswer(selectedLetter: letterOf(value));
+    }
+    if (value is! Map) return const GradedAnswer();
+    final m = Map<String, dynamic>.from(value);
+    final selected = letterOf(
+      m['answer'] ??
+          m['selected'] ??
+          m['selected_answer'] ??
+          m['selected_option'] ??
+          m['choice'] ??
+          m['user_answer'] ??
+          m['user_choice'] ??
+          m['given_answer'] ??
+          m['response'],
+    );
+    // Prefer an explicit correct letter. `correct` is often a *boolean*
+    // (`is_correct` alias) — never string-coerce that into a letter.
+    var correct = letterOf(
+      m['correct_answer'] ??
+          m['right_answer'] ??
+          m['answer_key'] ??
+          m['expected'] ??
+          m['expected_answer'] ??
+          m['correct_option'] ??
+          m['correct_choice'] ??
+          m['key'],
+    );
+    correct ??= letterOf(m['correct']);
+    final flaggedCorrect = m['is_correct'] == true ||
+        m['isCorrect'] == true ||
+        m['passed'] == true ||
+        m['correct'] == true;
+    if (correct == null && flaggedCorrect && selected != null) {
+      correct = selected;
+    }
+    return GradedAnswer(selectedLetter: selected, correctLetter: correct);
+  }
+
   static Map<String, GradedAnswer> parseMap(Object? raw) {
     final out = <String, GradedAnswer>{};
     if (raw is Map) {
+      // Some payloads nest the map under `answers` / `results` again.
+      final nested = raw['answers'] ?? raw['results'] ?? raw['questions'];
+      if (nested is Map || nested is List) {
+        return parseMap(nested);
+      }
       for (final entry in raw.entries) {
         final id = entry.key.toString();
-        final value = entry.value;
-        if (value is String) {
-          out[id] = GradedAnswer(selectedLetter: value);
-        } else if (value is Map) {
-          final m = Map<String, dynamic>.from(value);
-          out[id] = GradedAnswer(
-            selectedLetter: _string(
-              m['answer'] ??
-                  m['selected'] ??
-                  m['selected_answer'] ??
-                  m['choice'] ??
-                  m['user_answer'],
-            ),
-            correctLetter: _string(
-              m['correct_answer'] ??
-                  m['correct'] ??
-                  m['right_answer'] ??
-                  m['answer_key'] ??
-                  m['expected'],
-            ),
-          );
-        }
+        if (id == 'answers' || id == 'results' || id == 'questions') continue;
+        out[id] = fromValue(entry.value);
       }
     } else if (raw is List) {
       for (final item in raw) {
         if (item is! Map) continue;
         final m = Map<String, dynamic>.from(item);
         final id = _string(
-          m['question_id'] ?? m['id'] ?? m['question'] ?? m['uuid'],
+          m['question_id'] ??
+              m['id'] ??
+              m['question'] ??
+              m['uuid'] ??
+              m['question_uuid'],
         );
         if (id == null) continue;
-        out[id] = GradedAnswer(
-          selectedLetter: _string(
-            m['answer'] ??
-                m['selected'] ??
-                m['selected_answer'] ??
-                m['choice'] ??
-                m['user_answer'],
-          ),
-          correctLetter: _string(
-            m['correct_answer'] ??
-                m['correct'] ??
-                m['right_answer'] ??
-                m['answer_key'] ??
-                m['expected'],
-          ),
-        );
+        out[id] = fromValue(m);
       }
     }
     return Map.unmodifiable(out);

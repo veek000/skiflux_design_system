@@ -172,11 +172,18 @@ class TopupRepository extends ApiRepository {
     bool? saveCard,
     String? idempotencyKey,
     String? redirectUrl,
+
+    /// Pack size the user selected. Sent so the backend credits that many
+    /// SkillCoins rather than recomputing from fiat alone (which broke
+    /// discounted pack prices). Optional on the OpenAPI schema but accepted.
+    String? amountSkillcoins,
   }) =>
       post(
         kTopupInitiatePath,
         body: {
           'amount_fiat': amountFiat,
+          'amount_skillcoins': ?amountSkillcoins,
+          'skillcoins': ?amountSkillcoins,
           'currency': ?currency,
           'gateway_name': ?gatewayName,
           'payment_method': ?paymentMethod,
@@ -206,12 +213,15 @@ class TopupRepository extends ApiRepository {
     required String savedCardId,
     String? currency,
     String? idempotencyKey,
+    String? amountSkillcoins,
   }) =>
       post(
         kTopupChargeCardPath,
         body: {
           'amount_fiat': amountFiat,
           'saved_card_id': savedCardId,
+          'amount_skillcoins': ?amountSkillcoins,
+          'skillcoins': ?amountSkillcoins,
           'currency': ?currency,
           'idempotency_key': ?idempotencyKey,
         },

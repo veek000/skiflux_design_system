@@ -6,6 +6,7 @@ import '../../shared/error_handling/error_handler.dart';
 import '../../shared/widgets/network_image.dart';
 import '../../shared/sheets/share_sheet.dart';
 import '../../shared/toast/skiflux_toast.dart';
+import '../leaderboard/data/leaderboard_store.dart';
 import '../leaderboard/leaderboard_screen.dart';
 import '../playlists/data/playlists_store.dart';
 import '../search/search_screen.dart';
@@ -834,25 +835,47 @@ class _WatchHistoryCard extends ConsumerWidget {
 
 // ── Menu list ────────────────────────────────────────────────────────
 
+/// Detail text for the Leaderboard menu row — prefers the live board standing
+/// so "#N in League" matches the table the user is about to open.
+String? _leaderboardMenuDetail({
+  required LeaderboardData? board,
+  required UserProfile? profile,
+}) {
+  final rank = board?.currentRank ?? profile?.rank;
+  final level = (board?.currentLevel?.isNotEmpty ?? false)
+      ? board!.currentLevel!
+      : (profile?.currentLevel ?? '');
+  if (rank == null) return level.isEmpty ? null : level;
+  return '#$rank${level.isEmpty ? '' : ' in $level'}';
+}
+
 class _MenuList extends ConsumerWidget {
   const _MenuList();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // `rankLabel` formats "#12 in Master" from `rank` + `current_level`. With
-    // no profile the row simply carries no detail — it used to read "#12 in
-    // Master" for everyone, including signed-out users who have no standing.
+    // Prefer the same standing the Leaderboard table uses (XP-ordered board
+    // on the All pill). Profile.`rank` alone can lag behind and disagreed
+    // with the table / "better than N%" pill.
     final profile = ref.watch(meProfileProvider).value;
+    final league = ref.watch(leaderboardLeagueProvider);
+    final board = league == 0
+        ? ref.watch(leaderboardProvider).asData?.value
+        : null;
 
     return Column(
       children: [
         _MenuRow(
           icon: RemixIcons.trophy_fill,
           label: 'Leaderboard',
-          detail: profile?.rankLabel,
-          onTap: () => Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const LeaderboardScreen())),
+          detail: _leaderboardMenuDetail(board: board, profile: profile),
+          onTap: () {
+            // Always open on All so the menu detail and the board match.
+            ref.read(leaderboardLeagueProvider.notifier).select(0);
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const LeaderboardScreen()),
+            );
+          },
         ),
         _MenuRow(
           icon: RemixIcons.download_fill,

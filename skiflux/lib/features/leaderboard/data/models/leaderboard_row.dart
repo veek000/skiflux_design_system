@@ -11,13 +11,16 @@ part 'leaderboard_row.g.dart';
 /// factory runs, and every field keeps a default, so a renamed key costs one
 /// blank cell rather than a thrown list.
 ///
-/// The entry also carries `id`, `tasks_done` and `coins`. No leaderboard
-/// surface renders them, so they are deliberately not modelled here.
+/// `tasks_done` / `coins` are unused on this screen. `id` is modelled so we
+/// can match the signed-in learner when `username` is null (the schema marks
+/// it nullable) and `is_me` is missing.
 @freezed
 abstract class LeaderboardRow with _$LeaderboardRow {
   const LeaderboardRow._();
 
   const factory LeaderboardRow({
+    /// Learner UUID from `UserLeaderboardEntry.id`. Empty when omitted.
+    @Default('') String id,
     @Default(0) int rank,
     @Default('') String firstName,
     @Default('') String lastName,
@@ -30,7 +33,7 @@ abstract class LeaderboardRow with _$LeaderboardRow {
     @Default('') String currentLevel,
 
     /// The entry's own `is_me`. Defaults false so the store can fall back to a
-    /// username match — see `LeaderboardNotifier.resolve`.
+    /// username / id match — see `LeaderboardNotifier.resolve`.
     @Default(false) bool isCurrentUser,
   }) = _LeaderboardRow;
 

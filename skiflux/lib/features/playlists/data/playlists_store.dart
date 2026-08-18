@@ -259,12 +259,9 @@ class CoinPack {
     if (coins == null || coins <= 0 || price == null || price <= Decimal.zero) {
       return null;
     }
-    return CoinPack(
-      coins: coins,
-      price: price,
-      badge: _parseBadge(json['badge'] as String?),
-      savePercent: _intFrom(json['save_percent']),
-    );
+    // Marketing tags (Best Value / Save N%) are intentionally not shown —
+    // packs are presented as plain coin + price.
+    return CoinPack(coins: coins, price: price);
   }
 
   static int? _intFrom(Object? value) {
@@ -287,11 +284,6 @@ class CoinPack {
     return null;
   }
 
-  static CoinPackBadge _parseBadge(String? val) {
-    if (val == 'best_value' || val == 'popular') return CoinPackBadge.bestValue;
-    if (val == 'save') return CoinPackBadge.save;
-    return CoinPackBadge.none;
-  }
 }
 
 /// Coin packs for the Buy Coins surfaces.
@@ -324,27 +316,16 @@ final coinPacksProvider = FutureProvider<List<CoinPack>>((ref) async {
 });
 
 /// CLIENT FALLBACK PRICING — not backend-sourced (no pack endpoint exists in
-/// the spec). The displayed price is exactly what `topup/initiate` charges;
-/// coins credited are decided and verified by the backend.
+/// the spec). Prices are `coins × [kCoinRateNaira]` so a debit of ₦N credits
+/// exactly the pack's coin count when the backend uses the same flat rate.
+/// (Discounted "Save 17%" prices used to under-credit because initiate only
+/// sends `amount_fiat` and the server converts at the flat rate.)
 List<CoinPack> _fallbackCoinPacks() => [
-  CoinPack(coins: 100, price: Decimal.fromInt(600)),
-  CoinPack(
-    coins: 200,
-    price: Decimal.fromInt(1100),
-    badge: CoinPackBadge.bestValue,
-  ),
-  CoinPack(
-    coins: 500,
-    price: Decimal.fromInt(2500),
-    badge: CoinPackBadge.save,
-    savePercent: 17,
-  ),
-  CoinPack(
-    coins: 1000,
-    price: Decimal.fromInt(4500),
-    badge: CoinPackBadge.save,
-    savePercent: 25,
-  ),
+  for (final coins in const [100, 200, 500, 1000])
+    CoinPack(
+      coins: coins,
+      price: Decimal.fromInt(coins * kCoinRateNaira),
+    ),
 ];
 
 /// Snapshot of the coin view + every season the app has loaded this session.

@@ -77,20 +77,38 @@ class WalletRepository extends ApiRepository {
 
   /// Supported banks for [gateway] (server default: paystack). The payload is
   /// untyped, so the list is located tolerantly and unusable entries dropped.
+  ///
+  /// Uses a dynamic response type: some gateways/envelopes return a bare list
+  /// (or `{data: [...]}`) and a typed `Map` decode used to throw before the
+  /// picker could render — which is what showed the Add Bank error state.
   Future<List<SupportedBank>> getSupportedBanks({String? gateway}) => guard(
     () async {
-      final response = await dio.get<Map<String, dynamic>>(
+      final normalized = gateway?.trim().toLowerCase();
+      final response = await dio.get<dynamic>(
         kWithdrawalBanksPath,
-        queryParameters: {'gateway': ?gateway},
+        queryParameters: {
+          if (normalized != null && normalized.isNotEmpty) 'gateway': normalized,
+        },
       );
-      final body = response.data ?? const <String, dynamic>{};
-      return _bankList(unwrapObject(body))
-          .map(SupportedBank.tryParse)
-          .whereType<SupportedBank>()
-          .toList(growable: false);
+      return parseSupportedBanks(response.data);
     },
     kind: SkifluxErrorKind.contentLoadFailed,
   );
+
+  /// Public so unit tests can exercise envelope shapes without Dio.
+  static List<SupportedBank> parseSupportedBanks(Object? data) {
+    final raw = _bankListFrom(data);
+    final banks = <SupportedBank>[];
+    final seen = <String>{};
+    for (final entry in raw) {
+      final bank = SupportedBank.tryParse(entry);
+      if (bank == null) continue;
+      // Paystack sometimes repeats a code under a different display name.
+      if (!seen.add(bank.code)) continue;
+      banks.add(bank);
+    }
+    return List.unmodifiable(banks);
+  }
 
   /// Enabled withdrawal methods. Untyped payload; entries that don't carry
   /// the documented four fields are skipped.
@@ -220,6 +238,38 @@ class WalletRepository extends ApiRepository {
     return const [];
   }
 
+  /// Locates a bank array in any of the shapes the untyped banks endpoint
+  /// has been seen to return: bare list, `{data:[…]}`, `{data:{banks:[…]}}`,
+  /// `{banks:[…]}`, Paystack-style success envelopes, etc.
+  static List<dynamic> _bankListFrom(Object? data) {
+    if (data is List) return data;
+    if (data is! Map) return const [];
+    final map = Map<String, dynamic>.from(data);
+    // Prefer peeling a success/`data` envelope when `data` is itself a map,
+    // but keep looking when `data` is already the bank list.
+    final direct = _bankList(map, keys: const [
+      'banks',
+      'bank_list',
+      'supported_banks',
+      'results',
+      'data',
+      'items',
+    ]);
+    if (direct.isNotEmpty) return direct;
+    final inner = map['data'];
+    if (inner is Map) {
+      return _bankList(Map<String, dynamic>.from(inner), keys: const [
+        'banks',
+        'bank_list',
+        'supported_banks',
+        'results',
+        'data',
+        'items',
+      ]);
+    }
+    return const [];
+  }
+
   /// `POST /wallet/transactions/{transaction_ref}/report` — dispute / report a transaction.
   Future<Map<String, dynamic>> reportTransaction({
     required String transactionRef,
@@ -267,12 +317,21 @@ final addBankOptionsProvider = FutureProvider<AddBankOptions>((ref) async {
   try {
     final methods = await repo.getWithdrawalMethods();
     final bankForm = methods.where((m) => m.flow == 'bank_form');
-    if (bankForm.isNotEmpty && bankForm.first.gateway.isNotEmpty) {
-      gateway = bankForm.first.gateway;
+    if (bankForm.isNotEmpty && bankForm.first.gateway.trim().isNotEmpty) {
+      gateway = bankForm.first.gateway.trim().toLowerCase();
     }
   } catch (_) {
     // Methods discovery is an optimisation; the banks call still decides.
   }
-  final banks = await repo.getSupportedBanks(gateway: gateway);
+  var banks = await repo.getSupportedBanks(gateway: gateway);
+  // A wrong/unknown gateway name can yield an empty list while the default
+  // still works — retry once without a filter, then as plain paystack.
+  if (banks.isEmpty && gateway != 'paystack') {
+    banks = await repo.getSupportedBanks(gateway: 'paystack');
+    if (banks.isNotEmpty) gateway = 'paystack';
+  }
+  if (banks.isEmpty) {
+    banks = await repo.getSupportedBanks();
+  }
   return AddBankOptions(gatewayName: gateway, banks: banks);
 });

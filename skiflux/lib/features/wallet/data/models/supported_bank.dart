@@ -21,8 +21,25 @@ class SupportedBank {
   static SupportedBank? tryParse(Object? raw) {
     if (raw is! Map) return null;
     final json = Map<String, dynamic>.from(raw);
-    final name = _string(json, const ['name', 'bank_name', 'label']);
-    final code = _string(json, const ['code', 'bank_code', 'id']);
+    // Paystack marks retired banks with active:false — skip them so the
+    // picker only offers destinations the gateway will still resolve.
+    final active = json['active'];
+    if (active is bool && !active) return null;
+    final name = _string(json, const [
+      'name',
+      'bank_name',
+      'label',
+      'bankName',
+    ]);
+    // Prefer numeric gateway codes over slugs — `POST …/accounts` expects the
+    // code Paystack resolve uses ("058"), not "guaranty-trust-bank".
+    final code = _string(json, const [
+          'code',
+          'bank_code',
+          'bankCode',
+          'id',
+        ]) ??
+        _string(json, const ['slug']);
     if (name == null || code == null) return null;
     return SupportedBank(name: name, code: code);
   }

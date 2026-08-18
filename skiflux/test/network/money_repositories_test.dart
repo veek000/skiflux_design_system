@@ -259,6 +259,20 @@ void main() {
       expect(banks.first.code, '058');
     });
 
+    test('getSupportedBanks reads a Paystack-style data array', () async {
+      final banks = WalletRepository.parseSupportedBanks({
+        'status': true,
+        'message': 'Banks retrieved',
+        'data': [
+          {'name': 'Access Bank', 'code': '044', 'active': true},
+          {'name': 'Retired Bank', 'code': '999', 'active': false},
+          {'name': 'Zenith Bank', 'code': '057', 'slug': 'zenith-bank'},
+        ],
+      });
+      expect(banks.map((b) => b.code), ['044', '057']);
+      expect(banks.first.name, 'Access Bank');
+    });
+
     test('addWithdrawalAccount posts the spec body and failures map to '
         'bankVerificationFailed', () async {
       final adapter = _StubAdapter(
