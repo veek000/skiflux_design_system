@@ -43,6 +43,7 @@ class SkifluxComment extends StatefulWidget {
     this.message,
     this.audioPath,
     this.duration = '0:00',
+    this.durationMs,
     this.playing = false,
     this.timeLabel = '30min',
     this.avatarImage,
@@ -78,6 +79,10 @@ class SkifluxComment extends StatefulWidget {
   /// value from the file/`duration_ms` payload — the old `'0:10'` default made
   /// every note look 10 seconds long.
   final String duration;
+
+  /// Known length in milliseconds (from the recorder or API). Seeds the label
+  /// immediately so a just-sent note shows e.g. `0:07` before prepare finishes.
+  final int? durationMs;
 
   /// Voicenote playing state: pause icon + brand waveform + remaining-time
   /// countdown (WhatsApp-style). The parent owns this so it can enforce
@@ -159,14 +164,40 @@ class _SkifluxCommentState extends State<SkifluxComment> {
   @override
   void initState() {
     super.initState();
+    _seedTotalFromWidget();
     if (_hasAudio) _initPlayer();
+  }
+
+  void _seedTotalFromWidget() {
+    final seeded = widget.durationMs ?? _parseDurationLabel(widget.duration);
+    if (seeded != null && seeded > 0 && _totalMs <= 0) {
+      _totalMs = seeded;
+    }
+  }
+
+  /// Parses `m:ss` / `mm:ss` labels. Returns null for empty/`0:00`.
+  static int? _parseDurationLabel(String label) {
+    final trimmed = label.trim();
+    if (trimmed.isEmpty || trimmed == '0:00') return null;
+    final parts = trimmed.split(':');
+    if (parts.length != 2) return null;
+    final m = int.tryParse(parts[0]);
+    final s = int.tryParse(parts[1]);
+    if (m == null || s == null) return null;
+    final ms = ((m * 60) + s) * 1000;
+    return ms > 0 ? ms : null;
   }
 
   @override
   void didUpdateWidget(SkifluxComment oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.durationMs != oldWidget.durationMs ||
+        widget.duration != oldWidget.duration) {
+      _seedTotalFromWidget();
+    }
     if (widget.audioPath != oldWidget.audioPath) {
       _disposePlayer();
+      _seedTotalFromWidget();
       if (_hasAudio) _initPlayer();
     } else if (_prepared && _player != null &&
         widget.playing != oldWidget.playing) {
@@ -229,7 +260,9 @@ class _SkifluxCommentState extends State<SkifluxComment> {
       if (!mounted) return;
       setState(() {
         _prepared = true;
-        _totalMs = total > 0 ? total : 0;
+        // Keep the recorder-seeded length if the player still reports -1/0
+        // (common right after a fresh capture on some devices).
+        if (total > 0) _totalMs = total;
       });
     } catch (error) {
       // An unprepared controller can neither draw nor play. Drop it so the row

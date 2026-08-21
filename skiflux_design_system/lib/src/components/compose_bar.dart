@@ -29,8 +29,14 @@ import 'voice_waveform.dart';
 /// Recording is real: the mic button starts an [RecorderController]
 /// capture (m4a in the app documents directory) and the waveform renders
 /// live mic amplitude. Send stops the recording and reports the file via
-/// [onSendVoiceNote]; delete discards it and removes the temp file.
+/// [onSendVoiceNote] (path + duration); delete discards it and removes the
+/// temp file.
 enum SkifluxComposeState { idle, recording }
+
+/// Voice-note send callback — path of the finalized m4a plus the recorded
+/// length so the comment row can show a real duration before the player
+/// finishes preparing.
+typedef SkifluxSendVoiceNote = void Function(String path, Duration duration);
 
 class SkifluxComposeBar extends StatefulWidget {
   const SkifluxComposeBar({
@@ -53,10 +59,10 @@ class SkifluxComposeBar extends StatefulWidget {
   final VoidCallback? onDeleteTap;
   final VoidCallback? onSend;
 
-  /// Called with the recorded file path when send is tapped while
-  /// recording. The file lives in the app documents directory; the
-  /// receiver owns it from here (attach, upload, or delete).
-  final ValueChanged<String>? onSendVoiceNote;
+  /// Called with the recorded file path + duration when send is tapped while
+  /// recording. The file is copied to a stable `voice_notes/` path so the
+  /// recorder can release locks before the comment player opens it.
+  final SkifluxSendVoiceNote? onSendVoiceNote;
 
   /// Raised when a recording could not be started or produced no file — mic
   /// permission refused, the recorder throwing, an empty capture.
@@ -166,6 +172,8 @@ class _SkifluxComposeBarState extends State<SkifluxComposeBar> {
   }
 
   Future<void> _sendRecording() async {
+    // Capture elapsed *before* stop/reset — `reset()` zeroes both clocks.
+    final elapsedBeforeStop = _recorder.elapsedDuration;
     String? path;
     try {
       path = await _recorder.stop(false) ?? _recordingPath;
@@ -173,6 +181,9 @@ class _SkifluxComposeBarState extends State<SkifluxComposeBar> {
       debugPrint('SkifluxComposeBar: recorder.stop failed → $error');
       path = _recordingPath;
     }
+    // Prefer the finalized file duration; fall back to the live timer.
+    final recorded = _recorder.recordedDuration;
+    final duration = recorded > Duration.zero ? recorded : elapsedBeforeStop;
     _recordingPath = null;
     // `stop(false)` leaves the controller holding the finished recording's
     // state, so a second note in the same session records against a stale
@@ -190,8 +201,37 @@ class _SkifluxComposeBarState extends State<SkifluxComposeBar> {
       widget.onSend?.call();
       return;
     }
-    widget.onSendVoiceNote?.call(path);
+
+    // Copy out of the recorder's temp path so the comment player isn't racing
+    // a still-locked/truncated m4a (common cause of "sent but won't play /
+    // 0:00 duration").
+    final stablePath = await _stabilizeRecording(path);
+    widget.onSendVoiceNote?.call(stablePath, duration);
     widget.onSend?.call();
+  }
+
+  /// Copy [path] into `Documents/voice_notes/` and delete the original when
+  /// possible. Returns the original path if the copy fails.
+  static Future<String> _stabilizeRecording(String path) async {
+    try {
+      final src = File(path);
+      if (!await src.exists()) return path;
+      final dir = await getApplicationDocumentsDirectory();
+      final outDir = Directory('${dir.path}/voice_notes');
+      if (!await outDir.exists()) await outDir.create(recursive: true);
+      final dest =
+          '${outDir.path}/vn_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      await src.copy(dest);
+      try {
+        await src.delete();
+      } catch (_) {
+        // Original can stay; the stable copy is what we play/upload.
+      }
+      return dest;
+    } catch (error) {
+      debugPrint('SkifluxComposeBar: stabilize copy failed → $error');
+      return path;
+    }
   }
 
   static bool _hasBytes(String path) {
