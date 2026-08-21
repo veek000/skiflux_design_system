@@ -206,8 +206,11 @@ class _SkifluxCommentState extends State<SkifluxComment> {
       // resolves is not lost — [_initPlayer] applies `widget.playing` when it
       // finishes.
       if (widget.playing) {
-        unawaited(_player!.startPlayer());
-      } else {
+          if (_totalMs > 0 && _positionMs >= _totalMs) {
+            unawaited(_player!.seekTo(0));
+          }
+          unawaited(_player!.startPlayer());
+        } else {
         unawaited(_player!.pausePlayer());
       }
     }
@@ -242,7 +245,7 @@ class _SkifluxCommentState extends State<SkifluxComment> {
       widget.onPlaybackComplete?.call();
     });
     try {
-      await player.setFinishMode(finishMode: FinishMode.pause);
+      await player.setFinishMode(finishMode: FinishMode.stop);
       // Normalize Windows/file URIs the same way the package expects.
       final normalized = path.startsWith('file:')
           ? Uri.parse(path).toFilePath()
@@ -277,7 +280,12 @@ class _SkifluxCommentState extends State<SkifluxComment> {
     if (!mounted) return;
     // Applies a toggle that arrived while prepare was still running, which
     // `didUpdateWidget` deliberately skipped.
-    if (widget.playing) await player.startPlayer();
+    if (widget.playing) {
+        if (_totalMs > 0 && _positionMs >= _totalMs) {
+          await player.seekTo(0);
+        }
+        await player.startPlayer();
+      }
   }
 
   void _disposePlayer() {

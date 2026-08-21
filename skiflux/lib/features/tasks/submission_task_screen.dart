@@ -177,7 +177,10 @@ class _SubmissionTaskScreenState extends ConsumerState<SubmissionTaskScreen> {
       String? link;
       if (_method == 0) {
         link = _linkController.text.trim();
-        final uri = Uri.tryParse(link);
+          if (!link.toLowerCase().startsWith('http://') && !link.toLowerCase().startsWith('https://')) {
+            link = 'https://$link';
+          }
+          final uri = Uri.tryParse(link);
         final valid =
             uri != null &&
             (uri.scheme == 'http' || uri.scheme == 'https') &&

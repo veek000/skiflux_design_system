@@ -59,10 +59,8 @@ class EpisodeTasksRepository extends ApiRepository {
     submitPath,
     body: {
       'episode_id': episodeId,
-      'project_submission': {
-        'submission_url': url,
+      'submission_url': url,
         if (note != null && note.isNotEmpty) 'submission_text': note,
-      },
     },
     kind: SkifluxErrorKind.taskSubmission,
   );

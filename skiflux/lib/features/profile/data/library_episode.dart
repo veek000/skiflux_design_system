@@ -178,9 +178,9 @@ class LibraryEpisode {
       videoUrl: _string(json['video_url']),
       durationSeconds: _int(json['video_duration']) ?? 0,
       viewCount: _int(json['view_count']) ?? 0,
-      likeCount: _int(json['like_count']),
-      commentCount: _int(json['comment_count']),
-      saveCount: _int(json['save_count']),
+      likeCount: _int(json['like_count']) ?? _int(json['likeCount']),
+      commentCount: _int(json['comment_count']) ?? _int(json['commentCount']),
+      saveCount: _int(json['save_count']) ?? _int(json['saveCount']),
       skillworld: _string(json['skillworld']),
     );
   }
