@@ -33,6 +33,7 @@ class HomeFeedItem {
     required this.creatorName,
     required this.creatorUsername,
     required this.creatorInitials,
+    this.creatorAvatarUrl,
     /// Network URL for [FeedContentType.video] playback via `video_player`.
     /// Null for images (and for legacy call sites with no stream yet).
     this.videoUrl,
@@ -71,6 +72,7 @@ class HomeFeedItem {
   final String creatorName;
   final String creatorUsername;
   final String creatorInitials;
+  final String? creatorAvatarUrl;
 
   final String? episodeId;
 

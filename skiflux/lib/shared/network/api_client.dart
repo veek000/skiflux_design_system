@@ -50,13 +50,24 @@ final apiClientProvider = Provider<Dio>((ref) {
     ConnectivityInterceptor(() => ref.read(connectivityProvider.notifier)),
   );
   if (kDebugMode) {
+    // dio.interceptors.add(
+    //   LogInterceptor(
+    //     request: false,
+    //     requestHeader: false,
+    //     requestBody: false,
+    //     responseHeader: false,
+    //     responseBody: false,
+    //     logPrint: (line) => debugPrint('[api] $line'),
+    //   ),
+    // );
     dio.interceptors.add(
       LogInterceptor(
-        request: false,
+        request: true,
         requestHeader: false,
-        requestBody: false,
+        requestBody: true,
         responseHeader: false,
-        responseBody: false,
+        responseBody: true,
+        error: true,
         logPrint: (line) => debugPrint('[api] $line'),
       ),
     );

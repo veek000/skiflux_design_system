@@ -456,9 +456,14 @@ class CommentsNotifier extends Notifier<CommentsState> {
     state = state.copyWith(composeState: value);
   }
 
-  void togglePlay(int index) {
-    final next = state.playingIndex == index ? null : index;
-    state = state.copyWith(playingIndex: next, clearPlayingIndex: next == null);
+  // void togglePlay(int index) {
+  //   final next = state.playingIndex == index ? null : index;
+  //   state = state.copyWith(playingIndex: next, clearPlayingIndex: next == null);
+  // }
+  void setPlaying(int index) {
+    state = state.copyWith(
+      playingIndex: index,
+    );
   }
 
   void clearPlaying() {

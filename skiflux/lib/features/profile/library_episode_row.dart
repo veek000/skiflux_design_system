@@ -32,6 +32,28 @@ class LibraryEpisodeRow extends StatelessWidget {
   final double? progress;
   final VoidCallback? onTap;
 
+  Widget _creatorAvatar() {
+    final url = episode.creatorAvatarUrl;
+
+    if (url == null || url.isEmpty) {
+      return SkifluxAvatar(
+        style: SkifluxAvatarStyle.initial,
+        size: SkifluxSpacing.spaceL,
+        initials: episode.creatorInitials,
+      );
+    }
+
+    return ClipOval(
+      child: SizedBox(
+        width: SkifluxSpacing.spaceL,
+        height: SkifluxSpacing.spaceL,
+        child: SkifluxNetworkImage(
+          url: url,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return InkWell(
@@ -57,11 +79,12 @@ class LibraryEpisodeRow extends StatelessWidget {
                 const SizedBox(height: SkifluxSpacing.spaceXs),
                 Row(
                   children: [
-                    SkifluxAvatar(
-                      style: SkifluxAvatarStyle.initial,
-                      size: SkifluxSpacing.spaceL,
-                      initials: episode.creatorInitials,
-                    ),
+                    // SkifluxAvatar(
+                    //   style: SkifluxAvatarStyle.initial,
+                    //   size: SkifluxSpacing.spaceL,
+                    //   initials: episode.creatorInitials,
+                    // ),
+                    _creatorAvatar(),
                     const SizedBox(width: SkifluxSpacing.spaceXs),
                     Flexible(
                       child: Text(

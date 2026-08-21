@@ -516,10 +516,19 @@ class _AvatarWithFollowCta extends ConsumerWidget {
     return Stack(
       clipBehavior: Clip.none,
       children: [
+        // SkifluxAvatar(
+        //   style: SkifluxAvatarStyle.initial,
+        //   size: SkifluxUnit.u48,
+        //   initials: item.creatorInitials,
+        // ),
         SkifluxAvatar(
-          style: SkifluxAvatarStyle.initial,
+          style: SkifluxAvatarStyle.avatar,
           size: SkifluxUnit.u48,
           initials: item.creatorInitials,
+          image: item.creatorAvatarUrl != null &&
+              item.creatorAvatarUrl!.isNotEmpty
+              ? NetworkImage(item.creatorAvatarUrl!)
+              : null,
         ),
         if (!alreadyFollowed && canFollow)
           Positioned(

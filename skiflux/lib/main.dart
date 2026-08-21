@@ -6,7 +6,7 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'app/app.dart';
 import 'config/env_config.dart';
-import 'firebase_options.dart';
+import 'firebase_options_ci_stub.dart';
 import 'shared/network/provider_retry.dart';
 import 'shared/notifications/fcm_service.dart';
 

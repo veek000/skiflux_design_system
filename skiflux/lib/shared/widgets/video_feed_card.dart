@@ -694,6 +694,10 @@ class _ActionRail extends ConsumerWidget {
   final HomeFeedItem item;
   final VoidCallback onMoreTap;
 
+  String shareableEpisodeUrl(String episodeId) {
+    return 'https://skiflux.com/episode/$episodeId';
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final episodeId = item.episodeId ?? '';
@@ -759,19 +763,33 @@ class _ActionRail extends ConsumerWidget {
               : null,
         ),
         const SizedBox(height: SkifluxSpacing.spaceS),
+        // _ActionItem(
+        //   icon: RemixIcons.share_forward_fill,
+        //   // No share count exists on the Episode payload; show none.
+        //   count: '',
+        //   // The device's own share sheet. This used to open a custom row of
+        //   // eight branded circles, none of which did anything.
+        //   onTap: () => showShareSheet(
+        //     context,
+        //     title: item.creatorName.isEmpty
+        //         ? item.title
+        //         : '${item.title} — @${item.creatorUsername}',
+        //     url: shareableMediaUrl(item.videoUrl),
+        //   ),
+        // ),
         _ActionItem(
           icon: RemixIcons.share_forward_fill,
-          // No share count exists on the Episode payload; show none.
           count: '',
-          // The device's own share sheet. This used to open a custom row of
-          // eight branded circles, none of which did anything.
-          onTap: () => showShareSheet(
+          onTap: hasEpisode
+              ? () => showShareSheet(
             context,
             title: item.creatorName.isEmpty
                 ? item.title
                 : '${item.title} — @${item.creatorUsername}',
-            url: shareableMediaUrl(item.videoUrl),
-          ),
+            // url: 'https://skiflux.com/episode/$episodeId',
+            url: shareableEpisodeUrl(episodeId),
+          )
+              : null,
         ),
         const SizedBox(height: SkifluxSpacing.spaceS),
         GestureDetector(

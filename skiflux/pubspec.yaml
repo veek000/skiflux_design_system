@@ -52,7 +52,7 @@ dependencies:
   # blur/scrim/card visuals via containerWidget.
   modal_bottom_sheet: ^3.0.0
   # Real-time crash reporting and exception monitoring
-  sentry_flutter: ^8.9.0
+  sentry_flutter: ^9.27.0
   # Renders the brand splash Bodymovin/Lottie export (assets/animations/
   # logo_splash.json) — confirmed per CLAUDE.md package policy. Pure Dart, no
   # platform config; keeps the JSON as the source of truth so a re-export from
@@ -82,6 +82,7 @@ dependencies:
   # Home feed video playback + real progress bar (user-approved 2026-07-28).
   # Exact pin per freezed/FCM precedent. Image feed items never use this.
   video_player: 2.13.0
+  audioplayers: ^6.8.1
   # Social sign-in / sign-up (user-approved 2026-07-28). The backend's
   # `/auth/social/mobile/{google,apple}` endpoints each take a provider
   # `id_token`, which only the native SDK can mint — there is nothing to

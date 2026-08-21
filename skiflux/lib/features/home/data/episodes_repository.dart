@@ -84,6 +84,7 @@ HomeFeedItem episodeJsonToFeedItem(Map<String, dynamic> json) {
   var creatorUsername = '';
   var creatorInitials = 'C';
   String? creatorId;
+  String? creatorAvatarUrl;
   if (creator is Map) {
     final c = Map<String, dynamic>.from(creator);
     final first = _stringOrNull(c['first_name']) ?? '';
@@ -94,6 +95,7 @@ HomeFeedItem episodeJsonToFeedItem(Map<String, dynamic> json) {
         _stringOrNull(c['name']) ?? _stringOrNull(c['display_name']);
     creatorId = _stringOrNull(c['id']?.toString());
     creatorUsername = _stringOrNull(c['username']) ?? '';
+    creatorAvatarUrl = _stringOrNull(c['avatar_url']);
     creatorName = (display != null && display.isNotEmpty)
         ? display
         : ('$first $last'.trim().isNotEmpty
@@ -129,6 +131,7 @@ HomeFeedItem episodeJsonToFeedItem(Map<String, dynamic> json) {
     creatorName: creatorName,
     creatorUsername: creatorUsername,
     creatorInitials: creatorInitials.isEmpty ? 'C' : creatorInitials,
+    creatorAvatarUrl: creatorAvatarUrl,
     episodeId: id.isEmpty ? null : id,
     creatorId: creatorId,
     likeCount: _intOrNull(json['like_count']),

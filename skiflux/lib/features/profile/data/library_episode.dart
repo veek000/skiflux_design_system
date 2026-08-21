@@ -17,6 +17,7 @@ class LibraryEpisode {
     required this.creatorName,
     required this.creatorUsername,
     required this.creatorInitials,
+    this.creatorAvatarUrl,
     this.order,
     this.thumbnailUrl,
     this.videoUrl,
@@ -38,6 +39,7 @@ class LibraryEpisode {
   final String creatorName;
   final String creatorUsername;
   final String creatorInitials;
+  final String? creatorAvatarUrl;
 
   /// Position within its season, 1-10. Null when the API omitted it.
   final int? order;
@@ -93,6 +95,7 @@ class LibraryEpisode {
     creatorName: creatorName,
     creatorUsername: creatorUsername,
     creatorInitials: creatorInitials,
+    creatorAvatarUrl: creatorAvatarUrl,
     order: order,
     thumbnailUrl: thumbnailUrl,
     videoUrl: videoUrl,
@@ -133,25 +136,28 @@ class LibraryEpisode {
   /// OpenAPI `Episode` → [LibraryEpisode].
   factory LibraryEpisode.fromJson(Map<String, dynamic> json) {
     final creator = json['creator'];
+
     var name = 'Creator';
     var username = '';
     var initials = 'C';
+    String? avatarUrl;
+
     if (creator is Map) {
       final c = Map<String, dynamic>.from(creator);
-      final first = _string(c['first_name']) ?? '';
-      final last = _string(c['last_name']) ?? '';
-      final display = _string(c['display_name']);
+
+      name = _string(c['name']) ?? 'Creator';
       username = _string(c['username']) ?? '';
-      name = (display != null && display.isNotEmpty)
-          ? display
-          : ('$first $last'.trim().isNotEmpty
-                ? '$first $last'.trim()
-                : (username.isNotEmpty ? username : 'Creator'));
-      if (first.isNotEmpty || last.isNotEmpty) {
-        initials =
-            '${first.isNotEmpty ? first[0] : ''}'
-                    '${last.isNotEmpty ? last[0] : ''}'
-                .toUpperCase();
+      avatarUrl = _string(c['avatar_url']);
+
+      if (name.isNotEmpty) {
+        final parts = name.trim().split(RegExp(r'\s+'));
+
+        if (parts.length >= 2) {
+          initials =
+              '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+        } else {
+          initials = name[0].toUpperCase();
+        }
       } else if (username.isNotEmpty) {
         initials = username[0].toUpperCase();
       }
@@ -164,8 +170,11 @@ class LibraryEpisode {
       creatorName: name,
       creatorUsername: username,
       creatorInitials: initials.isEmpty ? 'C' : initials,
+      creatorAvatarUrl: avatarUrl,
       order: _int(json['order']),
-      thumbnailUrl: _string(json['thumbnail_url']) ?? _string(json['preview_url']),
+      thumbnailUrl:
+      _string(json['thumbnail_url']) ??
+          _string(json['preview_url']),
       videoUrl: _string(json['video_url']),
       durationSeconds: _int(json['video_duration']) ?? 0,
       viewCount: _int(json['view_count']) ?? 0,
@@ -175,6 +184,57 @@ class LibraryEpisode {
       skillworld: _string(json['skillworld']),
     );
   }
+  // factory LibraryEpisode.fromJson(Map<String, dynamic> json) {
+  //   final creator = json['creator'];
+  //   var name = 'Creator';
+  //   var username = '';
+  //   var initials = 'C';
+  //   String? avatarUrl;
+  //   if (creator is Map) {
+  //     final c = Map<String, dynamic>.from(creator);
+  //     final first = _string(c['first_name']) ?? '';
+  //     final last = _string(c['last_name']) ?? '';
+  //     final display = _string(c['display_name']);
+  //     username = _string(c['username']) ?? '';
+  //     avatarUrl =
+  //         _string(c['avatar_url']) ??
+  //             _string(c['profile_image']) ??
+  //             _string(c['profile_image_url']) ??
+  //             _string(c['avatar']);
+  //     name = (display != null && display.isNotEmpty)
+  //         ? display
+  //         : ('$first $last'.trim().isNotEmpty
+  //               ? '$first $last'.trim()
+  //               : (username.isNotEmpty ? username : 'Creator'));
+  //     if (first.isNotEmpty || last.isNotEmpty) {
+  //       initials =
+  //           '${first.isNotEmpty ? first[0] : ''}'
+  //                   '${last.isNotEmpty ? last[0] : ''}'
+  //               .toUpperCase();
+  //     } else if (username.isNotEmpty) {
+  //       initials = username[0].toUpperCase();
+  //     }
+  //   }
+  //
+  //   return LibraryEpisode(
+  //     id: _string(json['id']) ?? '',
+  //     title: _string(json['title']) ?? 'Episode',
+  //     description: _string(json['description']) ?? '',
+  //     creatorName: name,
+  //     creatorUsername: username,
+  //     creatorInitials: initials.isEmpty ? 'C' : initials,
+  //     creatorAvatarUrl: avatarUrl,
+  //     order: _int(json['order']),
+  //     thumbnailUrl: _string(json['thumbnail_url']) ?? _string(json['preview_url']),
+  //     videoUrl: _string(json['video_url']),
+  //     durationSeconds: _int(json['video_duration']) ?? 0,
+  //     viewCount: _int(json['view_count']) ?? 0,
+  //     likeCount: _int(json['like_count']),
+  //     commentCount: _int(json['comment_count']),
+  //     saveCount: _int(json['save_count']),
+  //     skillworld: _string(json['skillworld']),
+  //   );
+  // }
 
   /// The feed's own model in the shape the library and downloads use.
   ///

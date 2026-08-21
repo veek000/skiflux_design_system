@@ -72,10 +72,16 @@ class AuthInterceptor extends Interceptor {
     ErrorInterceptorHandler handler,
   ) async {
     final options = err.requestOptions;
+    final statusCode = err.response?.statusCode;
+
     final shouldRefresh =
-        err.response?.statusCode == 401 &&
-        options.extra[noAuthExtra] != true &&
-        options.extra[_retriedExtra] != true;
+        (statusCode == 401 || statusCode == 403) &&
+            options.extra[noAuthExtra] != true &&
+            options.extra[_retriedExtra] != true;
+    // final shouldRefresh =
+    //     err.response?.statusCode == 401 &&
+    //     options.extra[noAuthExtra] != true &&
+    //     options.extra[_retriedExtra] != true;
 
     if (!shouldRefresh) return handler.next(err);
 

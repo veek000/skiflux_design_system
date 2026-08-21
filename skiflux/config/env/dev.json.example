@@ -1,7 +1,7 @@
 {
   "ENVIRONMENT": "dev",
   "SENTRY_DSN": "https://examplePublicKey@o0.ingest.sentry.io/0",
-  "API_BASE_URL": "https://api-dev.skiflux.com",
+  "API_BASE_URL": "https://skiflux-backend-production.up.railway.app",
   "ENABLE_ANALYTICS": false,
   "GOOGLE_SERVER_CLIENT_ID": "",
   "GOOGLE_IOS_CLIENT_ID": ""

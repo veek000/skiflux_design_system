@@ -311,27 +311,44 @@ final withdrawalFeePercentProvider = FutureProvider<Decimal?>((ref) {
   return ref.watch(walletRepositoryProvider).getWithdrawalFeePercent();
 });
 
+// final addBankOptionsProvider = FutureProvider<AddBankOptions>((ref) async {
+//   final repo = ref.watch(walletRepositoryProvider);
+//   var gateway = 'paystack'; // Spec: banks endpoint "defaults to paystack".
+//   try {
+//     final methods = await repo.getWithdrawalMethods();
+//     final bankForm = methods.where((m) => m.flow == 'bank_form');
+//     if (bankForm.isNotEmpty && bankForm.first.gateway.trim().isNotEmpty) {
+//       gateway = bankForm.first.gateway.trim().toLowerCase();
+//     }
+//   } catch (_) {
+//     // Methods discovery is an optimisation; the banks call still decides.
+//   }
+//   var banks = await repo.getSupportedBanks(gateway: gateway);
+//   // A wrong/unknown gateway name can yield an empty list while the default
+//   // still works — retry once without a filter, then as plain paystack.
+//   if (banks.isEmpty && gateway != 'paystack') {
+//     banks = await repo.getSupportedBanks(gateway: 'paystack');
+//     if (banks.isNotEmpty) gateway = 'paystack';
+//   }
+//   if (banks.isEmpty) {
+//     banks = await repo.getSupportedBanks();
+//   }
+//   return AddBankOptions(gatewayName: gateway, banks: banks);
+// });
+
 final addBankOptionsProvider = FutureProvider<AddBankOptions>((ref) async {
   final repo = ref.watch(walletRepositoryProvider);
-  var gateway = 'paystack'; // Spec: banks endpoint "defaults to paystack".
-  try {
-    final methods = await repo.getWithdrawalMethods();
-    final bankForm = methods.where((m) => m.flow == 'bank_form');
-    if (bankForm.isNotEmpty && bankForm.first.gateway.trim().isNotEmpty) {
-      gateway = bankForm.first.gateway.trim().toLowerCase();
-    }
-  } catch (_) {
-    // Methods discovery is an optimisation; the banks call still decides.
-  }
-  var banks = await repo.getSupportedBanks(gateway: gateway);
-  // A wrong/unknown gateway name can yield an empty list while the default
-  // still works — retry once without a filter, then as plain paystack.
-  if (banks.isEmpty && gateway != 'paystack') {
-    banks = await repo.getSupportedBanks(gateway: 'paystack');
-    if (banks.isNotEmpty) gateway = 'paystack';
-  }
-  if (banks.isEmpty) {
-    banks = await repo.getSupportedBanks();
-  }
-  return AddBankOptions(gatewayName: gateway, banks: banks);
+
+  // The mobile app uses Paystack for withdrawals.
+  // Ignore the gateway returned by GET /wallet/withdrawals/methods.
+  const gateway = 'paystack';
+
+  final banks = await repo.getSupportedBanks(
+    gateway: gateway,
+  );
+
+  return AddBankOptions(
+    gatewayName: gateway,
+    banks: banks,
+  );
 });

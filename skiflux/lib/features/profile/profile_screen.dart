@@ -462,10 +462,30 @@ class _ProfileHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        SkifluxAvatar(
-          style: SkifluxAvatarStyle.initial,
-          size: SkifluxUnit.u64,
-          initials: profile.initials,
+        // SkifluxAvatar(
+        //   style: SkifluxAvatarStyle.initial,
+        //   size: SkifluxUnit.u64,
+        //   initials: profile.initials,
+        // ),
+        ClipOval(
+          child: SizedBox(
+            width: SkifluxUnit.u64,
+            height: SkifluxUnit.u64,
+            child: profile.avatarUrl != null && profile.avatarUrl!.isNotEmpty
+                ? SkifluxNetworkImage(
+              url: profile.avatarUrl!,
+              errorWidget: SkifluxAvatar(
+                style: SkifluxAvatarStyle.initial,
+                size: SkifluxUnit.u64,
+                initials: profile.initials,
+              ),
+            )
+                : SkifluxAvatar(
+              style: SkifluxAvatarStyle.initial,
+              size: SkifluxUnit.u64,
+              initials: profile.initials,
+            ),
+          ),
         ),
         const SizedBox(height: SkifluxSpacing.spaceS),
         Text(

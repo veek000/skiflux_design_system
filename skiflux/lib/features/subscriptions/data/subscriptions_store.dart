@@ -148,6 +148,14 @@ class SubscriptionEpisode {
 
   /// Spec `Episode` — the same schema the home feed parses.
   factory SubscriptionEpisode.fromJson(Map<String, dynamic> json) {
+
+    print(
+      'EP ${json['id']} counts: '
+          'likes=${json['like_count']} '
+          'comments=${json['comment_count']} '
+          'saves=${json['save_count']}',
+    );
+
     final creator = json['creator'];
     var creatorUsername = '';
     var creatorId = '';
