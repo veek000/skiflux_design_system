@@ -1,37 +1,23 @@
 ﻿import re
 
-with open('lib/features/home/data/comments_store.dart', 'r', encoding='utf-8') as f:
+with open('lib/features/home/sheets/comments_sheet.dart', 'r', encoding='utf-8') as f:
     text = f.read()
 
-text = text.replace('''    for (final c in state.comments) {
-      final id = c.id;
-      final path = c.audioPath;
-      final duration = c.durationLabel;
-      if (id != null && path != null && path.isNotEmpty) {
-        _localAudioById[id] = path;
-      }
-        if (duration != "0:00") _localDurationById[id] = duration;
-      }
-    }''', '''    for (final c in state.comments) {
-      final id = c.id;
-      final path = c.audioPath;
-      final duration = c.durationLabel;
-      if (id != null && path != null && path.isNotEmpty) {
-        _localAudioById[id] = path;
-        if (duration != "0:00") _localDurationById[id] = duration;
-      }
-    }''')
+duration_ms_func = '''
+  int? _durationMsFromLabel(String label) {
+    final trimmed = label.trim();
+    if (trimmed.isEmpty || trimmed == '0:00') return null;
+    final parts = trimmed.split(':');
+    if (parts.length != 2) return null;
+    final m = int.tryParse(parts[0]);
+    final s = int.tryParse(parts[1]);
+    if (m == null || s == null) return null;
+    final ms = ((m * 60) + s) * 1000;
+    return ms > 0 ? ms : null;
+  }
+'''
 
-text = text.replace('''      if (newIds.isNotEmpty) {
-        _pendingLocalAudio = null;
-        _pendingLocalDuration = null;
-      }
-    _pendingLocalDuration = null;
-    }''', '''      if (newIds.isNotEmpty) {
-        _pendingLocalAudio = null;
-        _pendingLocalDuration = null;
-      }
-    }''')
+text = text.replace('  @override\n  Widget build(BuildContext context) {', duration_ms_func + '\n  @override\n  Widget build(BuildContext context) {')
 
-with open('lib/features/home/data/comments_store.dart', 'w', encoding='utf-8') as f:
+with open('lib/features/home/sheets/comments_sheet.dart', 'w', encoding='utf-8') as f:
     f.write(text)
