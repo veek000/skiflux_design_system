@@ -147,7 +147,7 @@ class LibraryEpisode {
 
       name = _string(c['name']) ?? 'Creator';
       username = _string(c['username']) ?? '';
-      avatarUrl = _string(c['avatar_url']);
+      avatarUrl = _string(c['avatarUrl']) ?? _string(c['avatar_url']);
 
       if (name.isNotEmpty) {
         final parts = name.trim().split(RegExp(r'\s+'));

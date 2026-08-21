@@ -89,7 +89,7 @@ class EpisodeTasksRepository extends ApiRepository {
     await dio.post<dynamic>(
       submitPath,
       data: form,
-      options: Options(contentType: 'multipart/form-data'),
+      
     );
   }, kind: SkifluxErrorKind.taskSubmission);
 
@@ -178,3 +178,4 @@ class EpisodeTasksRepository extends ApiRepository {
 final episodeTasksRepositoryProvider = Provider<EpisodeTasksRepository>(
   (ref) => EpisodeTasksRepository(ref.watch(apiClientProvider)),
 );
+

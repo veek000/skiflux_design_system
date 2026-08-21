@@ -95,7 +95,7 @@ HomeFeedItem episodeJsonToFeedItem(Map<String, dynamic> json) {
         _stringOrNull(c['name']) ?? _stringOrNull(c['display_name']);
     creatorId = _stringOrNull(c['id']?.toString());
     creatorUsername = _stringOrNull(c['username']) ?? '';
-    creatorAvatarUrl = _stringOrNull(c['avatar_url']);
+    creatorAvatarUrl = _stringOrNull(c['avatarUrl']) ?? _stringOrNull(c['avatar_url']);
     creatorName = (display != null && display.isNotEmpty)
         ? display
         : ('$first $last'.trim().isNotEmpty

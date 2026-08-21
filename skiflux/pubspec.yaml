@@ -130,6 +130,7 @@ dependencies:
   # instead of asking the user to come back and tap "I've paid". PAN/CVV entry
   # still happens on the gateway's own page, never in our UI (PCI).
   webview_flutter: ^4.14.1
+  app_links: ^7.2.1
 
 flutter_launcher_icons:
   image_path: "assets/app_icons/app_icon_source.png"

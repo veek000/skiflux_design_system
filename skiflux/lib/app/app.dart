@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:app_links/app_links.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -41,10 +42,19 @@ class SkifluxMobileAppV2 extends ConsumerStatefulWidget {
 
 class _SkifluxMobileAppV2State extends ConsumerState<SkifluxMobileAppV2> {
   var _fcmAttached = false;
+  var _appLinksAttached = false;
+  late AppLinks _appLinks;
+  StreamSubscription<Uri>? _appLinksSubscription;
 
   /// One in-flight reauth navigation — concurrent 401s only arm the gate once,
   /// but the listen can still fire while a push is already underway.
   var _routingToSignIn = false;
+
+  @override
+  void dispose() {
+    _appLinksSubscription?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -71,6 +81,7 @@ class _SkifluxMobileAppV2State extends ConsumerState<SkifluxMobileAppV2> {
           _fcmAttached = true;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             unawaited(_attachFcm());
+            unawaited(_attachAppLinks());
           });
         }
         return ConnectivityBanner(child: child ?? const SizedBox.shrink());
@@ -234,6 +245,44 @@ class _SkifluxMobileAppV2State extends ConsumerState<SkifluxMobileAppV2> {
       return (type: type, data: data);
     } catch (_) {
       return null;
+    }
+  }
+
+
+  Future<void> _attachAppLinks() async {
+    if (_appLinksAttached) return;
+    _appLinksAttached = true;
+    _appLinks = AppLinks();
+
+    // Handle initial link (cold start)
+    final initialUri = await _appLinks.getInitialLink();
+    if (initialUri != null) {
+      _handleDeepLink(initialUri);
+    }
+
+    // Handle background/foreground links
+    _appLinksSubscription = _appLinks.uriLinkStream.listen((uri) {
+      _handleDeepLink(uri);
+    });
+  }
+
+  void _handleDeepLink(Uri uri) {
+    // Expected format: https://app.skiflux.com/episode/<id> or https://skiflux.com/episode/<id>
+    if (uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'episode' && uri.pathSegments.length > 1) {
+      final episodeId = uri.pathSegments[1];
+      final navContext = rootNavigatorKey.currentContext;
+      if (navContext == null || !navContext.mounted) return;
+      // You might need GoRouter or a custom navigator here to push the episode.
+      // E.g. navContext.go('/episode/');
+      // For now we rely on the internal openNotificationDeepLink if it supports it, or simply parse it:
+      unawaited(
+        openNotificationDeepLink(
+          navContext,
+          ref,
+          type: 'episode',
+          data: {'id': episodeId, 'episode_id': episodeId},
+        ),
+      );
     }
   }
 

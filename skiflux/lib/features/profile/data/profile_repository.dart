@@ -94,7 +94,6 @@ class ProfileRepository extends ApiRepository {
         body: form,
         parse: UserProfile.fromJson,
         options: Options(
-          contentType: 'multipart/form-data',
         ),
       );
     }
@@ -119,3 +118,4 @@ class ProfileRepository extends ApiRepository {
 final profileRepositoryProvider = Provider<ProfileRepository>(
   (ref) => ProfileRepository(ref.watch(apiClientProvider)),
 );
+

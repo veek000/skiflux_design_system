@@ -50,7 +50,8 @@ class CommentItem {
     // Backends have shipped several spellings; any non-empty media URL means
     // this row is a voice note — otherwise a just-sent note reloads as a blank
     // text bubble (empty `text`, no `audio_url` key match).
-    final audioUrl = _string(json['audio_url']) ??
+    final audioUrl =
+        _string(json['audio_url']) ??
         _string(json['audio']) ??
         _string(json['voice_url']) ??
         _string(json['voice_note_url']) ??
@@ -62,10 +63,12 @@ class CommentItem {
     )?.toLocal();
     // `audio_public_id` without a URL still marks a voice note (CDN URL may
     // arrive later); empty text + that flag must not render as a blank message.
-    final hasAudioHint = audioUrl != null ||
+    final hasAudioHint =
+        audioUrl != null ||
         _string(json['audio_public_id']) != null ||
         json['has_audio'] == true;
-    final durationMs = _intId(json['audio_duration_ms']) ??
+    final durationMs =
+        _intId(json['audio_duration_ms']) ??
         _durationMsFromSeconds(json['audio_duration']) ??
         _durationMsFromSeconds(json['duration']) ??
         _durationMsFromSeconds(json['voice_duration']);
@@ -90,12 +93,13 @@ class CommentItem {
       timeLabel: shortAgeLabel(createdAt),
       likeCount: json['like_count'] is int
           ? json['like_count'] as int
-          : (json['like_count'] is num ? (json['like_count'] as num).toInt() : 0),
+          : (json['like_count'] is num
+                ? (json['like_count'] as num).toInt()
+                : 0),
       isLiked: json['is_liked'] == true,
       replies: [
-        for (final reply in (json['replies'] is List
-            ? json['replies'] as List
-            : const []))
+        for (final reply
+            in (json['replies'] is List ? json['replies'] as List : const []))
           if (reply is Map)
             CommentItem.fromJson(Map<String, dynamic>.from(reply)),
       ],
@@ -244,8 +248,9 @@ class CommentsState {
     return CommentsState(
       comments: comments ?? this.comments,
       totalCount: totalCount ?? this.totalCount,
-      playingIndex:
-          clearPlayingIndex ? null : (playingIndex ?? this.playingIndex),
+      playingIndex: clearPlayingIndex
+          ? null
+          : (playingIndex ?? this.playingIndex),
       clearPlayingIndex: false,
       composeState: composeState ?? this.composeState,
       isLoading: isLoading ?? this.isLoading,
@@ -278,10 +283,12 @@ class CommentsNotifier extends Notifier<CommentsState> {
   /// Survives `_load` so a reload that only returns `audio_url` does not leave
   /// the just-sent note unplayable.
   final Map<int, String> _localAudioById = <int, String>{};
+  final Map<int, String> _localDurationById = <int, String>{};
 
   /// Path of a voice note that has been uploaded but not yet claimed a server
   /// id (between optimistic append and `_loadAndClaimNew`).
   String? _pendingLocalAudio;
+  String? _pendingLocalDuration;
 
   void init(String episodeId) {
     if (_episodeId == episodeId) return;
@@ -402,11 +409,14 @@ class CommentsNotifier extends Notifier<CommentsState> {
     for (final c in state.comments) {
       final id = c.id;
       final path = c.audioPath;
+      final duration = c.durationLabel;
       if (id != null && path != null && path.isNotEmpty) {
         _localAudioById[id] = path;
+        if (duration != "0:00") _localDurationById[id] = duration;
       }
     }
     final pendingPath = _pendingLocalAudio;
+    final pendingDuration = _pendingLocalDuration;
 
     await _load();
     if (!ref.mounted) return;
@@ -416,8 +426,14 @@ class CommentsNotifier extends Notifier<CommentsState> {
     if (pendingPath != null && pendingPath.isNotEmpty) {
       for (final id in newIds) {
         _localAudioById.putIfAbsent(id, () => pendingPath);
+        if (pendingDuration != null) {
+          _localDurationById.putIfAbsent(id, () => pendingDuration);
+        }
       }
-      if (newIds.isNotEmpty) _pendingLocalAudio = null;
+      if (newIds.isNotEmpty) {
+        _pendingLocalAudio = null;
+        _pendingLocalDuration = null;
+      }
     }
 
     var merged = _withLocalAudio(state.comments, claimPendingFor: newIds);
@@ -436,6 +452,7 @@ class CommentsNotifier extends Notifier<CommentsState> {
           body: SkifluxCommentBody.voicenote,
           authorName: 'You',
           audioPath: pendingPath,
+          durationLabel: pendingDuration ?? "0:00",
           timeLabel: 'now',
         ),
       ]);
@@ -484,12 +501,7 @@ class CommentsNotifier extends Notifier<CommentsState> {
         out.add(c);
         continue;
       }
-      out.add(
-        c.copyWith(
-          body: SkifluxCommentBody.voicenote,
-          audioPath: path,
-        ),
-      );
+      out.add(c.copyWith(body: SkifluxCommentBody.voicenote, audioPath: path));
     }
     return List.unmodifiable(out);
   }
@@ -504,9 +516,7 @@ class CommentsNotifier extends Notifier<CommentsState> {
   //   state = state.copyWith(playingIndex: next, clearPlayingIndex: next == null);
   // }
   void setPlaying(int index) {
-    state = state.copyWith(
-      playingIndex: index,
-    );
+    state = state.copyWith(playingIndex: index);
   }
 
   void clearPlaying() {
@@ -580,21 +590,33 @@ class CommentsNotifier extends Notifier<CommentsState> {
 
   /// Upload the recorded voice note (multipart `audio_file`). Optimistic
   /// playable row; removed again if the upload fails.
-  Future<void> addVoiceNote(String path) async {
+  ///
+  /// [duration] comes from the recorder so the row can show a real `m:ss`
+  /// immediately — without it the UI used to sit on `0:00` until (or unless)
+  /// the player finished preparing.
+  Future<void> addVoiceNote(
+    String path, {
+    Duration duration = Duration.zero,
+  }) async {
     final episodeId = _episodeId;
     if (episodeId == null || episodeId.isEmpty) {
       throw const SkifluxFailure(SkifluxErrorKind.voicenoteFailed);
     }
+    final durationLabel = formatVoiceDurationMs(
+      duration.inMilliseconds > 0 ? duration.inMilliseconds : null,
+    );
     final optimistic = CommentItem(
       author: SkifluxCommentAuthor.own,
       body: SkifluxCommentBody.voicenote,
       authorName: 'You',
       audioPath: path,
+      durationLabel: durationLabel,
       timeLabel: 'now',
     );
     final before = state.comments;
     final beforeCount = state.totalCount;
     _pendingLocalAudio = path;
+    _pendingLocalDuration = durationLabel;
     state = state.copyWith(
       comments: [...before, optimistic],
       totalCount: beforeCount + 1,
@@ -613,7 +635,9 @@ class CommentsNotifier extends Notifier<CommentsState> {
         if (id != null) {
           _ownIds.add(id);
           _localAudioById[id] = path;
+          _localDurationById[id] = durationLabel;
           _pendingLocalAudio = null;
+          _pendingLocalDuration = null;
         }
         final playable = created.copyWith(
           author: SkifluxCommentAuthor.own,
@@ -621,12 +645,10 @@ class CommentsNotifier extends Notifier<CommentsState> {
           // message; keep the row as a playable voicenote with the local file.
           body: SkifluxCommentBody.voicenote,
           audioPath: path,
+          durationLabel: durationLabel,
         );
         state = state.copyWith(
-          comments: [
-            for (final c in before) c,
-            playable,
-          ],
+          comments: [for (final c in before) c, playable],
           totalCount: beforeCount + 1,
         );
       }
@@ -637,6 +659,7 @@ class CommentsNotifier extends Notifier<CommentsState> {
       ref.read(feedEngagementProvider.notifier).bumpComments(episodeId, 1);
     } catch (_) {
       _pendingLocalAudio = null;
+      _pendingLocalDuration = null;
       if (ref.mounted) {
         state = state.copyWith(comments: before, totalCount: beforeCount);
       }
@@ -705,9 +728,7 @@ class CommentsNotifier extends Notifier<CommentsState> {
     final beforeCount = state.totalCount;
     // A deleted parent takes its replies with it, so the header count has to
     // drop by all of them, not by one.
-    final removed = before
-        .where((c) => c.id == id || c.parentId == id)
-        .length;
+    final removed = before.where((c) => c.id == id || c.parentId == id).length;
     state = state.copyWith(
       comments: [
         for (final c in before)

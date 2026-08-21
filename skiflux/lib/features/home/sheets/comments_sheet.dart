@@ -599,13 +599,15 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
     super.dispose();
   }
 
-  Future<void> _sendVoiceNote(String path) async {
+  Future<void> _sendVoiceNote(String path, Duration duration) async {
     try {
       // An empty/invalid path is a failure of the record→send path itself.
       if (path.trim().isEmpty) {
         throw const SkifluxFailure(SkifluxErrorKind.voicenoteFailed);
       }
-      await ref.read(commentsProvider.notifier).addVoiceNote(path);
+      await ref
+          .read(commentsProvider.notifier)
+          .addVoiceNote(path, duration: duration);
     } catch (e, st) {
       if (!mounted) return;
       await ErrorDisplay.show(
@@ -876,16 +878,23 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
     final isOwn = data.author == SkifluxCommentAuthor.own;
     // Every write needs a confirmed backend id; optimistic rows have none yet.
     final confirmed = data.id != null;
+    final durationMs = _durationMsFromLabel(data.durationLabel);
     final Widget comment = SkifluxComment(
+      // Stable identity so a post-upload rebuild doesn't dispose the player
+      // mid-prepare (which left just-sent notes silent with `0:00`).
+      key: ValueKey(
+        'comment-${data.id ?? data.audioPath ?? data.audioUrl ?? index}',
+      ),
       authorName: data.authorName,
       handle: data.handle,
       author: data.author,
       body: data.body,
       message: data.message,
       audioPath: audioPath,
-      // Real length comes from the player once prepared; this is only the
-      // pre-prepare fallback (payload duration or 0:00 — never a fake 0:10).
+      // Real length comes from the player once prepared; seed from the
+      // recorder/API so the label isn't blank while prepare runs.
       duration: data.durationLabel,
+      durationMs: durationMs,
       avatarImage: data.avatarUrl != null
           ? skifluxImageProvider(data.avatarUrl!)
           : null,
