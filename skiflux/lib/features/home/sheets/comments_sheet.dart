@@ -883,6 +883,9 @@ class _CommentsSheetState extends ConsumerState<_CommentsSheet> {
       body: data.body,
       message: data.message,
       audioPath: audioPath,
+      // Real length comes from the player once prepared; this is only the
+      // pre-prepare fallback (payload duration or 0:00 — never a fake 0:10).
+      duration: data.durationLabel,
       avatarImage: data.avatarUrl != null
           ? skifluxImageProvider(data.avatarUrl!)
           : null,

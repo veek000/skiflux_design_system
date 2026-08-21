@@ -35,6 +35,7 @@ class CommentItem {
     this.message,
     this.audioPath,
     this.audioUrl,
+    this.durationLabel = '0:00',
     this.timeLabel = 'now',
     this.likeCount = 0,
     this.isLiked = false,
@@ -64,6 +65,10 @@ class CommentItem {
     final hasAudioHint = audioUrl != null ||
         _string(json['audio_public_id']) != null ||
         json['has_audio'] == true;
+    final durationMs = _intId(json['audio_duration_ms']) ??
+        _durationMsFromSeconds(json['audio_duration']) ??
+        _durationMsFromSeconds(json['duration']) ??
+        _durationMsFromSeconds(json['voice_duration']);
 
     return CommentItem(
       id: _intId(json['id']),
@@ -81,6 +86,7 @@ class CommentItem {
       avatarUrl: _string(json['user_avatar']),
       message: text,
       audioUrl: audioUrl,
+      durationLabel: formatVoiceDurationMs(durationMs),
       timeLabel: shortAgeLabel(createdAt),
       likeCount: json['like_count'] is int
           ? json['like_count'] as int
@@ -117,6 +123,10 @@ class CommentItem {
   /// which can only open a path.
   final String? audioUrl;
 
+  /// Fallback `m:ss` label before the player reports a real length. Never the
+  /// old hardcoded `0:10` — use `0:00` until known.
+  final String durationLabel;
+
   final String timeLabel;
   final int likeCount;
   final bool isLiked;
@@ -136,6 +146,7 @@ class CommentItem {
     String? message,
     String? audioPath,
     String? audioUrl,
+    String? durationLabel,
     bool clearAudioPath = false,
   }) => CommentItem(
     id: id ?? this.id,
@@ -148,11 +159,43 @@ class CommentItem {
     message: message ?? this.message,
     audioPath: clearAudioPath ? null : (audioPath ?? this.audioPath),
     audioUrl: audioUrl ?? this.audioUrl,
+    durationLabel: durationLabel ?? this.durationLabel,
     timeLabel: timeLabel,
     likeCount: likeCount ?? this.likeCount,
     isLiked: isLiked ?? this.isLiked,
     replies: replies,
   );
+}
+
+/// `m:ss` for a voice-note length. Null/unknown → `0:00` (never invent `0:10`).
+String formatVoiceDurationMs(int? ms) {
+  if (ms == null || ms <= 0) return '0:00';
+  final d = Duration(milliseconds: ms);
+  return '${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
+}
+
+int? _durationMsFromSeconds(Object? raw) {
+  if (raw is int) return raw > 0 ? raw * 1000 : null;
+  if (raw is num) {
+    final n = raw.toDouble();
+    if (n <= 0) return null;
+    // Values > 1000 are already ms (e.g. 4500); smaller look like seconds.
+    return n > 1000 ? n.round() : (n * 1000).round();
+  }
+  if (raw is String) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return null;
+    // "0:07" / "1:05"
+    final parts = trimmed.split(':');
+    if (parts.length == 2) {
+      final m = int.tryParse(parts[0]);
+      final s = int.tryParse(parts[1]);
+      if (m != null && s != null) return ((m * 60) + s) * 1000;
+    }
+    final n = num.tryParse(trimmed);
+    if (n != null) return _durationMsFromSeconds(n);
+  }
+  return null;
 }
 
 class CommentsState {
@@ -411,7 +454,7 @@ class CommentsNotifier extends Notifier<CommentsState> {
   /// Critical: the server often returns a just-uploaded voice note **without**
   /// `audio_url` (processing lag / field rename). `fromJson` then classifies
   /// it as an empty text message — which is the "blank comment" users saw
-  /// after the optimistic `0:10` voicenote disappeared. When we still hold the
+  /// after the optimistic voicenote disappeared. When we still hold the
   /// recorder file for that id (or a pending path for newly claimed ids),
   /// force [SkifluxCommentBody.voicenote] + [CommentItem.audioPath].
   List<CommentItem> _withLocalAudio(

@@ -42,7 +42,7 @@ class SkifluxComment extends StatefulWidget {
     this.body = SkifluxCommentBody.message,
     this.message,
     this.audioPath,
-    this.duration = '0:10',
+    this.duration = '0:00',
     this.playing = false,
     this.timeLabel = '30min',
     this.avatarImage,
@@ -73,11 +73,15 @@ class SkifluxComment extends StatefulWidget {
   /// voicenote row is decorative only.
   final String? audioPath;
 
-  /// Fallback duration label used only when [audioPath] is null.
+  /// Fallback duration label used only when the player has not yet reported a
+  /// real length (no [audioPath], or prepare still in flight). Prefer a real
+  /// value from the file/`duration_ms` payload — the old `'0:10'` default made
+  /// every note look 10 seconds long.
   final String duration;
 
-  /// Voicenote playing state: pause icon + `Content/Brand` waveform.
-  /// The parent owns this so it can enforce one-at-a-time playback.
+  /// Voicenote playing state: pause icon + brand waveform + remaining-time
+  /// countdown (WhatsApp-style). The parent owns this so it can enforce
+  /// one-at-a-time playback.
   final bool playing;
 
   /// Relative timestamp, e.g. `30min`.
@@ -127,7 +131,13 @@ class _SkifluxCommentState extends State<SkifluxComment> {
   PlayerController? _player;
   StreamSubscription<int>? _positionSub;
   StreamSubscription<void>? _completionSub;
+  StreamSubscription<PlayerState>? _stateSub;
   int _positionMs = 0;
+
+  /// Total length in ms once [preparePlayer] resolves. Kept locally so the
+  /// duration label does not depend on reading [PlayerController.maxDuration]
+  /// after dispose races, and so we can show a remaining-time countdown.
+  int _totalMs = 0;
 
   /// Whether [PlayerController.preparePlayer] has actually resolved.
   ///
@@ -143,6 +153,8 @@ class _SkifluxCommentState extends State<SkifluxComment> {
 
   bool get _hasAudio =>
       widget.body == SkifluxCommentBody.voicenote && widget.audioPath != null;
+
+  bool get _isActivelyPlaying => widget.playing && _prepared;
 
   @override
   void initState() {
@@ -163,9 +175,9 @@ class _SkifluxCommentState extends State<SkifluxComment> {
       // resolves is not lost — [_initPlayer] applies `widget.playing` when it
       // finishes.
       if (widget.playing) {
-        _player!.startPlayer();
+        unawaited(_player!.startPlayer());
       } else {
-        _player!.pausePlayer();
+        unawaited(_player!.pausePlayer());
       }
     }
   }
@@ -177,20 +189,48 @@ class _SkifluxCommentState extends State<SkifluxComment> {
   }
 
   Future<void> _initPlayer() async {
+    final path = widget.audioPath;
+    if (path == null || path.isEmpty) return;
+
     final player = PlayerController();
+    // Smoother remaining-time ticks while playing (WhatsApp-like).
+    player.updateFrequency = UpdateFrequency.high;
     _player = player;
     _positionSub = player.onCurrentDurationChanged.listen((ms) {
-      if (mounted) setState(() => _positionMs = ms);
+      if (!mounted) return;
+      setState(() => _positionMs = ms < 0 ? 0 : ms);
+    });
+    _stateSub = player.onPlayerStateChanged.listen((_) {
+      // Rebuild so the pause icon / brand waveform stay in sync if the native
+      // player pauses itself (e.g. audio focus loss).
+      if (mounted) setState(() {});
     });
     _completionSub = player.onCompletion.listen((_) {
-      if (mounted) {
-        setState(() => _positionMs = 0);
-        widget.onPlaybackComplete?.call();
-      }
+      if (!mounted) return;
+      setState(() => _positionMs = 0);
+      widget.onPlaybackComplete?.call();
     });
     try {
       await player.setFinishMode(finishMode: FinishMode.pause);
-      await player.preparePlayer(path: widget.audioPath!);
+      // Normalize Windows/file URIs the same way the package expects.
+      final normalized = path.startsWith('file:')
+          ? Uri.parse(path).toFilePath()
+          : path;
+      await player.preparePlayer(
+        path: normalized,
+        shouldExtractWaveform: true,
+        noOfSamples: 64,
+      );
+      var total = player.maxDuration;
+      if (total <= 0) {
+        // Some devices report duration only after a second probe.
+        total = await player.getDuration(DurationType.max);
+      }
+      if (!mounted) return;
+      setState(() {
+        _prepared = true;
+        _totalMs = total > 0 ? total : 0;
+      });
     } catch (error) {
       // An unprepared controller can neither draw nor play. Drop it so the row
       // renders the static bars, and tell the parent — silently swallowing this
@@ -202,8 +242,6 @@ class _SkifluxCommentState extends State<SkifluxComment> {
       return;
     }
     if (!mounted) return;
-    // maxDuration is now known, and the waveform may bind.
-    setState(() => _prepared = true);
     // Applies a toggle that arrived while prepare was still running, which
     // `didUpdateWidget` deliberately skipped.
     if (widget.playing) await player.startPlayer();
@@ -212,10 +250,15 @@ class _SkifluxCommentState extends State<SkifluxComment> {
   void _disposePlayer() {
     _positionSub?.cancel();
     _completionSub?.cancel();
+    _stateSub?.cancel();
+    _positionSub = null;
+    _completionSub = null;
+    _stateSub = null;
     _player?.dispose();
     _player = null;
     _prepared = false;
     _positionMs = 0;
+    _totalMs = 0;
   }
 
   @override
@@ -322,7 +365,10 @@ class _SkifluxCommentState extends State<SkifluxComment> {
   }
 
   Widget _voiceBody() {
-    final waveColor = widget.playing
+    // Active (playing) state: brand-colored duration + pause glyph + live
+    // waveform progress — mirrors WhatsApp's sent-note affordance.
+    final active = _isActivelyPlaying || widget.playing;
+    final waveColor = active
         ? SkifluxColors.contentBrand
         : SkifluxColors.contentBrandInactive;
     return Row(
@@ -333,9 +379,16 @@ class _SkifluxCommentState extends State<SkifluxComment> {
           child: Container(
             width: SkifluxUnit.u28 + SkifluxSpacing.space2xs,
             height: SkifluxUnit.u28 + SkifluxSpacing.space2xs,
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: SkifluxColors.backgroundBrand,
               shape: BoxShape.circle,
+              // Slight ring while playing so the control reads as "active".
+              border: active
+                  ? Border.all(
+                      color: SkifluxColors.contentBrand,
+                      width: 1.5,
+                    )
+                  : null,
             ),
             child: Icon(
               widget.playing
@@ -358,15 +411,18 @@ class _SkifluxCommentState extends State<SkifluxComment> {
                     playerController: _player!,
                     waveformType: WaveformType.fitWidth,
                     enableSeekGesture: true,
+                    continuousWaveform: true,
                     playerWaveStyle: SkifluxWaveformStyle.player(),
                   ),
                 )
               // Static fallback: no audio, or prepare hasn't resolved (or
-              // failed). Fill the row with bars so the waveform runs right up
-              // to the duration label (same spaceS gap as between the play
-              // button and the waveform).
+              // failed). Tint brand while the parent thinks we're playing so
+              // the row still looks active during prepare.
               : LayoutBuilder(
                   builder: (context, constraints) => SkifluxVoiceWaveform(
+                    color: active
+                        ? SkifluxColors.contentBrand
+                        : SkifluxColors.contentBrandInactive,
                     barCount: ((constraints.maxWidth +
                                 SkifluxWaveformStyle.barGap) /
                             SkifluxWaveformStyle.barPitch)
@@ -383,17 +439,28 @@ class _SkifluxCommentState extends State<SkifluxComment> {
     );
   }
 
+  /// Idle → total length. Playing / paused mid-note → remaining time counting
+  /// down (WhatsApp). Never invents a 10-second length.
   String _durationLabel() {
-    final player = _player;
-    if (player == null) return widget.duration;
-    // Elapsed while playing (or mid-seek), total length otherwise.
-    final ms = widget.playing || _positionMs > 0
-        ? _positionMs
-        : player.maxDuration;
-    if (ms <= 0) return widget.duration;
+    final total = _totalMs > 0
+        ? _totalMs
+        : (_player != null && _player!.maxDuration > 0
+            ? _player!.maxDuration
+            : 0);
+    if (total <= 0) return widget.duration;
+
+    final showRemaining = widget.playing || _positionMs > 0;
+    final ms = showRemaining
+        ? (total - _positionMs).clamp(0, total)
+        : total;
+    return _formatMs(ms);
+  }
+
+  static String _formatMs(int ms) {
     final d = Duration(milliseconds: ms);
+    final minutes = d.inMinutes;
     final seconds = d.inSeconds % 60;
-    return '${d.inMinutes}:${seconds.toString().padLeft(2, '0')}';
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
   }
 
   /// Timestamp + text actions on the left, reactions on the right.

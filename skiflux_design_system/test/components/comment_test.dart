@@ -89,8 +89,8 @@ void main() {
       );
       // Voicenote shows a play button.
       expect(find.byIcon(RemixIcons.play_mini_fill), findsOneWidget);
-      // Duration label from fallback.
-      expect(find.text('0:10'), findsOneWidget);
+      // Duration label from fallback — unknown length is 0:00, never a fake 0:10.
+      expect(find.text('0:00'), findsOneWidget);
     });
 
     testWidgets('play toggle callback fires', (tester) async {
