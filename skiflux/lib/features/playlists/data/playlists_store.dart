@@ -72,6 +72,10 @@ class PlaylistEpisode {
   /// fell back to image mode and showed a still.
   final String? videoUrl;
 
+  final int? likeCount;
+  final int? commentCount;
+  final int? saveCount;
+
   bool get hasVideo => videoUrl != null && videoUrl!.isNotEmpty;
 
   String get epTag => 'EP ${number.toString().padLeft(2, '0')}';

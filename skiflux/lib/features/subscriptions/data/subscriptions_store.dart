@@ -28,7 +28,8 @@ import 'subscriptions_repository.dart';
 // content surface, so they moved to `shared/utils/formatting.dart`. Re-exported
 // because this file is the import the subscription screens and tests already
 // reach for.
-export '../../../shared/utils/formatting.dart' show countLabel, relativeAgeLabel;
+export '../../../shared/utils/formatting.dart'
+    show countLabel, relativeAgeLabel;
 
 enum SubscriptionFeedFilter { recent, today, continueWatching, unwatched }
 
@@ -82,9 +83,10 @@ class SubscribedCreator {
     final name = full.isNotEmpty ? full : username;
     var initials = '?';
     if (first.isNotEmpty || last.isNotEmpty) {
-      initials = '${first.isNotEmpty ? first[0] : ''}'
-              '${last.isNotEmpty ? last[0] : ''}'
-          .toUpperCase();
+      initials =
+          '${first.isNotEmpty ? first[0] : ''}'
+                  '${last.isNotEmpty ? last[0] : ''}'
+              .toUpperCase();
     } else if (username.isNotEmpty) {
       initials = username[0].toUpperCase();
     }
@@ -148,14 +150,6 @@ class SubscriptionEpisode {
 
   /// Spec `Episode` — the same schema the home feed parses.
   factory SubscriptionEpisode.fromJson(Map<String, dynamic> json) {
-
-    print(
-      'EP ${json['id']} counts: '
-          'likes=${json['like_count']} '
-          'comments=${json['comment_count']} '
-          'saves=${json['save_count']}',
-    );
-
     final creator = json['creator'];
     var creatorUsername = '';
     var creatorId = '';
@@ -163,7 +157,8 @@ class SubscriptionEpisode {
     if (creator is Map) {
       creatorUsername = _string(creator['username']) ?? '';
       creatorId = creator['id']?.toString() ?? '';
-      creatorName = _string(creator['name']) ??
+      creatorName =
+          _string(creator['name']) ??
           _string(creator['display_name']) ??
           creatorUsername;
     }
@@ -193,7 +188,8 @@ class SubscriptionEpisode {
       postedToday: age != null && age.inHours < 24,
       thumbnailUrl:
           _string(json['thumbnail_url']) ?? _string(json['preview_url']),
-      videoUrl: _string(json['video_url']) ??
+      videoUrl:
+          _string(json['video_url']) ??
           _string(json['stream_url']) ??
           _string(json['playback_url']),
       likeCount: _int(json['like_count']),
@@ -253,12 +249,14 @@ class SubscriptionEpisode {
   bool get isContinueWatching => watchProgress > 0 && watchProgress < 1;
   bool get hasThumbnail => thumbnailUrl != null && thumbnailUrl!.isNotEmpty;
 
-  String get epTag => epNumber > 0
-      ? 'EP ${epNumber.toString().padLeft(2, '0')}'
-      : 'EP';
+  String get epTag =>
+      epNumber > 0 ? 'EP ${epNumber.toString().padLeft(2, '0')}' : 'EP';
 
   /// Shape the subscription player modal hands to [VideoFeedCard].
-  HomeFeedItem toFeedItem({String? creatorNameOverride, String? creatorInitials}) {
+  HomeFeedItem toFeedItem({
+    String? creatorNameOverride,
+    String? creatorInitials,
+  }) {
     final stream = _absoluteMediaUrl(videoUrl);
     final cover = _absoluteMediaUrl(thumbnailUrl);
     final hasVideo = stream != null && stream.isNotEmpty;
@@ -274,7 +272,8 @@ class SubscriptionEpisode {
       videoUrl: stream,
       creatorName: creatorNameOverride ?? creatorName,
       creatorUsername: creatorUsername,
-      creatorInitials: creatorInitials ??
+      creatorInitials:
+          creatorInitials ??
           (creatorName.isNotEmpty
               ? creatorName[0].toUpperCase()
               : (creatorUsername.isNotEmpty
@@ -294,8 +293,7 @@ class SubscriptionEpisode {
 
   /// "22k views · 5 hrs ago", dropping either half the payload didn't carry
   /// rather than printing a dangling separator around a blank.
-  String get meta =>
-      [views, postedAgo].where((s) => s.isNotEmpty).join(' · ');
+  String get meta => [views, postedAgo].where((s) => s.isNotEmpty).join(' · ');
 }
 
 class SubscriptionsState {
@@ -357,7 +355,11 @@ class SubscriptionsState {
         initials: name[0].toUpperCase(),
       );
     }
-    return SubscribedCreator(name: 'Unknown', username: 'unknown', initials: '?');
+    return SubscribedCreator(
+      name: 'Unknown',
+      username: 'unknown',
+      initials: '?',
+    );
   }
 
   int newCountFor(SubscribedCreator c) => episodes
