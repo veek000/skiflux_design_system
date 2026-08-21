@@ -206,9 +206,11 @@ class _SkifluxCommentState extends State<SkifluxComment> {
       // resolves is not lost — [_initPlayer] applies `widget.playing` when it
       // finishes.
       if (widget.playing) {
-          if (_totalMs > 0 && _positionMs >= _totalMs) {
-            unawaited(_player!.seekTo(0));
-          }
+          // Always seek to 0 before (re)starting: FinishMode.stop parks the
+          // native player at the final frame even though _positionMs was reset
+          // to 0 by onCompletion, so a second tap would silently restart at
+          // the very end and produce no sound.
+          unawaited(_player!.seekTo(0));
           unawaited(_player!.startPlayer());
         } else {
         unawaited(_player!.pausePlayer());
@@ -281,9 +283,7 @@ class _SkifluxCommentState extends State<SkifluxComment> {
     // Applies a toggle that arrived while prepare was still running, which
     // `didUpdateWidget` deliberately skipped.
     if (widget.playing) {
-        if (_totalMs > 0 && _positionMs >= _totalMs) {
-          await player.seekTo(0);
-        }
+        await player.seekTo(0);
         await player.startPlayer();
       }
   }

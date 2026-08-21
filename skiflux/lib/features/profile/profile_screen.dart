@@ -290,6 +290,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       // there was nothing to play.
       thumbnailUrl: ep.thumbnailUrl,
       videoUrl: ep.videoUrl,
+      likeCount: ep.likeCount,
+      commentCount: ep.commentCount,
+      saveCount: ep.saveCount,
     );
     if (!context.mounted) return;
     await showEpisodePlayerModal(context, sub);

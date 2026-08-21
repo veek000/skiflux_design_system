@@ -180,6 +180,9 @@ PlaylistEpisode episodeJsonToPlaylistEpisode(Map<String, dynamic> json) {
     // Both are required on `Episode`; a locked row may still carry only the
     // preview, which is the right thing to play in that case.
     videoUrl: _string(json['video_url']) ?? _string(json['preview_url']),
+    likeCount: _int(json['like_count']) ?? _int(json['likeCount']),
+    commentCount: _int(json['comment_count']) ?? _int(json['commentCount']),
+    saveCount: _int(json['save_count']) ?? _int(json['saveCount']),
   );
 }
 

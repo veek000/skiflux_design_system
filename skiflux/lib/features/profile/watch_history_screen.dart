@@ -41,6 +41,19 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
   String _query = '';
 
   @override
+  void initState() {
+    super.initState();
+    // Always refresh so the latest watched video appears at the top:
+    // watchHistoryProvider is not invalidated automatically when a view is
+    // tracked, so it can be stale when the screen opens.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(watchHistoryProvider.notifier).refresh();
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final history = ref.watch(watchHistoryProvider);
     final loaded = history.value ?? const <WatchHistoryEntry>[];
