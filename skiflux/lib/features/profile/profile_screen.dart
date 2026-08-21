@@ -27,10 +27,7 @@ import 'data/skill_world_store.dart';
 /// no username. Subscribe runs the real follow toggle through
 /// [subscriptionsProvider]; there is no local subscribed flag.
 class ProfileScreen extends ConsumerStatefulWidget {
-  const ProfileScreen({
-    super.key,
-    required this.creatorId,
-  });
+  const ProfileScreen({super.key, required this.creatorId});
 
   final String creatorId;
 
@@ -119,69 +116,71 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       ),
       body: SafeArea(
         top: false,
-        child: ref.watch(creatorProfileProvider(widget.creatorId)).when(
-          loading: () => const _ProfileSkeleton(),
-          error: (e, st) => LoadFailure(
-            error: e,
-            title: "We couldn't load this profile",
-            onRetry: () => ref
-                .read(creatorProfileProvider(widget.creatorId).notifier)
-                .retry(),
-          ),
-          data: (profile) {
-            final subs = ref.watch(subscriptionsProvider);
-            // Seasons are matched on the id *or* the username: the id can come
-            // back empty, and it is not guaranteed to share a namespace with
-            // the one on `SeasonList.creator`.
-            final creator = CreatorRef(
-              id: profile.id,
-              username: profile.username,
-            );
-            // Follow list loaded → membership is the truth (it reflects
-            // optimistic toggles instantly); otherwise the profile payload's
-            // own is_following.
-            final subscribed = subs.hasLoaded
-                ? subs.isSubscribed(
-                    profile.id.isNotEmpty ? profile.id : profile.username,
-                  )
-                : profile.isFollowing;
-            return ListView(
-              padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
-              children: [
-                _ProfileHeader(
-                  profile: profile,
-                  subscribed: subscribed,
-                  onSubscribe: () => _toggleFollow(profile, subscribed),
-                  onNotify: () async {
-                    final next = await showNotifySettingsSheet(
-                      context,
-                      current: _notify,
-                    );
-                    if (next == null || !context.mounted) return;
-                    setState(() => _notify = next);
-                    // Honest scope: nothing syncs — the backend has no
-                    // per-creator notification preference endpoint.
-                    SkifluxToast.info(
-                      context,
-                      '${next.toastTitle} (saved on this device only)',
-                    );
-                  },
-                ),
-                const SizedBox(height: SkifluxSpacing.spaceL),
-                _Tabs(
-                  index: _tabIndex,
-                  onChanged: (i) => setState(() => _tabIndex = i),
-                ),
-                const SizedBox(height: SkifluxSpacing.spaceL),
-                if (_tabIndex == 0) ...[
-                  _pillGroup(creator),
-                  _recentEpisodes(context, creator),
-                ] else
-                  _playlists(context, creator),
-              ],
-            );
-          },
-        ),
+        child: ref
+            .watch(creatorProfileProvider(widget.creatorId))
+            .when(
+              loading: () => const _ProfileSkeleton(),
+              error: (e, st) => LoadFailure(
+                error: e,
+                title: "We couldn't load this profile",
+                onRetry: () => ref
+                    .read(creatorProfileProvider(widget.creatorId).notifier)
+                    .retry(),
+              ),
+              data: (profile) {
+                final subs = ref.watch(subscriptionsProvider);
+                // Seasons are matched on the id *or* the username: the id can come
+                // back empty, and it is not guaranteed to share a namespace with
+                // the one on `SeasonList.creator`.
+                final creator = CreatorRef(
+                  id: profile.id,
+                  username: profile.username,
+                );
+                // Follow list loaded → membership is the truth (it reflects
+                // optimistic toggles instantly); otherwise the profile payload's
+                // own is_following.
+                final subscribed = subs.hasLoaded
+                    ? subs.isSubscribed(
+                        profile.id.isNotEmpty ? profile.id : profile.username,
+                      )
+                    : profile.isFollowing;
+                return ListView(
+                  padding: const EdgeInsets.all(SkifluxSpacing.spaceL),
+                  children: [
+                    _ProfileHeader(
+                      profile: profile,
+                      subscribed: subscribed,
+                      onSubscribe: () => _toggleFollow(profile, subscribed),
+                      onNotify: () async {
+                        final next = await showNotifySettingsSheet(
+                          context,
+                          current: _notify,
+                        );
+                        if (next == null || !context.mounted) return;
+                        setState(() => _notify = next);
+                        // Honest scope: nothing syncs — the backend has no
+                        // per-creator notification preference endpoint.
+                        SkifluxToast.info(
+                          context,
+                          '${next.toastTitle} (saved on this device only)',
+                        );
+                      },
+                    ),
+                    const SizedBox(height: SkifluxSpacing.spaceL),
+                    _Tabs(
+                      index: _tabIndex,
+                      onChanged: (i) => setState(() => _tabIndex = i),
+                    ),
+                    const SizedBox(height: SkifluxSpacing.spaceL),
+                    if (_tabIndex == 0) ...[
+                      _pillGroup(creator),
+                      _recentEpisodes(context, creator),
+                    ] else
+                      _playlists(context, creator),
+                  ],
+                );
+              },
+            ),
       ),
     );
   }
@@ -207,11 +206,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   Widget _recentList(BuildContext context, List<PlaylistEpisode> all) {
     final world = _world;
-    final eps = (world == null
-            ? all
-            : all.where((e) => e.skillworld == world).toList(growable: false))
-        .take(4)
-        .toList(growable: false);
+    final eps =
+        (world == null
+                ? all
+                : all
+                      .where((e) => e.skillworld == world)
+                      .toList(growable: false))
+            .take(4)
+            .toList(growable: false);
 
     if (eps.isEmpty) {
       return const Padding(
@@ -473,18 +475,18 @@ class _ProfileHeader extends StatelessWidget {
             height: SkifluxUnit.u64,
             child: profile.avatarUrl != null && profile.avatarUrl!.isNotEmpty
                 ? SkifluxNetworkImage(
-              url: profile.avatarUrl!,
-              errorWidget: SkifluxAvatar(
-                style: SkifluxAvatarStyle.initial,
-                size: SkifluxUnit.u64,
-                initials: profile.initials,
-              ),
-            )
+                    url: profile.avatarUrl!,
+                    errorWidget: SkifluxAvatar(
+                      style: SkifluxAvatarStyle.initial,
+                      size: SkifluxUnit.u64,
+                      initials: profile.initials,
+                    ),
+                  )
                 : SkifluxAvatar(
-              style: SkifluxAvatarStyle.initial,
-              size: SkifluxUnit.u64,
-              initials: profile.initials,
-            ),
+                    style: SkifluxAvatarStyle.initial,
+                    size: SkifluxUnit.u64,
+                    initials: profile.initials,
+                  ),
           ),
         ),
         const SizedBox(height: SkifluxSpacing.spaceS),

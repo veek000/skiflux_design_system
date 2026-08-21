@@ -94,25 +94,23 @@ class SeasonsRepository extends ApiRepository {
   Future<List<Playlist>> getCreatorSeasons(
     String creatorId, {
     String? skillworld,
-  }) =>
-      getList(
-        '/creators/$creatorId/seasons',
-        parse: seasonJsonToPlaylist,
-        // ignore: use_null_aware_elements
-        query: {if (skillworld != null) 'skillworld': skillworld},
-      );
+  }) => getList(
+    '/creators/$creatorId/seasons',
+    parse: seasonJsonToPlaylist,
+    // ignore: use_null_aware_elements
+    query: {if (skillworld != null) 'skillworld': skillworld},
+  );
 
   /// `GET /creators/{creator_id}/episodes` — published episodes for one creator with lock state.
   Future<List<PlaylistEpisode>> getCreatorEpisodes(
     String creatorId, {
     String? skillworld,
-  }) =>
-      getList(
-        '/creators/$creatorId/episodes',
-        parse: episodeJsonToPlaylistEpisode,
-        // ignore: use_null_aware_elements
-        query: {if (skillworld != null) 'skillworld': skillworld},
-      );
+  }) => getList(
+    '/creators/$creatorId/episodes',
+    parse: episodeJsonToPlaylistEpisode,
+    // ignore: use_null_aware_elements
+    query: {if (skillworld != null) 'skillworld': skillworld},
+  );
 
   /// A season plus its episodes, which is what every playlist screen needs.
   Future<Playlist> getSeasonWithEpisodes(Playlist season) async {
@@ -173,9 +171,7 @@ PlaylistEpisode episodeJsonToPlaylistEpisode(Map<String, dynamic> json) {
     title: _string(json['title']) ?? 'Episode',
     duration: formatDuration(_int(json['video_duration'])),
     coinCost: coinCostOf(price),
-    state: locked
-        ? PlaylistEpisodeState.locked
-        : PlaylistEpisodeState.unlocked,
+    state: locked ? PlaylistEpisodeState.locked : PlaylistEpisodeState.unlocked,
     skillworld: _string(json['skillworld']),
     viewCount: _int(json['view_count']),
     createdAt: DateTime.tryParse(_string(json['created_at']) ?? '')?.toLocal(),

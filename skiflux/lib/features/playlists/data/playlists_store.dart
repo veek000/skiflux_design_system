@@ -34,6 +34,9 @@ class PlaylistEpisode {
     this.createdAt,
     this.thumbnailUrl,
     this.videoUrl,
+    this.likeCount,
+    this.commentCount,
+    this.saveCount,
   });
 
   final String id;
@@ -253,7 +256,8 @@ class CoinPack {
     final json = Map<String, dynamic>.from(raw);
 
     final coins = _intFrom(json['coins']) ?? _intFrom(json['skillcoins']);
-    final price = _decimalFrom(json['price_naira']) ??
+    final price =
+        _decimalFrom(json['price_naira']) ??
         _decimalFrom(json['price_fiat']) ??
         _decimalFrom(json['price']);
     if (coins == null || coins <= 0 || price == null || price <= Decimal.zero) {
@@ -283,7 +287,6 @@ class CoinPack {
     if (value is num) return Decimal.tryParse(value.toString());
     return null;
   }
-
 }
 
 /// Coin packs for the Buy Coins surfaces.
@@ -322,10 +325,7 @@ final coinPacksProvider = FutureProvider<List<CoinPack>>((ref) async {
 /// sends `amount_fiat` and the server converts at the flat rate.)
 List<CoinPack> _fallbackCoinPacks() => [
   for (final coins in const [100, 200, 500, 1000])
-    CoinPack(
-      coins: coins,
-      price: Decimal.fromInt(coins * kCoinRateNaira),
-    ),
+    CoinPack(coins: coins, price: Decimal.fromInt(coins * kCoinRateNaira)),
 ];
 
 /// Snapshot of the coin view + every season the app has loaded this session.
@@ -433,10 +433,7 @@ class PlaylistsNotifier extends Notifier<PlaylistsState> {
       coins = (coins - ep.coinCost).clamp(0, coins);
     }
     ep.state = PlaylistEpisodeState.unlocked;
-    state = PlaylistsState(
-      skillCoins: coins,
-      seasonsById: state.seasonsById,
-    );
+    state = PlaylistsState(skillCoins: coins, seasonsById: state.seasonsById);
   }
 }
 
